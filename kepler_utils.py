@@ -63,8 +63,6 @@ def read_mira35_mmclx(filename, **kwargs):
 
     antenna_transition = None;
 
-    metadata = filemetadata('metadata')
-
      
     # -------------------------
     # test for non empty kwargs
