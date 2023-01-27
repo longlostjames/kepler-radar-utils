@@ -159,7 +159,7 @@ def read_mira35_mmclx(filename, **kwargs):
     if scan_type is not None:
         fixed_angle["data"] = np.array(1 * [fixed_angles[scan_type]])
     else:
-        fixed_angle["data"] = np.array(1 * [fixed_angles[None]])
+        fixed_angle["data"] = np.array(1 * [None])
 
     # time
     # interpolate between the first and last timestamps in the Time variable
