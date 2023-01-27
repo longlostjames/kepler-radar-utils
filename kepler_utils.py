@@ -156,15 +156,16 @@ def read_mira35_mmclx(filename, **kwargs):
 
     print(filename.lower());
 
+    scan_type = None;
+    sweep_mode["data"] = np.array(1 * [None]);
+
     for key, value in sweep_modes.items():
         print(key)
         if key in filename.lower(): 
             scan_type = value;
             sweep_mode["data"] = np.array(1 * [value]);
             sweep_mode["data"][0] = value;
-        else: 
-            sweep_mode["data"] = np.array(1 * [None]);
-            scan_type = None;
+            break;
 
     fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0], 'vert' : ncvars['elv'][0], "man" : ncvars['azi'][0]}
 
