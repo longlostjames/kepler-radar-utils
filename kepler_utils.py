@@ -76,12 +76,12 @@ def read_mira35_mmclx(filename, **kwargs):
     # -----------------
     # Open netCDF4 file
     # -----------------
-    dset = netCDF4.Dataset(filename)
+    ncobj = netCDF4.Dataset(filename)
     nrays = len(dset.dimensions["time"])
     ngates = len(dset.dimensions["range"])
     nsweeps = 1;
     
-    ncvars = dset.variables
+    ncvars = ncobj.variables
 
     # --------------------------------
     # latitude, longitude and altitude
