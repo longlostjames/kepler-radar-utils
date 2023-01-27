@@ -77,8 +77,8 @@ def read_mira35_mmclx(filename, **kwargs):
     # Open netCDF4 file
     # -----------------
     ncobj = netCDF4.Dataset(filename)
-    nrays = len(dset.dimensions["time"])
-    ngates = len(dset.dimensions["range"])
+    nrays = len(ncobj.dimensions["time"])
+    ngates = len(ncobj.dimensions["range"])
     nsweeps = 1;
     
     ncvars = ncobj.variables
