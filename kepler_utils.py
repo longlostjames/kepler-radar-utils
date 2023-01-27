@@ -249,7 +249,7 @@ def read_mira35_mmclx(filename, **kwargs):
     #    dic["data"] = dset.variables["Beamwidth"][:]
     #    instrument_parameters["radar_beam_width_h"] = dic
 
-    dset.close()
+    ncobj.close()
 
     return Radar(
         time,
