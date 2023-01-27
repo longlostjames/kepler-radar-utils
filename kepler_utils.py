@@ -154,6 +154,8 @@ def read_mira35_mmclx(filename, **kwargs):
 
     sweep_mode = filemetadata("sweep_mode")
 
+    print(filename.lower());
+
     for key, value in sweep_modes.items():
         if key in filename.lower(): 
             scan_type = value;
