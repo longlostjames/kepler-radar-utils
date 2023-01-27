@@ -192,7 +192,7 @@ def read_mira35_mmclx(filename, **kwargs):
     elevation['data'] = ncvars['elv'][:]
 
     # fields
-    field_name = ncobj.TypeName
+    #field_name = ncobj.TypeName
 
     #field_data = np.ma.array(dset.variables[field_name][:])
     #if "MissingData" in dset.ncattrs():
@@ -200,10 +200,11 @@ def read_mira35_mmclx(filename, **kwargs):
     #if "RangeFolded" in dset.ncattrs():
     #    field_data[field_data == dset.RangeFolded] = np.ma.masked
 
-    fields = {field_name: filemetadata(field_name)}
-    fields[field_name]["data"] = field_data
-    fields[field_name]["units"] = dset.variables[field_name].Units
-    fields[field_name]["_FillValue"] = get_fillvalue()
+    fields = {}
+    #fields = {field_name: filemetadata(field_name)}
+    #fields[field_name]["data"] = field_data
+    #fields[field_name]["units"] = dset.variables[field_name].Units
+    #fields[field_name]["_FillValue"] = get_fillvalue()
 
 
     try:
