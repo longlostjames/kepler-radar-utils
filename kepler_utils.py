@@ -62,6 +62,9 @@ def read_mira35_mmclx(filename, **kwargs):
     georefs_applied = None;
 
     antenna_transition = None;
+
+    metadata = filemetadata('metadata')
+
      
     # -------------------------
     # test for non empty kwargs
@@ -123,6 +126,15 @@ def read_mira35_mmclx(filename, **kwargs):
     #for netcdf_attr, metadata_key in metadata_mapping.items():
     #    if netcdf_attr in dset.ncattrs():
     #        metadata[metadata_key] = dset.getncattr(netcdf_attr)
+
+
+    # metadata
+    metadata = filemetadata('metadata')
+    for k in ['institution', 'title', 'used_algorithms']:
+        if k in ncobj.ncattrs(): 
+            metadata[k] = ncobj.getncattr(k)
+
+    metadata['instrument_name']='ncas-radar-mobile-ka-band-1'
 
     # ------------------------------------------
     # sweep_start_ray_index, sweep_end_ray_index
@@ -218,6 +230,9 @@ def read_mira35_mmclx(filename, **kwargs):
         fields[field_name] = field_dic
     except KeyError:
         print("Zg does not exist")
+
+
+
 
 
     # instrument_parameters
