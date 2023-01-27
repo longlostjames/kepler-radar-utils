@@ -158,6 +158,7 @@ def read_mira35_mmclx(filename, **kwargs):
         if key in filename.lower(): 
             scan_type = value;
             sweep_mode["data"] = np.array(1 * [value]);
+            sweep_mode["data"][0] = value;
         else: 
             sweep_mode["data"] = np.array(1 * [None]);
             scan_type = None;
