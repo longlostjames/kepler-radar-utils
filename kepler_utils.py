@@ -5,10 +5,274 @@
 # Module for processing mmclx radar files from Kepler (MIRA-35) radar
 # Author: Chris Walden, UK Research & Innovation and
 #                       National Centre for Atmospheric Science
-# Last modified: 15-01-2023
+# Last modified: 27-01-2023
 # ==========================================================================
 
 """Module for processing mmclx radar data from Kepler (MIRA-35) radar."""
+
+
+import datetime
+
+import netCDF4
+import numpy as np
+
+from pyart.config import FileMetadata, get_fillvalue
+from pyart.core.radar import Radar
+from pyart.io.common import _test_arguments, make_time_unit_str
+
+from io import StringIO
+
+
+def read_mira35_mmclx(filename, **kwargs):
+    """
+    Read a netCDF mmclx file from MIRA-35 radar.
+
+    Parameters
+    ----------
+    filename : str
+        Name of mmclx netCDF file to read data from.
+
+    Returns
+    -------
+    radar : Radar
+        Radar object.
+    """
+
+    # time, range, fields, metadata, scan_type, latitue, longitude, altitude, altitude_agl,
+    # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
+    # target_scan_rate, rays_are_indexed, ray_angle_res,
+    # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
+    # scan_rate, antenna_transition, 
+    # None rotation, tilt, roll, drift, heading, pitch
+    # ?? georefs_applied
+    # instrument_parameters
+    # radar_calibration
+    # OK ngates
+    # OK nrays
+    # OK nsweeps
+    
+    # The following are not required for a fixed platform
+    rotation = None;
+    tilt = None;
+    roll = None;
+    drift = None;
+    heading = None;
+    pitch = None;
+    
+    georefs_applied = None;
+
+    antenna_transition = None;
+     
+    # -------------------------
+    # test for non empty kwargs
+    # -------------------------
+    _test_arguments(kwargs)
+
+    # --------------------------------
+    # create metadata retrieval object
+    # --------------------------------
+    filemetadata = FileMetadata('mmclx')
+
+    # -----------------
+    # Open netCDF4 file
+    # -----------------
+    dset = netCDF4.Dataset(filename)
+    nrays = len(dset.dimensions["time"])
+    ngates = len(dset.dimensions["range"])
+    nsweeps = 1;
+    
+    ncvars = dset.variables
+
+    # --------------------------------
+    # latitude, longitude and altitude
+    # --------------------------------
+    latitude = filemetadata('latitude')
+    longitude = filemetadata('longitude')
+    altitude = filemetadata('altitude')
+
+    z = StringIO(ncobj.getncattr('Latitude'))
+    
+    z1 = np.genfromtxt(z, dtype=None, names=['lat','zs2'])
+    if z1['zs2']==b'S' and z1['lat']>0: 
+        latitude['data'] = -z1['lat']
+    else:
+        latitude['data'] = z1['lat']  
+        
+    z = StringIO(ncobj.getncattr('Longitude'))
+    
+    z1 = np.genfromtxt(z, dtype=None, names=['lon','zs2'])
+    
+    if z1['zs2']==b'W' and z1['lon']>0: 
+        longitude['data'] = -z1['lon']
+    else:
+        longitude['data'] = z1['lon']  
+    
+    z = StringIO(ncobj.getncattr('Altitude'))
+    
+    z1 = np.genfromtxt(z, dtype=None, names=['alt','zs2'])
+    altitude['data'] = z1['alt']
+
+
+    # metadata
+    #metadata = filemetadata("metadata")
+    #metadata_mapping = {
+    #    "vcp-value": "vcp",
+    #    "radarName-value": "radar_name",
+    #    "ConversionPlugin": "conversion_software",
+    #}
+    #for netcdf_attr, metadata_key in metadata_mapping.items():
+    #    if netcdf_attr in dset.ncattrs():
+    #        metadata[metadata_key] = dset.getncattr(netcdf_attr)
+
+    # ------------------------------------------
+    # sweep_start_ray_index, sweep_end_ray_index
+    # ------------------------------------------
+    sweep_start_ray_index = filemetadata("sweep_start_ray_index")
+    sweep_end_ray_index = filemetadata("sweep_end_ray_index")
+    sweep_start_ray_index["data"] = np.array([0], dtype="int32")
+    sweep_end_ray_index["data"] = np.array([nrays - 1], dtype="int32")
+
+    # ------------
+    # sweep number
+    # ------------
+    sweep_number = filemetadata("sweep_number")
+    sweep_number["data"] = np.array([0], dtype="int32")
+
+
+    # sweep_mode, fixed_angle
+    sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi','vert' : 'vertical_pointing','man' : 'manual_rhi'}
+
+    sweep_mode = filemetadata("sweep_mode")
+
+    for key, value in sweep_modes.items():
+        if key in filename.lower(): 
+            scan_type = value;
+            sweep_mode["data"] = np.array(1 * [value]);
+        else: 
+            sweep_mode["data"] = np.array(1 * [None]);
+            scan_type = None;
+
+    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0], 'vert' : ncvars['elv'][0], "man" : ncvars['azi'][0]}
+
+    fixed_angle = filemetadata("fixed_angle")
+
+    if scan_type is not None:
+        fixed_angle["data"] = np.array(1 * [fixed_angles[scan_type]])
+    else:
+        fixed_angle["data"] = np.array(1 * [fixed_angles[None]])
+
+    # time
+    # interpolate between the first and last timestamps in the Time variable
+    time = filemetadata('time')
+    nctime = ncvars['time']
+    
+    dtime = nc4.num2date(ncvars['time'][:],'seconds since 1970-01-01 00:00:00')
+
+    for idx, x in np.ndenumerate(dtime):
+        dtime[idx]=x.replace(microsecond=ncvars['microsec'][idx])
+            
+    base_time = dtime[0].replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    time['units'] = make_time_unit_str(base_time)  
+    time['data']  = date2num(dtime,time['units']);
+
+    # range
+    _range = filemetadata('range')
+    _range['data'] = ncvars['range'][:]
+    _range['metres_to_centre_of_first_gate'] = _range['data'][0]
+    # assuming the distance between all gates is constant, may not
+    # always be true.
+    _range['metres_between_gates'] = (_range['data'][1] - _range['data'][0])
+
+    # azimuth, elevation
+    azimuth = filemetadata('azimuth')
+    elevation = filemetadata('elevation')
+
+    azimuth['data'] = ncvars['azi'][:]
+    elevation['data'] = ncvars['elv'][:]
+
+    # fields
+    field_name = dset.TypeName
+
+    #field_data = np.ma.array(dset.variables[field_name][:])
+    #if "MissingData" in dset.ncattrs():
+    #    field_data[field_data == dset.MissingData] = np.ma.masked
+    #if "RangeFolded" in dset.ncattrs():
+    #    field_data[field_data == dset.RangeFolded] = np.ma.masked
+
+    fields = {field_name: filemetadata(field_name)}
+    fields[field_name]["data"] = field_data
+    fields[field_name]["units"] = dset.variables[field_name].Units
+    fields[field_name]["_FillValue"] = get_fillvalue()
+
+
+    try:
+        ncvars['Zg']
+        field_name = filemetadata.get_field_name('Zg')
+        field_dic = filemetadata(field_name)
+        #field_dic['_FillValue'] = ncvars['Zg']._FillValue
+        field_dic['units'] = ncvars['Zg'].units
+        field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
+        #field_dic['applied_calibration_offset'] = ncvars['ZED_HC'].applied_calibration_offset
+        fields[field_name] = field_dic
+    except KeyError:
+        print("Zg does not exist")
+
+
+    # instrument_parameters
+    instrument_parameters = {}
+
+    radar_calibration = {}
+
+
+    #if "PRF-value" in dset.ncattrs():
+    #    dic = filemetadata("prt")
+    #    prt = 1.0 / float(dset.getncattr("PRF-value"))
+    #    dic["data"] = np.ones((nrays,), dtype="float32") * prt
+    #    instrument_parameters["prt"] = dic
+
+    #if "PulseWidth-value" in dset.ncattrs():
+    #    dic = filemetadata("pulse_width")
+    #    pulse_width = dset.getncattr("PulseWidth-value") * 1.0e-6
+    #    dic["data"] = np.ones((nrays,), dtype="float32") * pulse_width
+    #    instrument_parameters["pulse_width"] = dic
+
+    #if "NyquistVelocity-value" in dset.ncattrs():
+    #    dic = filemetadata("nyquist_velocity")
+    #    nyquist_velocity = float(dset.getncattr("NyquistVelocity-value"))
+    #    dic["data"] = np.ones((nrays,), dtype="float32") * nyquist_velocity
+    #    instrument_parameters["nyquist_velocity"] = dic
+
+    #if "Beamwidth" in dset.variables:
+    #    dic = filemetadata("radar_beam_width_h")
+    #    dic["data"] = dset.variables["Beamwidth"][:]
+    #    instrument_parameters["radar_beam_width_h"] = dic
+
+    dset.close()
+
+    return Radar(
+        time,
+        _range,
+        fields,
+        metadata,
+        scan_type,
+        latitude,
+        longitude,
+        altitude,
+        sweep_number,
+        sweep_mode,
+        fixed_angle,
+        sweep_start_ray_index,
+        sweep_end_ray_index,
+        azimuth,
+        elevation,
+        instrument_parameters=instrument_parameters,
+        radar_calibration = radar_calibration
+    )
+
+
+
+
 
 def read_mmclx(filename, **kwargs):
     """
@@ -71,16 +335,28 @@ def read_mmclx(filename, **kwargs):
         field_name = filemetadata.get_field_name('Zg')
         field_dic = filemetadata(field_name)
         #field_dic['_FillValue'] = ncvars['Zg']._FillValue
-        field_dic['units'] = ncvars['Zg'].units
+        field_dic['units'] = 'dBZ';
         field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
         #field_dic['applied_calibration_offset'] = ncvars['ZED_HC'].applied_calibration_offset
         fields[field_name] = field_dic
     except KeyError:
         print("Zg does not exist")
     
+    try:
+        ncvars['Zg']
+        field_name = filemetadata.get_field_name('Zg')
+        field_dic = filemetadata(field_name)
+        #field_dic['_FillValue'] = ncvars['Zg']._FillValue
+        field_dic['units'] = ncvars['Zg'].units
+        field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
+        #field_dic['applied_calibration_offset'] = ncvars['ZED_HC'].applied_calibration_offset
+        fields[field_name] = field_dic
+    except KeyError:
+        print("Zg does not exist")
+
+    # -----------------------------
     # latitude, longitude, altitude
-    
-    
+    # -----------------------------
     latitude = filemetadata('latitude')
     longitude = filemetadata('longitude')
     altitude = filemetadata('altitude')
@@ -125,13 +401,17 @@ def read_mmclx(filename, **kwargs):
     sweep_start_ray_index = filemetadata('sweep_start_ray_index')
     sweep_end_ray_index   = filemetadata('sweep_end_ray_index')
 
+    # We only store single sweeps 
     sweep_number['data'] = np.arange(1, dtype='int32')
-    sweep_mode['data'] =  np.array(1 * ['sector'])
+    sweep_mode['data'] =  np.array(1 * ['sector'])  # THIS NEEDS TO BE DETERMINED
+
     fixed_angle['data'] = np.array([np.round(ncvars['elv'][0],2)], dtype='float32')#np.array([0], dtype='float32')
     sweep_start_ray_index['data'] = np.array([0], dtype='int32')
     sweep_end_ray_index['data'] = np.array([nrays-1], dtype='int32')
 
+    # ------------------
     # azimuth, elevation
+    # ------------------
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
@@ -141,7 +421,9 @@ def read_mmclx(filename, **kwargs):
 
     metadata['instrument_name']='ncas-radar-mobile-ka-band-1'
 
+    # ---------------------
     # instrument parameters
+    # ---------------------
     instrument_parameters = None
     
 
