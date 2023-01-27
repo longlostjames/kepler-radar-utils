@@ -13,7 +13,7 @@
 
 import datetime
 
-import netCDF4
+import netCDF4 as nc4
 import numpy as np
 
 from pyart.config import FileMetadata, get_fillvalue
@@ -76,7 +76,7 @@ def read_mira35_mmclx(filename, **kwargs):
     # -----------------
     # Open netCDF4 file
     # -----------------
-    ncobj = netCDF4.Dataset(filename)
+    ncobj = nc4.Dataset(filename)
     nrays = len(ncobj.dimensions["time"])
     ngates = len(ncobj.dimensions["range"])
     nsweeps = 1;
