@@ -36,10 +36,17 @@ dateyr = datestr[0:4]
 
 if campaign == "long-term":
     mmclxpath = os.path.join(inpath,"long-term","mom",dateyr,datestr);
+    outpath = os.path.join(outpath,"long-term",dateyr,datestr);
 else:
     mmclxpath = os.path.join(inpath,"campaign",campaign,"mom",datestr);
-
+    outpath = os.path.join(outpath,campaign,datestr);
 os.chdir(mmclxpath);
 files = [os.path.join(mmclxpath,f) for f in glob.glob('*.mmclx')]
 
 print(files);
+
+print(outpath);
+
+
+if not os.path.exists(outpath):
+    os.makedirs(outpath)
