@@ -1,6 +1,6 @@
 import getopt, sys
 
-import datetime
+from datetime import datetime
 
 sys.path.append('/home/users/cjwalden/my-packages')
 import kepler_utils as kepler
