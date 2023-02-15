@@ -23,6 +23,7 @@ from pyart.io.common import _test_arguments, make_time_unit_str
 from io import StringIO
 
 
+
 def read_mira35_mmclx(filename, **kwargs):
     """
     Read a netCDF mmclx file from MIRA-35 radar.
@@ -167,7 +168,7 @@ def read_mira35_mmclx(filename, **kwargs):
             sweep_mode["data"][0] = value;
             break;
 
-    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0], 'vert' : ncvars['elv'][0], "man" : ncvars['azi'][0]}
+    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
 
     fixed_angle = filemetadata("fixed_angle")
 
