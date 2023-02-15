@@ -30,9 +30,9 @@ for o, a in opts:
 dateyr = datestr[0:4]
 
 if campaign == "long-term":
-    mmclxpath = os.path.join(data_path,"long-term",dateyr,datestr);
+    mmclxpath = os.path.join(data_path,"long-term","raw",dateyr,datestr);
 else:
-    mmclxpath = os.path.join(data_path,"campaign",campaign,datestr);
+    mmclxpath = os.path.join(data_path,"campaign",campaign,"raw",datestr);
 
 os.chdir(mmclxpath);
 files = [os.path.join(mmclxpath,f) for f in glob.glob('*.mmclx')]
