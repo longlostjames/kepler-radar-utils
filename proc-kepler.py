@@ -65,6 +65,9 @@ for f in files:
 
     Radar = kepler.read_mira35_mmclx(f);
 
-    outfile = os.path.join(outpath,'ncas-mobile-radar-ka-band-1_{}_{}.nc'.format(datestr,scan_type));
+    file_timestamp = datetime.strftime(Radar.metadata["time_coverage_start"],'%Y%m%d-%H%M%SZ');
+
+
+    outfile = os.path.join(outpath,'ncas-mobile-radar-ka-band-1_{}_{}.nc'.format(file_timestamp,scan_type));
 
     pyart.io.write_cfradial(outfile, Radar, format='NETCDF4', time_reference=None);
