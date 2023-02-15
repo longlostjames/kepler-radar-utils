@@ -287,7 +287,7 @@ def read_mira35_mmclx(filename, **kwargs):
         azimuth,
         elevation,
         instrument_parameters=instrument_parameters,
-        radar_calibration = radar_calibration
+        radar_calibration=radar_calibration
     )
 
 
@@ -440,6 +440,8 @@ def read_mmclx(filename, **kwargs):
 
 
     metadata['instrument_name']='ncas-radar-mobile-ka-band-1'
+    metadata['time_coverage_start'] = datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
+    metadata['time_coverage_end'] = datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
 
     # ---------------------
     # instrument parameters
