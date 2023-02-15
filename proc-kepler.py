@@ -29,7 +29,7 @@ dateyr = datestr[0:4]
 
 if campaign == "long-term":
     mmclxpath = os.path.join(data_path,"long-term",dateyr,datestr);
-else
+else:
     mmclxpath = os.path.join(data_path,"campaign",campaign,datestr);
 
 os.chdir(mmclxpath);
