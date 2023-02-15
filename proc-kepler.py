@@ -1,6 +1,6 @@
 import getopt, sys, os
 import glob
-
+import pyart
 
 from datetime import datetime
 
@@ -41,7 +41,7 @@ else:
     mmclxpath = os.path.join(inpath,"campaign",campaign,"mom",datestr);
     outpath = os.path.join(outpath,campaign,datestr);
 os.chdir(mmclxpath);
-files = [os.path.join(mmclxpath,f) for f in glob.glob('*.mmclx')]
+files = [f for f in glob.glob('*.mmclx')]
 
 print(files);
 
@@ -50,3 +50,21 @@ print(outpath);
 
 if not os.path.exists(outpath):
     os.makedirs(outpath)
+
+scan_types = ['ppi','rhi','vert','man']
+
+for f in files:
+    for elem in scan_types:
+        scan_type = None
+        if elem in f.lower():
+            scan_type = elem
+            break;
+
+    print("{} {}".format(f, scan_type));
+
+
+    Radar = kepler.read_mira35_mmclx(f);
+
+    outfile = os.path.join(outpath,'ncas-mobile-radar-ka-band-1_{}_{}.nc'.format(datestr,scan_type));
+
+    pyart.io.write_cfradial(outfile, Radar, format='NETCDF4', time_reference=None);
