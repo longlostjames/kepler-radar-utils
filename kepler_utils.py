@@ -5,11 +5,12 @@
 # Module for processing mmclx radar files from Kepler (MIRA-35) radar
 # Author: Chris Walden, UK Research & Innovation and
 #                       National Centre for Atmospheric Science
-# Last modified: 27-01-2023
+# Last modified: 20-02-2023
 # ==========================================================================
 
 """Module for processing mmclx radar data from Kepler (MIRA-35) radar."""
 
+module_version = 0.1;
 
 import datetime
 
@@ -19,6 +20,8 @@ import numpy as np
 from pyart.config import FileMetadata, get_fillvalue
 from pyart.core.radar import Radar
 from pyart.io.common import _test_arguments, make_time_unit_str
+
+import yaml
 
 from io import StringIO
 
@@ -39,7 +42,7 @@ def read_mira35_mmclx(filename, **kwargs):
         Radar object.
     """
 
-    # time, range, fields, metadata, scan_type, latitue, longitude, altitude, altitude_agl,
+    # time, range, fields, metadata, scan_type, latitude, longitude, altitude, altitude_agl,
     # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
     # target_scan_rate, rays_are_indexed, ray_angle_res,
     # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
@@ -59,11 +62,8 @@ def read_mira35_mmclx(filename, **kwargs):
     drift = None;
     heading = None;
     pitch = None;
-    
     georefs_applied = None;
-
     antenna_transition = None;
-
      
     # -------------------------
     # test for non empty kwargs
@@ -81,7 +81,7 @@ def read_mira35_mmclx(filename, **kwargs):
     ncobj = nc4.Dataset(filename)
     nrays = len(ncobj.dimensions["time"])
     ngates = len(ncobj.dimensions["range"])
-    nsweeps = 1;
+    nsweeps = 1; # We only have single sweep files 
     
     ncvars = ncobj.variables
 
@@ -114,7 +114,100 @@ def read_mira35_mmclx(filename, **kwargs):
     z1 = np.genfromtxt(z, dtype=None, names=['alt','zs2'])
     altitude['data'] = z1['alt']
 
+    # Original mmclx metadata
+    # -----------------------
+    # convention: "CF-1.0"
+    # location: "Chilbolton"
+    # Altitude:
+    # Latitude:
+    # Longitude:
+    # system: "B3XC"
+    # title: "MIRA Cloud Radar Data"
+    # institution: "National Centre for Atmospheric Science (NCAS)"
+    # source: "220520_101223.pds"
+    # reference: "Ka Band Cloud Radar MIRA 35, METEK GmbH www.metek.de"
 
+    # Most important information from the header structure
+    # ----------------------------------------------------
+    # nfft: "number_of_fft_points"
+    # NyquistVelocity: 
+    # nave: "number_of_spectral_averages"
+    # ovl: "overlapping_ffts_flag"
+    # zrg: "number_of_range_gates"
+    # rg0: "number_of_lowest_range_gate"
+    # drg: "range_resolution"
+    # lambda: "wavelength"
+    # range: "range_from_antenna_to_centre_of_each_range_gate"
+
+    # Most important information from the SRVI struture given at each dwell time
+    # ---------------------------------------------------------------------------
+    # time: "seconds since 1970-01-01T00:00:00Z"
+    # # microsec: 
+    # tpow: "average_transmit_power"
+    # npw1: "noise_power_co-channel"
+    # npw2: "noise_power_cross-channel"
+    # cpw1: "snr_of_calibration_signal_co-channel"
+    # cpw2: "snr_of_calibration_signal_cross-channel"
+    # grst: "general_radar_state"
+    # azi: "azimuth"
+    # elv: "elevation"
+    # aziv: "azimuth_angle_velocity"
+    # northangle: "north_angle"
+    # elvv: "elevation_angle_velocity"
+    # LO_Frequency: "transmit_frequency"
+    # DetuneFine: "detuning_of_local_scillator_detected_from_Txn_footprint"
+
+metadata_keymap = {
+    "location": "platform",
+    "Longitude": "longitude",
+    "Latitude": "latitude",
+    "Altitude": "altitude",
+    "system": "instrument_serial_nnmber",
+    "title": "title",
+    "institution": "institution",
+    "reference": "reference",
+
+}
+
+ # time, range, fields, metadata, scan_type, latitude, longitude, altitude, altitude_agl,
+    # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
+    # target_scan_rate, rays_are_indexed, ray_angle_res,
+    # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
+    # scan_rate, antenna_transition, 
+    # None rotation, tilt, roll, drift, heading, pitch
+    # ?? georefs_applied
+    # instrument_parameters
+    # radar_calibration
+
+ variables_keymap = {
+        "Zg": "DBZH",
+        "VELg": "VEL",
+        "RMSg": "WIDTH",
+        "LDRg": "LDR",
+        "SNRg": "SNR",
+        "elv": "elevation",
+        "elvv": "elevation_angle_velocity"
+        "azi": "azimuth_angle",
+        "aziv": "azimuth_angle_velocity",
+        "nfft": "nfft",
+        "nave": "nave",
+        "prf": "prf",
+        "rg0": "rg0",
+    }
+
+variables = list(keymap.keys())
+
+# SNRg, VELg, RMSg, LDRg, NPKg, SNRg
+#RHO DPS PHOwav LDRnormal
+# HSDco HSDcx Zg ISDRco ISDRcx 
+# MRMco MRMcx RadarConst SNRCorFaCo SNRCorFaCx SKWg
+
+    # Variables
+    # nfft
+    # prf
+    # NyquistVelocity
+    # nave
+    
     # metadata
     #metadata = filemetadata("metadata")
     #metadata_mapping = {
@@ -126,8 +219,9 @@ def read_mira35_mmclx(filename, **kwargs):
     #    if netcdf_attr in dset.ncattrs():
     #        metadata[metadata_key] = dset.getncattr(netcdf_attr)
 
-
+    # --------
     # metadata
+    # --------
     metadata = filemetadata('metadata')
     for k in ['institution', 'title', 'used_algorithms']:
         if k in ncobj.ncattrs(): 
@@ -149,8 +243,9 @@ def read_mira35_mmclx(filename, **kwargs):
     sweep_number = filemetadata("sweep_number")
     sweep_number["data"] = np.array([0], dtype="int32")
 
-
+    # -----------------------
     # sweep_mode, fixed_angle
+    # -----------------------
     sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi','vert' : 'vertical_pointing','man' : 'manual_rhi'}
 
     sweep_mode = filemetadata("sweep_mode")
@@ -176,6 +271,7 @@ def read_mira35_mmclx(filename, **kwargs):
         fixed_angle["data"] = np.array(1 * [fixed_angles[scan_type]])
     else:
         fixed_angle["data"] = np.array(1 * [None])
+
 
     # time
     # interpolate between the first and last timestamps in the Time variable
@@ -207,7 +303,33 @@ def read_mira35_mmclx(filename, **kwargs):
     azimuth['data'] = ncvars['azi'][:]
     elevation['data'] = ncvars['elv'][:]
 
+
+    metadata['time_coverage_start'] = datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
+    metadata['time_coverage_end'] = datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
+
+
     # fields
+    # mmclx files contain the following: 
+    # where x="g" (global),"" (hydrometeors),"plank" (plankton),"rain","cl" 
+    # SNRx 
+    # VELx
+    # RMSx
+    # LDRx
+    # LWC (liquid water content of peaks classified as rain)
+    # RR (rain rate of peaks classified as rain)
+    # Ze (equivalent radar reflectivity of all hydrometeors)
+    # Zg (equivalent radar relectivity of all targets (global))
+    # Z (similer to Ze but with Mie correction applied, and a pressure and temperature dependent value of |Kw|^2
+    # MeltHeiDet (melting layer height detected from LDR if detected, else -1)
+    # MeltHeiDb (melting layer height as deduced from external sources)
+    # MeltHei (melting layer height from both sources)
+    # TEMP (temperature profile faked form external sources)
+    # ISDRco (ratio between power integrated over the largest peak and the noise level - to indicate saturation)
+    # ISDRcx (cross-polar channel version of ISDRco)
+    # RadarConst (radar constant related to 5km range, Zx = RadarCponst*SNRx*(range/5 km)^2), with range at the centre of each range gate)
+    # SNRCorFaCo ()
+    # SNRCorFaCx ()
+    # 
     #field_name = ncobj.TypeName
 
     #field_data = np.ma.array(dset.variables[field_name][:])
@@ -235,7 +357,16 @@ def read_mira35_mmclx(filename, **kwargs):
     except KeyError:
         print("Zg does not exist")
 
-
+    if "Zg" in ncvars:
+        field_name = filemetadata.get_field_name('Zg')
+        field_dic = filemetadata(field_name)
+        #field_dic['_FillValue'] = ncvars['Zg']._FillValue
+        field_dic['units'] = ncvars['Zg'].units
+        field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
+        #field_dic['applied_calibration_offset'] = ncvars['ZED_HC'].applied_calibration_offset
+        fields[field_name] = field_dic
+    except KeyError:
+        print("Zg does not exist")
 
 
 
@@ -438,11 +569,7 @@ def read_mmclx(filename, **kwargs):
     azimuth['data'] = ncvars['azi'][:]
     elevation['data'] = ncvars['elv'][:]#np.array([0.], dtype='float32')
 
-
-    metadata['instrument_name']='ncas-radar-mobile-ka-band-1'
-    metadata['time_coverage_start'] = datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
-    metadata['time_coverage_end'] = datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
-
+ 
     # ---------------------
     # instrument parameters
     # ---------------------
@@ -462,10 +589,10 @@ def read_mmclx(filename, **kwargs):
 # CONVERSION ROUTINES
 # ===================
 
-def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,tracking_tag):
+def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,yaml_instrument_file,tracking_tag):
 
     """This routine converts mmclx data from the NCAS Mobile Ka-band Radar (Kepler) to Level 0b (cfradial) data.
-    Metadata are added using information in the yaml_project_file.
+    Metadata are added using information in two YAML files the yaml_project_file, and yaml_instrument_file.
 
     :param infile: Full path of NetCDF Level 0a mmclx data file, e.g. `<path-to-file>/20220907_071502.vert.mmclx`
     :type infile: str
@@ -473,7 +600,24 @@ def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,tracking_tag):
     :param outfile: Full path of NetCDF Level 0b output file, e.g. `<path-to-file>/ncas-radar-mobile-ka-band-1_cao_20220907-071502_fix_l0b_v1.0.nc`
     :type outfile: str
     """
+    instrument_tagname = "radar-kepler"
 
+    # ---------------------------------------
+    # Read metadata from YAML instrument file
+    # ---------------------------------------  
+    with open(yaml_instrument_file, "r") as stream:
+        try:
+            instruments = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    for elem in instruments:
+        if instrument_tagname in elem:
+            instrument = elem[instrument_tagname];
+
+    # -------------------------------------
+    # Read metadata from YAML projects file
+    # -------------------------------------  
     with open(yaml_project_file, "r") as stream:
         try:
             projects = yaml.safe_load(stream)
@@ -484,254 +628,148 @@ def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,tracking_tag):
         if tracking_tag in p:
             project = p[tracking_tag];
 
-#    project = projects["tracking_tag"];
-
-    radar = "ncas-mobile-radar-ka-band-1";
+    radar = instrument["instrument_name"];
 
     for n in project["ncas_instruments"]:
         if radar in n:
-            ncas_instrument = n[radar];
+            project_instrument = n[radar];
 
-    print(ncas_instrument);
+    print(project_instrument);
             
-    DSin = nc4.Dataset(infile);
+    
+    RadarDataset = read_mira35_mmclx(infile);
 
-    dt_start = cftime.num2pydate(DSin['time'][0],DSin['time'].units)
-    dt_end   = cftime.num2pydate(DSin['time'][-1],DSin['time'].units)
+    # Use PyART to create CfRadial file
+    pyart.io.write_cfradial(outfile, RadarDataset, format='NETCDF4', time_reference=True)
+
+    #DSin = nc4.Dataset(infile);
+
+    #dt_start = cftime.num2pydate(DSin['time'][0],DSin['time'].units)
+    #dt_end   = cftime.num2pydate(DSin['time'][-1],DSin['time'].units)
 
     # FIXME: need to add the microsecs which are stored separately in mmclx files
 
     # Should modify below to write to cfradial using pyart.
     # Then will modify the files to make them NCAS compliant.
 
-    try: outfile.close()  # just to be safe, make sure dataset is not already open.
-    except: pass
-    DSout = nc4.Dataset(outfile,mode='w',format='NETCDF4')
-    print("Creating {}".format(outfile));
+    #try: outfile.close()  # just to be safe, make sure dataset is not already open.
+    #except: pass
+    #DSout = nc4.Dataset(outfile,mode='w',format='NETCDF4')
+    #print("Creating {}".format(outfile));
 
-    # ------------------------
-    # Set up global attributes
-    # ------------------------
-    DSout.product_version = "v1.0" ;
-    DSout.processing_level = "0b" ;
+    # -------------------------------------------------------
+    # Read freshly created cfradial file to add NCAS metadata
+    # -------------------------------------------------------
+    DS = nc4.Dataset(outfile);
 
-    DSout.licence = project["data_licence"];
-    DSout.acknowledgement = project["acknowledgement"];
-    DSout.platform = "Chilbolton Atmospheric Observatory" ;
-    DSout.platform_type = "stationary_platform" ;
-    DSout.title = ncas_instrument["title"];
-    DSout.creator_name = "Chris Walden" ;
-    DSout.creator_email = "chris.walden@ncas.ac.uk" ;
-    DSout.creator_url = "https://orcid.org/0000-0002-5718-466X" ;
-    DSout.institution = "National Centre for Atmospheric Science (NCAS)";
-    DSout.instrument_name = "ncas-radar-camra-1";
-    DSout.instrument_software = "radar-camra-rec" ;
-    DSout.instrument_software_version = "1.4 Rev 58" ;
+    DS.product_version = "v1.0" ;
+    DS.processing_level = "0b" ;
 
-    DSout.references = "";
-    DSout.source = "NCAS Mobile Ka-band Radar (Kepler)";
-    DSout.comment = "";
-    DSout.project = project["project_name"];
-    DSout.project_principal_investigator = project["principal_investigator"]["name"];
-    DSout.project_principal_investigator_email = project["principal_investigator"]["email"];
-    DSout.project_principal_investigator_url = project["principal_investigator"]["pid"];
+    DS.licence = project["data_licence"];
+    DS.acknowledgement = project["acknowledgement"];
+    #DS.platform = "Chilbolton Atmospheric Observatory" ;
+    #DS.platform_type = "stationary_platform" ;
+    DS.title = ncas_instrument["title"];
+    DS.creator_name = "Chris Walden" ;
+    DS.creator_email = "chris.walden@ncas.ac.uk" ;
+    DS.creator_url = "https://orcid.org/0000-0002-5718-466X" ;
+    DS.institution = "National Centre for Atmospheric Science (NCAS)";
+    DS.instrument_name = instrument["insstrument_name"];
+    DS.instrument_software = "" ;
+    DS.instrument_software_version = "" ;
 
-    DSout.processing_software_url = "";
-    DSout.processing_software_version = "1.0";
+    #DS.references = "";
+    #DS.source = "NCAS Mobile Ka-band Radar (Kepler)";
+    #DS.comment = "";
+    DS.project = project["project_name"];
+    DS.project_principal_investigator = project["principal_investigator"]["name"];
+    DS.project_principal_investigator_email = project["principal_investigator"]["email"];
+    DS.project_principal_investigator_url = project["principal_investigator"]["pid"];
 
-    DSout.scantype = "vertical_pointing";
+    DS.processing_software_url = "";
+    DS.processing_software_version = "";
 
-    DSout.time_coverage_start = datetime.strftime(dt_start,'%Y-%m-%dT%H:%M:%SZ');
-    DSout.time_coverage_end = datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
-    DSout.geospatial_bounds = "51.1450N -1.4384E";
+    #DS.scantype = "vertical_pointing";
 
-    DSout.pulse_compression = "false";
+    DS.time_coverage_start = datetime.strftime(dt_start,'%Y-%m-%dT%H:%M:%SZ');
+    DS.time_coverage_end = datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
+    #DS.geospatial_bounds = "51.1450N -1.4384E";
 
-    DSout.ADC_bits_per_sample = np.int(DSin.ADC_bits_per_sample);
-    DSout.ADC_channels        = np.int(DSin.ADC_channels);
-
+    
     # ----------------
     # Scalar variables
     # ----------------
 
-    varin = DSin['latitude'];
-    varout = DSout.createVariable('latitude',varin.datatype);
-    varout.standard_name = 'latitude';
-    varout.long_name = 'latitude of the antenna';
-    varout.units = 'degree_north';
-    varout[:]=51.1450;
+    #varin = DSin['latitude'];
+    #varout = DSout.createVariable('latitude',varin.datatype);
+    #varout.standard_name = 'latitude';
+    #varout.long_name = 'latitude of the antenna';
+    #varout.units = 'degree_north';
+    #varout[:]=51.1450;
 
-    varin = DSin['longitude'];
-    varout = DSout.createVariable('longitude',varin.datatype);
-    varout.standard_name = 'longitude';
-    varout.long_name = 'longitude of the antenna';
-    varout.units = 'degree_east';
-    varout[:]=-1.4384;
+    #varin = DSin['longitude'];
+    #varout = DSout.createVariable('longitude',varin.datatype);
+    #varout.standard_name = 'longitude';
+    #varout.long_name = 'longitude of the antenna';
+    #varout.units = 'degree_east';
+    #varout[:]=-1.4384;
 
-    varin = DSin['height'];
-    varout = DSout.createVariable('altitude',varin.datatype);
-    varout.standard_name = 'altitude';
-    varout.long_name = 'altitude of the elevation axis above the geoid (WGS84)';
-    varout.units = 'm';
-    varout[:]=146.7;
+    #varin = DSin['height'];
+    #varout = DSout.createVariable('altitude',varin.datatype);
+    #varout.standard_name = 'altitude';
+    #varout.long_name = 'altitude of the elevation axis above the geoid (WGS84)';
+    #varout.units = 'm';
+    #varout[:]=146.7;
 
-    varout = DSout.createVariable('altitude_agl',varin.datatype);
-    varout.standard_name = 'altitude';
-    varout.long_name = 'altitude of the elevation axis above ground';
-    varout.units = 'm';
-    varout[:]=16.0;
+    #varout = DSout.createVariable('altitude_agl',varin.datatype);
+    #varout.standard_name = 'altitude';
+    #varout.long_name = 'altitude of the elevation axis above ground';
+    #varout.units = 'm';
+    #varout[:]=16.0;
 
-    varin = DSin['frequency'];
-    varout = DSout.createVariable('frequency',varin.datatype);
-    varout.standard_name = 'radiation_frequency';
-    varout.long_name = 'frequency of transmitted radiation';
-    varout.units = 'GHz';
-    varout[:]=varin[:];
+    #varin = DSin['frequency'];
+    #varout = DSout.createVariable('frequency',varin.datatype);
+    #varout.standard_name = 'radiation_frequency';
+    #varout.long_name = 'frequency of transmitted radiation';
+    #varout.units = 'GHz';
+    #varout[:]=varin[:];
 
-    varin = DSin['prf'];
-    varout = DSout.createVariable('prf',varin.datatype);
-    varout.long_name = 'pulse repetition frequency';
-    varout.units = 'Hz';
-    varout[:]=varin[:];
+    #varin = DSin['prf'];
+    #varout = DSout.createVariable('prf',varin.datatype);
+    #varout.long_name = 'pulse repetition frequency';
+    #varout.units = 'Hz';
+    #varout[:]=varin[:];
 
-    varin = DSin['beamwidthH'];
-    varout = DSout.createVariable('beamwidthH',varin.datatype);
-    varout.long_name = 'horizontal angular beamwidth';
-    varout.units = 'degree';
-    varout[:]=varin[:];
+    #varin = DSin['beamwidthH'];
+    #varout = DSout.createVariable('beamwidthH',varin.datatype);
+    #varout.long_name = 'horizontal angular beamwidth';
+    #varout.units = 'degree';
+    #varout[:]=varin[:];
 
-    varin = DSin['beamwidthV'];
-    varout = DSout.createVariable('beamwidthV',varin.datatype);
-    varout.long_name = 'vertical angular beamwidth';
-    varout.units = 'degree';
-    varout[:]=varin[:];
+    #varin = DSin['beamwidthV'];
+    #varout = DSout.createVariable('beamwidthV',varin.datatype);
+    #varout.long_name = 'vertical angular beamwidth';
+    #varout.units = 'degree';
+    #varout[:]=varin[:];
 
-    varin = DSin['antenna_diameter'];
-    varout = DSout.createVariable('antenna_diameter',varin.datatype);
-    varout.long_name = 'antenna diameter';
-    varout.units = 'm';
-    varout[:]=varin[:];
+    #varin = DSin['antenna_diameter'];
+    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
+    #varout.long_name = 'antenna diameter';
+    #varout.units = 'm';
+    #varout[:]=varin[:];
 
-    varout = DSout.createVariable('antenna_focal_length','f4');
-    varout.long_name = 'focal length of antenna';
-    varout.units = 'm';
-    varout[:] = 9.0;
+    #varin = DSin['pulse_period'];
+    #varout = DSout.createVariable('pulse_width',varin.datatype);
+    #varout.long_name = 'pulse width';
+    #varout.units = 'us';
+    #varout[:]=varin[:];
 
-    varout = DSout.createVariable('antenna_focus_radial_location','f4');
-    varout.long_name = 'distance along boresight from elevation axis to antenna focus';
-    varout.units = 'm';
-    varout[:] = 14.34;
+    #varin = DSin['transmit_power'];
+    #varout = DSout.createVariable('transmit_power',varin.datatype);
+    #varout.long_name = 'peak transmitted power';
+    #varout.units = 'W';
+    #varout[:]=varin[:];
 
-    varin = DSin['pulse_period'];
-    varout = DSout.createVariable('pulse_width',varin.datatype);
-    varout.long_name = 'pulse width';
-    varout.units = 'us';
-    varout[:]=varin[:];
-
-    varin = DSin['transmit_power'];
-    varout = DSout.createVariable('transmit_power',varin.datatype);
-    varout.long_name = 'peak transmitted power';
-    varout.units = 'W';
-    varout[:]=varin[:];
-
-    varin = DSin['clock'];
-    varout = DSout.createVariable('clock',varin.datatype);
-    varout.long_name = 'clock input to timer card';
-    varout.units = 'Hz';
-    varout[:]=varin[:];
-
-    varout = DSout.createVariable('clock_divfactor','i4');
-    varout.long_name = 'clock divide factor';
-    varout.units = '1';
-    varout[:]=DSin['clock'].clock_divfactor;
-
-    varout = DSout.createVariable('delay_clocks','i4');
-    varout.long_name = 'clock cycles before sampling is initiated';
-    varout.units = '1';
-    varout[:]=DSin.delay_clocks;
-
-    varout = DSout.createVariable('samples_per_pulse','i4');
-    varout.long_name = 'number of samples per pulse';
-    varout.units = '1';
-    varout[:]=DSin.samples_per_pulse;
-
-    varout = DSout.createVariable('pulses_per_daq_cycle','i4');
-    varout.long_name = 'number of pulses per data acquisition cycle';
-    varout.units = '1';
-    varout[:]=DSin.pulses_per_daq_cycle;
-
-    varout = DSout.createVariable('pulses_per_ray','i4');
-    varout.long_name = 'number of pulses per ray';
-    varout.units = '1';
-    varout[:]=DSin.pulses_per_ray;
-
-    varout = DSout.createVariable('radar_constant','f4');
-    varout.long_name = 'radar constant';
-    varout.units = 'dB';
-    varout[:]=DSin.radar_constant;
-
-    varout = DSout.createVariable('receiver_gain','f4');
-    varout.long_name = 'receiver gain';
-    varout.units = 'dB';
-    varout[:]=DSin.receiver_gain;
-
-    varout = DSout.createVariable('cable_losses','f4');
-    varout.long_name = 'cable losses';
-    varout.units = 'dB';
-    varout[:]=DSin.cable_losses;
-
-    varout = DSout.createVariable('extra_attenuation','f4');
-    varout.long_name = 'extra attenuation';
-    varout.units = 'dB';
-    varout[:]=DSin.extra_attenuation;
-
-
-    # ---------------
-    # Copy dimensions
-    # ---------------
-    the_dim = DSin.dimensions['time'];
-    DSout.createDimension('time', len(the_dim) if not the_dim.isunlimited() else None)
-
-    the_dim = DSin.dimensions['pulses'];
-    DSout.createDimension('pulse', len(the_dim) if not the_dim.isunlimited() else None)
-
-    the_dim = DSin.dimensions['samples'];
-    DSout.createDimension('range', len(the_dim) if not the_dim.isunlimited() else None)
-
-    # --------------------
-    # Coordinate variables
-    # --------------------
-    varin = DSin['time'];
-    varout = DSout.createVariable('time',varin.datatype,('time'));
-    varout.standard_name = 'time';
-    varout.long_name = 'time at the end of each recorded ray';
-    varout.units = varin.units;
-    varout[:]=varin[:];
-
-    varin = DSin['range'];
-    varout = DSout.createVariable('range',varin.datatype,('range'));
-    varout.long_name = varin.long_name;
-    varout.range_offset_applied = np.float32(varin.range_offset);
-    varout.units = varin.units;
-    varout[:]=varin[:];
-
-    # --------------------------
-    # Antenna pointing variables
-    # --------------------------
-    varin = DSin['elevation'];
-    varout = DSout.createVariable('elevation',varin.datatype,'time');
-    varout.long_name = 'elevation angle of the antenna boresight above the horizon';
-    varout.units = 'degree';
-    varout.elevation_offset_applied = np.float32(0.);
-    varout[:] = varin[:];
-
-    varin = DSin['azimuth'];
-    varout = DSout.createVariable('azimuth',varin.datatype,'time');
-    varout.long_name = 'azimuth angle of the antenna boresight clockwise from the grid north';
-    varout.comment = 'More generally this is the azimuth angle of the plane perpendicular to the elevation axis, which remains defined even when the elevation is 90 degree';
-    varout.units = 'degree';
-    varout.azimuth_offset_applied = np.float32(0.);
-    varout[:] = varin[:];
 
     # ---------------
     # Field variables
@@ -742,14 +780,6 @@ def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,tracking_tag):
     # The ones to use are:
     # SNR, VEL, RMS, LDR, NPK, RHO, DPS, HSDco, HSDcx, Ze, ISDRco, ISDRcx
 
-    varin = DSin['Ze'];
-    varout = DSout.createVariable('ZED',varin.datatype,('time','range'),zlib=True);
-    varout.long_name = '';
-    varout.units = 'dBZ';
-    varout[:]=varin[:];
-    comment_string  = ""
-    varout.comment = comment_string;
-
 
     # -----------------------
     # Update history metadata
@@ -761,7 +791,7 @@ def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,tracking_tag):
 
     history = updttimestr + (" - user:" + user
     + " machine: " + socket.gethostname()
-    + " program: chilbolton_ts_utils.py convert_camra_ts_l0a2l0b"
+    + " program: kepler_utils.convert_kepler_mmclx2l0b"
     + " version:" + str(module_version));
 
     DSout.history = history + "\n" + DSin.history;
@@ -773,400 +803,9 @@ def convert_kepler_mmclx2l0b(infile,outfile,yaml_project_file,tracking_tag):
 
     return
 
+def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,tracking_tag):
 
-def convert_galileo_ts_l0b2l1(infile,outfile,dBZ_offset,range_offset,data_version):
-
-    """This routine converts raw (Level 0b) time series data from the Chilbolton 94GHz Cloud Radar (Galileo) to Level 1 data.
-    Level 0b data have been generated from as-recorded Level 0a data by splitting the files along the time dimension and converting to NetCDF4.
-    Processing by this routine involves removing redundant dimensions, and removing bias from the ADC samples of the received I and Q.
-    Metadata are added specific to the WIVERN-2 project ground-based observations collected in 2020-2021.
-
-    :param infile: Full path of NetCDF Level 0b data file, e.g. `<path-to-file>/radar-galileo_<YYYYddmmHHMMSS>-<YYYYddmmHHMMSS>_fix-ts.nc4`
-    :type infile: str
-
-    :param outfile: Full path of NetCDF Level 0b output file, e.g. `<path-to-file>/ncas-radar-w-band-1_cao_20201210-212823_fix-ts_l1_v1.0.nc`
-    :type outfile: str
-
-    :param dBZ_offset: dB calibration offset to apply to reflectivity.  This is converted to linear units and I and Q values are multiplied by the square root of this value.
-    :type dBZoffset: float
-
-    :param range_offset: Range offset to apply in metres.
-    :type range_offset: float
-
-    :param data_version: Version of data product in the format `N.m`, where `N` denotes the major verion and `m` a minor revision.
-    :type data_version: str
-    """
-
-    # -----------------------------------------------------
-    # Read NetCDF spectra file with embedded IQ time series
-    # -----------------------------------------------------
-    DSin = nc4.Dataset(infile);
-
-    dt_start = cftime.num2pydate(DSin['time'][0],DSin['time'].units)
-    dt_end   = cftime.num2pydate(DSin['time'][-1],DSin['time'].units)
-
-    # -----------------------------
-    # Set up NetCDF file for output
-    # -----------------------------
-    try: outfile.close()  # just to be safe, make sure dataset is not already open.
-    except: pass
-    DSout = nc4.Dataset(outfile,mode='w',format='NETCDF4')
-    print(outfile)
-
-    # ------------------------
-    # Set up global attributes
-    # ------------------------
-    DSout.product_version = "v{}".format(data_version);
-    DSout.processing_level = "1" ;
-
-    DSout.licence = "This dataset is released for use under a Creative Commons Attribution 4.0 International (CC-BY 4.0) license (see https://creativecommons.org/licenses/by/4.0/ for terms and conditions)."
-#    DSout.licence = "Data usage licence - UK Open Government Licence agreement: \n http://www.nationalarchives.gov.uk/doc/open-government-licence" ;
-    DSout.acknowledgement = "This dataset was developed as part of the activity \"Doppler Wind Radar Science Performance Study (WIVERN-2)\", funded by the European Space Agency under Contract no. 4000130864/20/NL/CT.  Users should acknowledge UK Research and Innovation as the data provider (in partnership with the National Centre for Atmospheric Science)." ;
-#    DSout.acknowledgement = "Acknowledgement is required of UK Research and Innovation as the data provider (in partnership with the National Centre for Atmospheric Science) whenever and wherever these data are used." ;
-    DSout.platform = "Chilbolton Atmospheric Observatory" ;
-    DSout.platform_type = "stationary_platform" ;
-    DSout.title = "Time series from 94 GHz Galileo radar collected for ESA WIVERN-2 campaign at Chilbolton Observatory";
-    DSout.creator_name = "Chris Walden" ;
-    DSout.creator_email = "chris.walden@ncas.ac.uk" ;
-    DSout.creator_url = "https://orcid.org/0000-0002-5718-466X" ;
-    DSout.institution = "National Centre for Atmospheric Science (NCAS)";
-    DSout.instrument_name = "ncas-radar-w-band-1";
-    DSout.instrument_software = "radar-galileo-rec" ;
-    DSout.instrument_software_version = "" ;
-
-    DSout.references = "";
-    DSout.source = "94GHz Galileo Radar";
-    DSout.comment = "";
-    DSout.project = "WIVERN-2 Doppler Wind Radar Science Performance Study";
-    DSout.project_principal_investigator = "Anthony Illingworth";
-    DSout.project_principal_investigator_email = "a.j.illingworth@reading.ac.uk";
-    DSout.project_principal_investigator_url = "https://orcid.org/0000-0002-5774-8410";
-
-    DSout.processing_software_url = "https://github.com/longlostjames/wivern_chilbolton_utils.git";
-    DSout.processing_software_version = "1.0";
-
-    DSout.scantype = "vertical_pointing";
-
-    DSout.time_coverage_start = datetime.strftime(dt_start,'%Y-%m-%dT%H:%M:%SZ');
-    DSout.time_coverage_end = datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
-    DSout.geospatial_bounds = "51.1447N -1.4384E";
-
-    DSout.pulse_compression = "false";
-
-    DSout.ADC_bits_per_sample = np.int(12);
-    DSout.ADC_channels        = np.int(8);
-
-    # ----------------
-    # Scalar variables
-    # ----------------
-
-    varout = DSout.createVariable('latitude','f4');
-    varout.standard_name = 'latitude';
-    varout.long_name = 'latitude of the antenna';
-    varout.units = 'degree_north';
-    varout[:]=51.1447;
-
-    varout = DSout.createVariable('longitude','f4');
-    varout.standard_name = 'longitude';
-    varout.long_name = 'longitude of the antenna';
-    varout.units = 'degree_east';
-    varout[:]=-1.4385;
-
-    varout = DSout.createVariable('altitude','f4');
-    varout.standard_name = 'altitude';
-    varout.long_name = 'altitude of the antenna above the geoid (WGS84)';
-    varout.units = 'm';
-    varout[:] = 131.6;
-
-    varout = DSout.createVariable('altitude_agl','f4');
-    varout.long_name = 'altitude of the antenna above ground';
-    varout.units = 'm';
-    varout[:] = 0.9;
-
-    varout = DSout.createVariable('frequency','f4');
-    varout.standard_name = 'radiation_frequency';
-    varout.long_name = 'frequency of transmitted radiation';
-    varout.units = 'GHz';
-    varout[:]=94.008;
-
-    varin = DSin['prf'];
-    varout = DSout.createVariable('prf',varin.datatype);
-    varout.long_name = 'pulse repetition frequency';
-    varout.units = 'Hz';
-    varout[:]=varin[:];
-
-    varin = DSin['beamwidthH'];
-    varout = DSout.createVariable('beamwidthH',varin.datatype);
-    varout.long_name = 'horizontal angular beamwidth';
-    varout.units = 'degree';
-    varout[:]=varin[:];
-
-    varin = DSin['beamwidthV'];
-    varout = DSout.createVariable('beamwidthV',varin.datatype);
-    varout.long_name = 'vertical angular beamwidth';
-    varout.units = 'degree';
-    varout[:]=varin[:];
-
-    varin = DSin['antenna_diameter'];
-    varout = DSout.createVariable('antenna_diameter',varin.datatype);
-    varout.long_name = 'antenna diameter';
-    varout.units = 'm';
-    varout.comment = "Refers to diameter of each antenna in bistatic pair.  Separation of antennae is 0.66m."
-    varout[:] = varin[:];
-
-    varout = DSout.createVariable('antenna_focal_length','f4');
-    varout.long_name = 'focal length of antenna';
-    varout.units = 'm';
-    varout[:] = 0.18;
-
-    varin = DSin['pulse_period'];
-    varout = DSout.createVariable('pulse_width',varin.datatype);
-    varout.long_name = 'pulse width';
-    varout.units = 'us';
-    varout[:] = varin[:];
-
-    varin = DSin['transmit_power'];
-    varout = DSout.createVariable('transmit_power',varin.datatype);
-    varout.long_name = 'peak transmitted power';
-    varout.units = 'W';
-    varout[:] = varin[:];
-
-    varin = DSin['clock'];
-    varout = DSout.createVariable('clock',varin.datatype);
-    varout.long_name = 'clock input to timer card';
-    varout.units = 'Hz';
-    varout[:] = varin[:];
-
-    clock_divfactor = DSin['clock'].clock_divfactor;
-    varout = DSout.createVariable('clock_divfactor','i4');
-    varout.long_name = 'clock divide factor';
-    varout.units = '1';
-    varout[:]=clock_divfactor;
-
-    delay_clocks = DSin.getncattr('delay_clocks');
-    varout = DSout.createVariable('delay_clocks','i4');
-    varout.long_name = 'clock cycles before sampling is initiated';
-    varout.units = '1';
-    varout[:] = delay_clocks;
-
-    samples_per_pulse = DSin.getncattr('samples_per_pulse');
-    varout = DSout.createVariable('samples_per_pulse','i4');
-    varout.long_name = 'number of samples per pulse';
-    varout.units = '1';
-    varout[:] = samples_per_pulse;
-
-    pulses_per_daq_cycle = DSin.getncattr('pulses_per_daq_cycle');
-    varout = DSout.createVariable('pulses_per_daq_cycle','i4');
-    varout.long_name = 'number of pulses per data acquisition cycle';
-    varout.units = '1';
-    varout[:] = pulses_per_daq_cycle;
-
-    pulses_per_ray = DSin.getncattr('pulses_per_ray');
-    varout = DSout.createVariable('pulses_per_ray','i4');
-    varout.long_name = 'number of pulses per ray';
-    varout.units = '1';
-    varout[:] = pulses_per_ray;
-
-    varout = DSout.createVariable('radar_constant','f4');
-    varout.long_name = 'radar constant';
-    varout.units = 'dB';
-
-    varout = DSout.createVariable('receiver_gain','f4');
-    varout.long_name = 'receiver gain';
-    varout.units = 'dB';
-
-    varout = DSout.createVariable('cable_losses','f4');
-    varout.long_name = 'cable losses';
-    varout.units = 'dB';
-
-    varout = DSout.createVariable('extra_attenuation','f4');
-    varout.long_name = 'extra attenuation';
-    varout.units = 'dB';
-    varout[:] = 0.0;
-
-
-    # ---------------
-    # Copy dimensions
-    # ---------------
-    the_dim = DSin.dimensions['time'];
-    DSout.createDimension('time', len(the_dim) if not the_dim.isunlimited() else None)
-
-    fft_bin_dim = DSin.dimensions['fft_bin_dim'];
-    spectra_number_dim = DSin.dimensions['spectra_number_dim'];
-    DSout.createDimension('pulse', len(fft_bin_dim)*len(spectra_number_dim));
-
-    the_dim = DSin.dimensions['range'];
-    DSout.createDimension('range', len(the_dim) if not the_dim.isunlimited() else None)
-
-    print(DSout.dimensions['pulse']);
-
-    # --------------------
-    # Coordinate variables
-    # --------------------
-    varin = DSin['time'];
-    varout = DSout.createVariable('time',varin.datatype,('time'));
-    varout.standard_name = 'time';
-    varout.long_name = 'time at the start of each recorded ray';
-    varout.units = varin.units;
-    varout[:]=varin[:];
-
-    varin = DSin['range'];
-    varout = DSout.createVariable('range',varin.datatype,('range'));
-    varout.long_name = 'distance from the antenna to the middle of each range gate';
-    varout.range_offset_applied = np.float32(range_offset);
-    varout.units = varin.units;
-    varout[:]=varin[:]+range_offset-varin.range_offset;
-
-    # --------------------------
-    # Antenna pointing variables
-    # --------------------------
-    varout = DSout.createVariable('elevation','f4','time');
-    varout.long_name = "elevation angle above the horizon of the antenna boresight";
-    varout.comment   = "assumes transmit and receive antenna boresights are aligned";
-    varout.units = 'degree';
-    varout.elevation_offset_applied = np.float32(0.);
-
-    varout = DSout.createVariable('azimuth','f4','time');
-    varout.long_name   = "azimuth angle clockwise from grid north of the plane containing the antenna boresight and zenith vectors";
-    varout.units = 'degree';
-    varout.azimuth_offset_applied = np.float32(0.);
-    varout.comment = "assumes transmit and receive antenna boresights are aligned"
-
-    # --------------------------------
-    # Determine bias-corrected I and Q
-    # --------------------------------
-    # Input Level 0b file has I and Q dependent on the following dimensions (time,spectra,pulses,sample).
-    # We rearrange this into a three-dimensional array dependent on (time,pulse,range);
-
-    Ico_in = DSin['IPF_HH'][:,:,:,:];
-    Qco_in = DSin['QPF_HH'][:,:,:,:];
-
-    Icx_in = DSin['IPF_HV'][:,:,:,:];
-    Qcx_in = DSin['QPF_HV'][:,:,:,:];
-
-    nray     = Ico_in.shape[0];
-    nspectra = Ico_in.shape[1];
-    npulse   = Ico_in.shape[2];
-    ngate    = Ico_in.shape[3];
-
-    Ico = Ico_in.reshape(nray,npulse*nspectra,ngate);
-    Qco = Qco_in.reshape(nray,npulse*nspectra,ngate);
-
-    Ico_mean = np.mean(Ico,axis=1);
-    Qco_mean = np.mean(Qco,axis=1);
-
-    Ico[:,:,:] = Ico[:,:,:]-Ico_mean[:,None,:];
-    Qco[:,:,:] = Qco[:,:,:]-Qco_mean[:,None,:];
-
-    Zcal=dBZ_offset+10*np.log10(DSout['prf'][:]/512);
-
-    Ico=Ico*np.sqrt(10**(Zcal/10.0));
-    Qco=Qco*np.sqrt(10**(Zcal/10.0));
-
-    Icx = Icx_in.reshape(nray,npulse*nspectra,ngate);
-    Qcx = Qcx_in.reshape(nray,npulse*nspectra,ngate);
-
-    Icx_mean = np.mean(Icx,axis=1);
-    Qcx_mean = np.mean(Qcx,axis=1);
-
-    Icx[:,:,:] = Icx[:,:,:]-Icx_mean[:,None,:];
-    Qcx[:,:,:] = Qcx[:,:,:]-Qcx_mean[:,None,:];
-
-    Icx=Icx*np.sqrt(10**(Zcal/10.0));
-    Qcx=Qcx*np.sqrt(10**(Zcal/10.0));
-
-    # ---------------
-    # Field variables
-    # ---------------
-
-    varout = DSout.createVariable('I','f4',('time','pulse','range'),zlib=True);
-    varout.ancillary_variables = 'qc_flag';
-    varout.long_name = 'co-polar in-phase video signal';
-    varout.units = '1';
-    varout.comment = 'Scaled to account for calibration for square root of linear reflectivity factor';
-#    add_offset = np.min(Ico[:]);
-#    scale_factor = (np.max(Ico[:])-np.min(Ico[:])) / (2**16-1)
-#    packed_data = np.int16(np.rint((Ico[:,:,:] - add_offset)/scale_factor));
-    #varout.scale_factor = np.float32(scale_factor);
-    #varout.add_offset = np.float32(add_offset);
-    #varout[:] = packed_data;
-    varout[:] = Ico;
-
-    varout = DSout.createVariable('Q','f4',('time','pulse','range'),zlib=True);
-    varout.ancillary_variables = 'qc_flag';
-    varout.long_name = 'cross-polar quadrature video signal';
-    varout.units = '1';
-    varout.comment = 'Scaled to account for calibration for square root of linear reflectivity factor';
-#    add_offset = np.min(Qco);
-#    scale_factor = (np.max(Qco)-np.min(Qco)) / (2**16-1)
-#    packed_data = np.int16(np.rint((Qco - add_offset)/scale_factor));
-    #varout.scale_factor = np.float32(scale_factor);
-    #varout.add_offset = np.float32(add_offset);
-    #varout[:] = packed_data;
-    varout[:] = Qco;
-
-    varout = DSout.createVariable('Icx','f4',('time','pulse','range'),zlib=True);
-    varout.ancillary_variables = 'qc_flag';
-    varout.long_name = 'cross-polar in-phase video signal';
-    varout.units = '1';
-    varout.comment = 'Scaled to account for calibration for square root of linear reflectivity factor';
-#    add_offset = np.min(Icx);
-#    scale_factor = (np.max(Icx)-np.min(Icx)) / (2**16-1);
-#    packed_data = np.int16(np.rint((Icx - add_offset)/scale_factor));
-#    varout.scale_factor = np.float32(scale_factor);
-#    varout.add_offset = np.float32(add_offset);
-#    varout[:] = packed_data;
-    varout[:] = Icx;
-
-    varout = DSout.createVariable('Qcx','f4',('time','pulse','range'),zlib=True);
-    varout.ancillary_variables = 'qc_flag';
-    varout.long_name = 'cross-polar quadrature video signal';
-    varout.units = '1';
-    varout.comment = 'Scaled to account for calibration for square root of linear reflectivity factor';
-#    add_offset = np.min(Qcx);
-#    scale_factor = (np.max(Qcx)-np.min(Qcx)) / (2**16-1);
-#    packed_data = np.int16(np.rint((Qcx - add_offset)/scale_factor));
-#    varout.scale_factor = np.float32(scale_factor);
-#    varout.add_offset = np.float32(add_offset);
-#    varout[:] = packed_data;
-    varout[:] = Qcx;
-
-    varout = DSout.createVariable('qc_flag','u1',('time','pulse','range'));
-    varout.is_quality = 'true';
-    varout.qualified_variables = 'I Q Icx Qcx';
-    varout.long_name = 'Quality control flag';
-    varout.flag_values = np.uint8(0),np.uint8(1), np.uint8(2), np.uint8(3), np.uint8(4), np.uint8(255);
-    varout.flag_meanings = 'not_used good_data probably_good_data bad_data data_in_blind_range no_qc_performed';
-    varout[:] = 2;
-
-    blind_range = np.arange(14);
-    DSout['qc_flag'][:,:,blind_range] = 4;
-
-    # -----------------------
-    # Update history metadata
-    # -----------------------
-    user = getpass.getuser()
-
-    updttime = datetime.utcnow()
-    updttimestr = updttime.ctime()
-
-    history = updttimestr + (" - user:" + user
-    + " machine: " + socket.gethostname()
-    + " program: kepler_utils.convert_mmclx2l0b"
-    + " version:" + str(module_version));
-
-    DSout.history = history + "\n" + DSin.history;
-
-    DSout.last_revised_date = datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
-
-    DSin.close();
-    DSout.close();
-
-    return
-
-def process_kepler(datestr,inpath,outpath,yaml_project_file,tracking_tag):
-
-    pattern = '*{}*_fix-ts.nc'.format(datestr);
+    pattern = '*{}*.mmclx'.format(datestr);
 
     print(datestr);
     print(inpath);
@@ -1181,11 +820,11 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,tracking_tag):
 
     data_version = "1.0";
 
-    dBZ_offset = 9.0;
-    range_offset = -865.56+864.0;
+    #dBZ_offset = 9.0;
+    #range_offset = -865.56+864.0;
 
     l0bpath = os.path.join(outpath,'L0b',datestr);
-    l1path = os.path.join(outpath,'L1',datestr);
+    #l1path = os.path.join(outpath,'L1',datestr);
 
     os.makedirs(l0bpath,exist_ok=True);
     os.makedirs(l1path,exist_ok=True);
@@ -1194,38 +833,21 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,tracking_tag):
     for dir in tsdirs:
         print("I am Here!");
         os.makedirs(os.path.join(l0bpath,dir),exist_ok=True);
-        os.makedirs(os.path.join(l1path,dir),exist_ok=True);
+        #os.makedirs(os.path.join(l1path,dir),exist_ok=True);
 
     for f in tsfiles:
         outfile_splits = os.path.split(f);
 
-        outfile_string = outfile_splits[1].replace('.nc','_l0b.nc');
+        outfile_string = outfile_splits[1].replace('.mmclx','_l0b.nc');
         splits = outfile_string.split('_');
-        instrument_name =splits[0].replace('radar-camra','ncas-radar-camra-1');
+        instrument_name ='ncas-mobile-radar-ka-band-1';
         platform = 'cao';
         datestr = splits[1][0:8];
         timestr = splits[1][8:];
         level = splits[3].split('.')[0];
         l0bfile = '{}_{}_{}-{}_{}_{}_v{}.nc'.format(instrument_name,platform,datestr,timestr,splits[2],level,data_version)
 
-        l0bfile.replace('radar-camra','ncas-radar-camra-1_cao');
-
-        event = outfile_splits[0].split('/')[-1];
-
-        if not event in tsdirs:
-            l0bfile = os.path.join(outpath,'L0b',datestr,l0bfile);
-        else:
-            l0bfile = os.path.join(outpath,'L0b',datestr,event,l0bfile);
-
-        convert_camra_ts_l0a2l0b(f,l0bfile,yaml_project_file,tracking_tag);
-
-        l1file = l0bfile.replace('l0b','l1');
-        l1file = l1file.replace('L0b','L1');
-
-        print(l0bfile);
-        print(l1file);
-
-        convert_camra_ts_l0b2l1(l0bfile,l1file,dBZ_offset,ZDR_offset,range_offset,data_version,yaml_project_file,tracking_tag);
+        convert_kepler_mmclx2l0b(f,l0bfile,yaml_project_file,yaml_instrument_file,tracking_tag);
 
     return
 
