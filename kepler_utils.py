@@ -179,7 +179,7 @@ metadata_keymap = {
     # instrument_parameters
     # radar_calibration
 
- variables_keymap = {
+variables_keymap = {
         "Zg": "DBZH",
         "VELg": "VEL",
         "RMSg": "WIDTH",
