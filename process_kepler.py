@@ -15,11 +15,13 @@ except getopt.GetoptError as err:
 data_date = datetime.datetime.now()
 datestr = data_date.strftime('%Y%m%d')
 
-inpath = '/Users/cw66/Data/kepler/'
-outpath = '/Users/cw66/Data/ncas-mobile-radar-ka-band-1/'
+#inpath = '/Users/cw66/Data/kepler/'
+inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data/campaign/picasso-b'
+#outpath = '/Users/cw66/Data/ncas-mobile-radar-ka-band-1/'
+outpath = '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-radar-mobile-ka-band-1/picasso-b'
 
-yaml_project_file = '/Users/cw66/git/kepler-radar-utils/amof_projects.yml'
-yaml_instrument_file = '/Users/cw66/git/kepler-radar-utils/amof_radars.yml'
+yaml_project_file = '/home/users/cjwalden/git/kepler-radar-utils/amof_projects.yml'
+yaml_instrument_file = '/home/users/cjwalden/git/kepler-radar-utils/amof_radars.yml'
 
 tracking_tag = 'AMOF_20220922221548';
 
