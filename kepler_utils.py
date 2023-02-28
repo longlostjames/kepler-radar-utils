@@ -253,7 +253,7 @@ def read_mira35_mmclx(filename, **kwargs):
     # -----------------------
     # sweep_mode, fixed_angle
     # -----------------------
-    sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi','vert' : 'vertical_pointing','man' : 'manual_rhi'}
+    sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi', 'vert' : 'vertical_pointing','man' : 'manual_rhi'}
 
     sweep_mode = filemetadata("sweep_mode")
 
@@ -541,7 +541,7 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
 
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type,data_version));
+    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
 
     # Use PyART to create CfRadial file
     pyart.io.write_cfradial(outfile, RadarDataset, format='NETCDF4', time_reference=True)
@@ -684,7 +684,7 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     history = updttimestr + (" - user:" + user
     + " machine: " + socket.gethostname()
-    + " program: kepler_utils.convert_kepler_mmclx2l0b"
+    + " program: kepler_utils.convert_kepler_mmclx2l1"
     + " version:" + str(module_version));
 
     DS.history = history + "\n" + DS.history;
