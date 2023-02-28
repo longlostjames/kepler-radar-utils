@@ -1,0 +1,18 @@
+---
+
+- radar-kepler:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    instrument_name: ncas-mobile-radar-ka-band-1
+    instrument_manufacturer: Meteorologische Messtechnik (Metek) GmbH
+    instrument_model: MIRA-35
+    instrument_serial_number: BX3C
+    instrument_pid: 
+    
+    instrument_software: 
+    instrument_software_version: -9.9
+
+    references: www.metek.de
+  
