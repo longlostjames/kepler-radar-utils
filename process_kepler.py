@@ -16,7 +16,7 @@ data_date = datetime.datetime.now()
 datestr = data_date.strftime('%Y%m%d')
 
 #inpath = '/Users/cw66/Data/kepler/'
-inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data/campaign/picasso-b'
+inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data/campaign/picasso-b/mom'
 #outpath = '/Users/cw66/Data/ncas-mobile-radar-ka-band-1/'
 outpath = '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-radar-mobile-ka-band-1/picasso-b'
 
