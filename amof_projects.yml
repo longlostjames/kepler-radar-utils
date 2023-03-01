@@ -1,4 +1,95 @@
 ---
+- CFARR_0002:
+
+    project: PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency Doppler radar data)
+
+    amof_admin:
+      tracking_tag: CFARR_0002
+      project_type: NERC Standard Grant
+      facility_charge: £39,250
+      requested_dates:
+        -
+      delivered_dates:
+
+    grant:
+      ref: NE/P012426/1
+      start_date: 01/10/2017
+      end_date: 31/12/2021
+      value: £609,423
+      grade:
+      scientific_area:
+        - Atmospheric: 100%
+        - Earth: 0%
+        - Freshwater: 0%
+        - Marine: 0%
+        - Terrestrial: 0%
+      ENRI:
+        - Biodiversity: 0%
+        - Environmental Risks and Hazards: 20%
+        - Global Change: 40%
+        - Natural Resource Management: 30%
+        - Pollution and Waste: 10%
+      research_area:
+        - Atmospheric physics and chemistry:
+          - Tropospheric processed: 20%
+          - Water in the atmosphere: 20%
+        - Climate and climate change:
+          - Climate and climate change: 20%
+          - Regional weather and extreme events: 20%
+        - Instrumentation, sensors and detectors:
+          - Survey and monitoring: 20%
+      keywords:
+
+    principal_investigator:
+      name: Jonathan Crosier
+      institution: University of Manchester
+      email: jonathan.crosier@manchester.ac.uk
+      pid: https://orcid.org/0000-0002-3086-4729
+
+    co-investigators:
+      - Chris Westbrook:
+          institution: University of Reading
+          pid: https://orcid.org/0000-0002-2889-8815
+      - James Dorsey:
+          institution: University of Manchester
+          pid: https://orcid.org/0000-0002-1720-9412
+
+    project_partners:
+      - Richard Cotton:
+          institution: Met Office
+          pid:
+      - Robin Hogan:
+          institution: ECMWF
+          pid: https://orcid.org/0000-0002-3180-5157
+
+    ncas_instruments:
+      - ncas-radar-ka-band-1:
+          usage: bespoke time-series and long-term measurements
+      - ncas-radar-w-band-1:
+          usage: bespoke aircraft tracking scans in 25m dish cradle
+      - ncas-radar-camra-1:
+          usage: bespoke aircraft tracking scans
+      - ncas-radar-mobile-ka-band-1:
+          title: Moment data from NCAS Mobile Ka-band Radar (Kepler)
+          platform:
+            location: CAO
+            type: stationary_platform
+          instrument_software: 
+            name: tbd
+            version: tbd
+          data_creator: 
+            name: Chris Walden
+            email: chris.walden@ncas.ac.uk
+            pid: https://orcid.org/0000-0002-5718-466X
+            institution: National Centre for Atmospheric Science (NCAS) and Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)
+          data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+          acknowledgement: |-
+            This dataset was developed as part of the activity "PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency Doppler radar data)", 
+            funded by Natural Environment Research Council (NERC) Grant NE/P012426/1.
+            It uses instrumentation provided by the Atmospheric Measurement and Observation Facility (AMOF), part of NERC National Capability.
+            Users should acknowledge UK Research and Innovation as the data provider (in partnership with the National Centre for Atmospheric Science).
+          usage: 
+            - bespoke aircraft tracking scans
 
 - AMOF_20220922221548:
 
