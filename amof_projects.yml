@@ -1,7 +1,7 @@
 ---
 - CFARR_0002:
 
-    project: PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency Doppler radar data)
+    project_name: PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency Doppler radar data)
 
     amof_admin:
       tracking_tag: CFARR_0002
