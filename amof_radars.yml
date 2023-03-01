@@ -5,7 +5,7 @@
     # -------------------
     # Instrument metadata
     # -------------------
-    instrument_name: ncas-mobile-radar-ka-band-1
+    instrument_name: ncas-radar-mobile-ka-band-1
     instrument_manufacturer: Meteorologische Messtechnik (Metek) GmbH
     instrument_model: MIRA-35
     instrument_serial_number: BX3C

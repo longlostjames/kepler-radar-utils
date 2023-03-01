@@ -183,7 +183,7 @@
 
 
     ncas_instruments:
-      - ncas-mobile-radar-ka-band-1:
+      - ncas-radar-mobile-ka-band-1:
           title: Moment data from NCAS Mobile Ka-band Radar (Kepler)
           platform:
             location: Netheravon
