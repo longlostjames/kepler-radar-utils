@@ -5,7 +5,7 @@
 # Module for processing mmclx radar files from Kepler (MIRA-35) radar
 # Author: Chris Walden, UK Research & Innovation and
 #                       National Centre for Atmospheric Science
-# Last modified: 20-02-2023
+# Last modified: 28-02-2023
 # ==========================================================================
 
 """Module for processing mmclx radar data from Kepler (MIRA-35) radar."""
@@ -52,8 +52,6 @@ def read_mira35_mmclx(filename, **kwargs):
     # target_scan_rate, rays_are_indexed, ray_angle_res,
     # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
     # scan_rate, antenna_transition, 
-    # None rotation, tilt, roll, drift, heading, pitch
-    # ?? georefs_applied
     # instrument_parameters
     # radar_calibration
     # OK ngates
@@ -84,11 +82,11 @@ def read_mira35_mmclx(filename, **kwargs):
     # Open netCDF4 file
     # -----------------
     ncobj = nc4.Dataset(filename)
-    nrays = len(ncobj.dimensions["time"])
-    ngates = len(ncobj.dimensions["range"])
+    nrays = len(ncobj.dimensions["time"]);
+    ngates = len(ncobj.dimensions["range"]);
     nsweeps = 1; # We only have single sweep files 
     
-    ncvars = ncobj.variables
+    ncvars = ncobj.variables;
 
     # --------------------------------
     # latitude, longitude and altitude
@@ -204,10 +202,10 @@ def read_mira35_mmclx(filename, **kwargs):
 
     variables = list(variables_keymap.keys())
 
-# SNRg, VELg, RMSg, LDRg, NPKg, SNRg
-#RHO DPS PHOwav LDRnormal
-# HSDco HSDcx Zg ISDRco ISDRcx 
-# MRMco MRMcx RadarConst SNRCorFaCo SNRCorFaCx SKWg
+    # SNRg, VELg, RMSg, LDRg, NPKg, SNRg
+    #RHO DPS PHOwav LDRnormal
+    # HSDco HSDcx Zg ISDRco ISDRcx 
+    # MRMco MRMcx RadarConst SNRCorFaCo SNRCorFaCx SKWg
 
     # Variables
     # nfft
@@ -283,7 +281,6 @@ def read_mira35_mmclx(filename, **kwargs):
     # time
     # interpolate between the first and last timestamps in the Time variable
     time = filemetadata('time')
-    nctime = ncvars['time']
     
     dtime = cftime.num2pydate(ncvars['time'][:],'seconds since 1970-01-01 00:00:00')
 
@@ -296,18 +293,23 @@ def read_mira35_mmclx(filename, **kwargs):
     time['data']  = nc4.date2num(dtime,time['units']);
 
     # range
-    _range = filemetadata('range')
-    _range['data'] = ncvars['range'][:]
-    _range['metres_to_centre_of_first_gate'] = _range['data'][0]
+    # -----
+    _range = filemetadata('range');
+    _range['data'] = ncvars['range'][:];
+    _range['units'] = 'metres';
+    #_range['metres_to_centre_of_first_gate'] = _range['data'][0];
+    _range['proposed_standard_name'] = "projection_range_coordinate";
+    _range['long_name'] = "distance_to_centre_of_each_range_gate";
     # assuming the distance between all gates is constant, may not
     # always be true.
-    _range['metres_between_gates'] = (_range['data'][1] - _range['data'][0])
+    #_range['metres_between_gates'] = (_range['data'][1] - _range['data'][0])
 
     # azimuth, elevation
+    # ------------------
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
-    azimuth['data'] = ncvars['azi'][:];
+    azimuth['data'] = ncvars['azi'][:]+ncvars['northangle'][:];
     azimuth['units'] = "degree";
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
     azimuth['long_name'] = "sensor_to_target_azimuth_angle";
@@ -316,11 +318,13 @@ def read_mira35_mmclx(filename, **kwargs):
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
     elevation['long_name'] = "sensor_to_target_elevation_angle";
 
+
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
 
-
+    # ------
     # fields
+    # ------
     # mmclx files contain the following: 
     # where x="g" (global),"" (hydrometeors),"plank" (plankton),"rain","cl" 
     # SNRx 
@@ -338,7 +342,7 @@ def read_mira35_mmclx(filename, **kwargs):
     # TEMP (temperature profile faked form external sources)
     # ISDRco (ratio between power integrated over the largest peak and the noise level - to indicate saturation)
     # ISDRcx (cross-polar channel version of ISDRco)
-    # RadarConst (radar constant related to 5km range, Zx = RadarCponst*SNRx*(range/5 km)^2), with range at the centre of each range gate)
+    # RadarConst (radar constant related to 5km range, Zx = RadarConst*SNRx*(range/5 km)^2), with range at the centre of each range gate)
     # SNRCorFaCo ()
     # SNRCorFaCx ()
     
@@ -347,7 +351,6 @@ def read_mira35_mmclx(filename, **kwargs):
 
 
     #linear_to_log_fields = {"Zg"}
-
     #for key, value in fields_keymap.items():
     #    print(key)
     #    if key in ncvars:
@@ -573,7 +576,7 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     DS.instrument_model = instrument['instrument_model'];
     DS.instrument_serial_number = instrument['instrument_serial_number'];
 
-    #DS.references = "";
+    DS.references = instrument['references'];
     #DS.source = "NCAS Mobile Ka-band Radar (Kepler)";
     #DS.comment = "";
     DS.project = project["project_name"];
