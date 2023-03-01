@@ -64,11 +64,14 @@
 
     ncas_instruments:
       - ncas-radar-ka-band-1:
-          usage: bespoke time-series and long-term measurements
+          usage: 
+           - bespoke time-series and long-term measurements
       - ncas-radar-w-band-1:
-          usage: bespoke aircraft tracking scans in 25m dish cradle
+          usage: 
+           - bespoke aircraft tracking scans in 25m dish cradle
       - ncas-radar-camra-1:
-          usage: bespoke aircraft tracking scans
+          usage: 
+           - bespoke aircraft tracking scans
       - ncas-radar-mobile-ka-band-1:
           title: Moment data from NCAS Mobile Ka-band Radar (Kepler)
           platform:
