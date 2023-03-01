@@ -44,5 +44,7 @@ inpath = os.path.join('/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-
 #outpath = '/Users/cw66/Data/ncas-mobile-radar-ka-band-1/'
 outpath = os.path.join('/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-radar-mobile-ka-band-1',campaign);
 
+print(tracking_tag);
+
 kepler.process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,tracking_tag);
 

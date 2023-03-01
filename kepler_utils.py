@@ -528,6 +528,8 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     radar_name = instrument["instrument_name"].lower();
 
+    print(radar_name);
+
     for n in project["ncas_instruments"]:
         if radar_name in n:
             project_instrument = n[radar_name];
