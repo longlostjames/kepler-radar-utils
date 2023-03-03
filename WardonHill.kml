@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Wardon Hill.kml</name>
+	<StyleMap id="msn_Radar_WardonHill">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_Radar_WardonHill</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_Radar_WardonHill</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="sh_Radar_WardonHill">
+		<IconStyle>
+			<scale>1.18182</scale>
+			<Icon>
+				<href>Radar_WardonHill.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ffffaa55</color>
+		</LabelStyle>
+	</Style>
+	<Style id="sn_Radar_WardonHill">
+		<IconStyle>
+			<Icon>
+				<href>Radar_WardonHill.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ffffaa55</color>
+		</LabelStyle>
+	</Style>
+	<Placemark>
+		<name>Wardon Hill</name>
+		<visibility>0</visibility>
+		<description>050° 49.2 N 002° 33.4 W</description>
+		<LookAt>
+			<longitude>-2.555854527806187</longitude>
+			<latitude>50.81978310745679</latitude>
+			<altitude>0</altitude>
+			<heading>5.44741516857525</heading>
+			<tilt>30.00096472314369</tilt>
+			<range>212.4200033005545</range>
+			<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+		</LookAt>
+		<styleUrl>#msn_Radar_WardonHill</styleUrl>
+		<Point>
+			<gx:drawOrder>1</gx:drawOrder>
+			<coordinates>-2.556328266053268,50.8191958684016,0</coordinates>
+		</Point>
+	</Placemark>
+</Document>
+</kml>

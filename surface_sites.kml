@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>surface_sites.kml</name>
+	<StyleMap id="__managed_style_00CD9FAAA4220C3B3DEE">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#failed2</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#failed0</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="failed0">
+		<IconStyle>
+			<scale>1.86667</scale>
+			<Icon>
+				<href>aws_yellow.png</href>
+			</Icon>
+			<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00aaff</color>
+			<scale>0.6</scale>
+		</LabelStyle>
+	</Style>
+	<Style id="failed2">
+		<IconStyle>
+			<scale>1.6</scale>
+			<Icon>
+				<href>aws_yellow.png</href>
+			</Icon>
+			<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00aaff</color>
+			<scale>0.6</scale>
+		</LabelStyle>
+	</Style>
+	<Folder>
+		<name>surface_sites</name>
+		<open>1</open>
+		<Style>
+			<ListStyle>
+				<listItemType>check</listItemType>
+				<bgColor>00ffffff</bgColor>
+				<maxSnippetLines>2</maxSnippetLines>
+			</ListStyle>
+		</Style>
+		<Folder>
+			<name>possible</name>
+			<open>1</open>
+			<Placemark id="0FBDC7EF3820C781A1E0">
+				<name>Netheravon Airfield</name>
+				<LookAt>
+					<longitude>-1.7545771</longitude>
+					<latitude>51.248112</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>631.6856082169662</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.7545771,51.248112,0</coordinates>
+				</Point>
+				<gx:mid>/m/0yqhx0p</gx:mid><gx:fid>0x4873e523a732843b:0xd71042aef1d8202d</gx:fid>
+			</Placemark>
+			<Placemark id="033802446520C7837570">
+				<name>Henstridge Airport</name>
+				<LookAt>
+					<longitude>-2.3556025</longitude>
+					<latitude>50.9856454</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>635.5685197404255</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-2.3556025,50.9856454,0</coordinates>
+				</Point>
+				<gx:mid>/g/120kyyzb</gx:mid><gx:fid>0x48724a0103fda363:0xb36676ce0f8b81f4</gx:fid>
+			</Placemark>
+			<Placemark id="06E27E87EF20C789601D">
+				<name>Thruxton Aerodrome</name>
+				<LookAt>
+					<longitude>-1.6000511</longitude>
+					<latitude>51.2106318</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>632.2407674308851</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.598842909091203,51.21072596872825,0</coordinates>
+				</Point>
+				<gx:mid>/m/0gy9zj</gx:mid><gx:fid>0x4873f981b8385d8f:0x4c6a1cbfcbe9fc08</gx:fid>
+			</Placemark>
+			<Placemark id="092B3C7D8320C78DABBF">
+				<name>Larkhill Met O</name>
+				<LookAt>
+					<longitude>-1.80741545</longitude>
+					<latitude>51.2071444</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>7282.204025544174</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.808261,51.2016401,0</coordinates>
+				</Point>
+				<gx:mid>/g/1td3qy_5</gx:mid><gx:fid>0x4873e664ad0f3c31:0x8a0c55cbfc5db0f3</gx:fid>
+			</Placemark>
+			<Placemark id="0E387CCFBC20C7946C8D">
+				<name>Chilbolton observatory</name>
+				<LookAt>
+					<longitude>-1.438554654716044</longitude>
+					<latitude>51.14520314513251</latitude>
+					<altitude>85.06722120561119</altitude>
+					<heading>-2.76567758149595e-11</heading>
+					<tilt>44.999833261561</tilt>
+					<range>607.0838603954326</range>
+					<altitudeMode>absolute</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<coordinates>-1.438374232852175,51.14498951594582,0</coordinates>
+				</Point>
+			</Placemark>
+			<Placemark id="01201BB8B620CC1EFDF0">
+				<name>Lydeway Field</name>
+				<LookAt>
+					<longitude>-1.9342848</longitude>
+					<latitude>51.3309552</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>630.4577292519847</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.9344185,51.330966,0</coordinates>
+				</Point>
+				<gx:mid>/g/11rnk68wv8</gx:mid><gx:fid>0x4873dfe49cff05ff:0x9eeb5eabb17850ae</gx:fid>
+			</Placemark>
+			<Placemark id="03BC3329C220CCABD634">
+				<name>Wadswick Farm Airstrip</name>
+				<LookAt>
+					<longitude>-2.2234194</longitude>
+					<latitude>51.4114016</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>629.2643236100754</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-2.221449926222401,51.41154993000939,0</coordinates>
+				</Point>
+				<gx:mid>/g/11cmnlttfz</gx:mid><gx:fid>0x4871794ac1b93fe9:0xf8574db4e007d6f6</gx:fid>
+			</Placemark>
+			<Placemark id="012DBC783420D2CA1454">
+				<name>Upavon Airfield</name>
+				<LookAt>
+					<longitude>-1.7775299</longitude>
+					<latitude>51.29040369999999</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>631.0589098419943</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.7775299,51.2904037,0</coordinates>
+				</Point>
+				<gx:mid>/g/11c1wpwwkz</gx:mid><gx:fid>0x4873e3b55fb865b5:0xbf1a887debcbe611</gx:fid>
+			</Placemark>
+			<Placemark id="020038BFDE20D330AE5A">
+				<name>Wardon Hill radar</name>
+				<LookAt>
+					<longitude>-2.55619096677671</longitude>
+					<latitude>50.8190976337208</latitude>
+					<altitude>243.4238438153697</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>340.2098890216439</range>
+					<altitudeMode>absolute</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<coordinates>-2.556331502124469,50.81921382677947,0</coordinates>
+				</Point>
+			</Placemark>
+			<Placemark id="071E1D30CB20E71DEFAF">
+				<name>Bath Wilts &amp; North Dorset Gliding Club</name>
+				<LookAt>
+					<longitude>-2.2402873</longitude>
+					<latitude>51.130619</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>633.4251658354663</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-2.2402873,51.130619,0</coordinates>
+				</Point>
+				<gx:mid>/g/1yh9t_vrd</gx:mid><gx:fid>0x4873d3da2a79fac5:0x1bcb5963ad32c0fd</gx:fid>
+			</Placemark>
+			<Placemark id="048EE7A3842175DF0995">
+				<name>Ranston Farm Airstrip</name>
+				<LookAt>
+					<longitude>-2.1851806</longitude>
+					<latitude>50.9150449</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>636.6110748781912</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-2.185319347000469,50.9152433044263,0</coordinates>
+				</Point>
+				<gx:mid>/g/11b7gq0lzl</gx:mid><gx:fid>0x4873b47337e034e5:0x51aa98355a79adf1</gx:fid>
+			</Placemark>
+			<Placemark id="0C45698238217B32B7B6">
+				<name>AirsportUK</name>
+				<LookAt>
+					<longitude>-1.8569841</longitude>
+					<latitude>51.0151987</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>635.1318668447695</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.8569841,51.0151987,0</coordinates>
+				</Point>
+				<gx:mid>/g/11jd7jjz2g</gx:mid><gx:fid>0x4873eb68b7f0103b:0x21fcf49482307b07</gx:fid>
+			</Placemark>
+			<Placemark id="0F83A36EFD217B33403B">
+				<name>Great Western Airsports</name>
+				<LookAt>
+					<longitude>-2.3115055</longitude>
+					<latitude>51.3122711</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>630.7347558815039</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-2.3115055,51.31227109999999,0</coordinates>
+				</Point>
+				<gx:mid>/g/11b706yzzt</gx:mid><gx:fid>0x48720f04e26b161f:0xcd71f659e871bfc1</gx:fid>
+			</Placemark>
+			<Placemark id="03C5E12078217B7CC3A3">
+				<name>Wiltshire Microlight Centre</name>
+				<LookAt>
+					<longitude>-1.9137374</longitude>
+					<latitude>51.4319038</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>628.9600124891675</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.9137374,51.43190380000001,0</coordinates>
+				</Point>
+				<gx:mid>/g/1yh9tq6rx</gx:mid><gx:fid>0x4871675ebad952d5:0xa3127fb3fb9a5701</gx:fid>
+			</Placemark>
+			<Placemark id="083732D441217B88E2C1">
+				<name>GS Aviation Ltd</name>
+				<LookAt>
+					<longitude>-1.731226</longitude>
+					<latitude>51.3889216</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>629.5979138405634</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-1.731703146267231,51.38927245943235,0</coordinates>
+				</Point>
+				<gx:mid>/g/1tczjy64</gx:mid><gx:fid>0x487159c65aa0fcb3:0x9f702adb4e0f9bed</gx:fid>
+			</Placemark>
+			<Placemark id="08C16ECEA421ED906A5B">
+				<name>Cardington Studios</name>
+				<LookAt>
+					<longitude>-0.4220056999999999</longitude>
+					<latitude>52.1085901</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>618.8787887205505</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-0.4220057,52.1085901,0</coordinates>
+				</Point>
+				<gx:mid>/g/11b6_98jxl</gx:mid><gx:fid>0x4877b678372d24b3:0xfb09df34c90b97de</gx:fid>
+			</Placemark>
+			<Placemark id="0913D91948220824CC56">
+				<name>Imber E.A. site</name>
+				<description><![CDATA[<div>Imber EA site</div>]]></description>
+				<LookAt>
+					<longitude>-2.0554852</longitude>
+					<latitude>51.238169</latitude>
+					<altitude>0</altitude>
+					<heading>0</heading>
+					<tilt>0</tilt>
+					<range>631.832906595395</range>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<gx:fovy>35</gx:fovy>
+				</LookAt>
+				<styleUrl>#__managed_style_00CD9FAAA4220C3B3DEE</styleUrl>
+				<Point>
+					<altitudeMode>relativeToGround</altitudeMode>
+					<coordinates>-2.0554852,51.23816900000001,0</coordinates>
+				</Point>
+			</Placemark>
+		</Folder>
+	</Folder>
+</Document>
+</kml>
