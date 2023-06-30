@@ -498,7 +498,7 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     data_version = '1.0';
 
-    instrument_tagname = "radar-kepler"
+    instrument_tagname = "ncas-radar-mobile-ka-band-1"
 
     # ---------------------------------------
     # Read metadata from YAML instrument file
