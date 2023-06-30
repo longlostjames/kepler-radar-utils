@@ -406,7 +406,7 @@ def read_mira35_mmclx(filename, **kwargs):
         field_dic = filemetadata(field_name)
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
-        field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:];
+        field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:]);
         field_dic['long_name'] =  "radar_linear_depolarization_ratio";
         field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
         fields[field_name] = field_dic

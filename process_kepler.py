@@ -25,7 +25,7 @@ tracking_tag = 'AMOF_20220922221548';
 campaign = 'woest';
 
 
-yaml_project_file = os.path.join(homepath,'amof_campaigns','{campaign}_project.yml'
+yaml_project_file = os.path.join(homepath,'amof_campaigns','{campaign}_project.yml')
 yaml_instrument_file = os.path.join(homepath,'amof_instruments','amof_radars.yml')
 
 
