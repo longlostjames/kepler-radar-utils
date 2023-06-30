@@ -2,6 +2,11 @@ import getopt, sys, os
 
 import datetime
 
+from pathlib import Path
+homepath = Path.home()
+
+kepler_rawpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data'
+
 #sys.path.append('/home/users/cjwalden/my-packages')
 import kepler_utils as kepler
 
@@ -15,16 +20,13 @@ except getopt.GetoptError as err:
 data_date = datetime.datetime.now()
 datestr = data_date.strftime('%Y%m%d')
 
-tracking_tag = 'CFARR_0002';
-# tracking_tag = 'AMOF_20220922221548';
+tracking_tag = 'AMOF_20220922221548';
 
-campaign = 'picasso-b';
-
-
-yaml_project_file = '/home/users/cjwalden/git/kepler-radar-utils/amof_projects.yml'
-yaml_instrument_file = '/home/users/cjwalden/git/kepler-radar-utils/amof_radars.yml'
+campaign = 'woest';
 
 
+yaml_project_file = os.path.join(homepath,'amof_campaigns','{campaign}_project.yml'
+yaml_instrument_file = os.path.join(homepath,'amof_instruments','amof_radars.yml')
 
 
 for o, a in opts:
@@ -39,9 +41,7 @@ for o, a in opts:
     else:
         assert False, "unhandled option"
 
-#inpath = '/Users/cw66/Data/kepler/'
-inpath = os.path.join('/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data/campaign',campaign,'mom');
-#outpath = '/Users/cw66/Data/ncas-mobile-radar-ka-band-1/'
+inpath = os.path.join(kepler_rawpath,'campaign',campaign,'mom');
 outpath = os.path.join('/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-radar-mobile-ka-band-1',campaign);
 
 print(tracking_tag);
