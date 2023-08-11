@@ -418,7 +418,7 @@ def read_mira35_mmclx(filename, **kwargs):
         field_dic = filemetadata(field_name)
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
-        field_dic['data'] = ncvars['SNRg'][:];
+        field_dic['data'] = 10.0*np.log10(ncvars['SNRg'][:]);
         field_dic['long_name'] =  "radar_signal_to_noise_ratio";
         field_dic['proposed_standard_name'] = "radar_signal_to_noise_ratio";
         fields[field_name] = field_dic
@@ -483,7 +483,11 @@ def read_mira35_mmclx(filename, **kwargs):
 # CONVERSION ROUTINES
 # ===================
 
+def sweeps_to_volume(infile_list,outpath):
 
+    
+
+    return
 def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag):
 
     """This routine converts mmclx data from the NCAS Mobile Ka-band Radar (Kepler) to Level 1 (cfradial) data.
@@ -577,6 +581,7 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     DS.instrument_manufacturer = instrument['instrument_manufacturer'];
     DS.instrument_model = instrument['instrument_model'];
     DS.instrument_serial_number = instrument['instrument_serial_number'];
+    DS.instrument_pid = instrument['instrument_pid']
 
     DS.references = instrument['references'];
     #DS.source = "NCAS Mobile Ka-band Radar (Kepler)";
@@ -593,7 +598,11 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     #DS.time_coverage_end = datetime.datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
     #DS.geospatial_bounds = "51.1450N -1.4384E";
 
-    
+    # -------------------------------------------------------
+    # Now clean up some variable attributes
+    # -------------------------------------------------------
+
+
     # ----------------
     # Scalar variables
     # ----------------
@@ -700,6 +709,20 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     return
 
+def anglicise_cfradial(cfradfile):
+
+    # -------------------------------------------------------
+    # Read cfradial file and change language localisation
+    # -------------------------------------------------------
+
+    DS = nc4.Dataset(cfradfile,'r+');
+
+    variable = nc_file.variables['my_variable']
+    variable.setncattr('attribute_name', 'new_attribute_value')
+
+    DS.close()
+
+
 def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,tracking_tag):
 
     pattern = '*{}*.mmclx'.format(datestr);
@@ -711,14 +734,13 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file
     mmclxfiles = [];
     mmclxdirs = [];
 
+    vertfiles = [];
+
     for root,dirs,files in os.walk(datepath):
         mmclxfiles += [os.path.join(root,f) for f in fnmatch.filter(files, pattern)];
         mmclxdirs += dirs;
 
     data_version = "1.0";
-
-    #dBZ_offset = 9.0;
-    #range_offset = -865.56+864.0;
 
     l1path = os.path.join(outpath,'L1',datestr);
 
