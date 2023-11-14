@@ -139,23 +139,23 @@ def read_mira35_mmclx(filename, **kwargs):
     
     z1 = np.genfromtxt(z, dtype=None, names=['lat','zs2'])
     if z1['zs2']==b'S' and z1['lat']>0: 
-        latitude['data'] = -z1['lat']
+        latitude['data'][0] = -z1['lat']
     else:
-        latitude['data'] = z1['lat']  
+        latitude['data'][0] = z1['lat']  
         
     z = StringIO(ncobj.getncattr('Longitude'))
     
     z1 = np.genfromtxt(z, dtype=None, names=['lon','zs2'])
     
     if z1['zs2']==b'W' and z1['lon']>0: 
-        longitude['data'] = -z1['lon']
+        longitude['data'][0] = -z1['lon']
     else:
-        longitude['data'] = z1['lon']  
+        longitude['data'][0] = z1['lon']  
     
     z = StringIO(ncobj.getncattr('Altitude'))
     
     z1 = np.genfromtxt(z, dtype=None, names=['alt','zs2'])
-    altitude['data'] = z1['alt']
+    altitude['data'][0] = z1['alt']
 
     # Original mmclx metadata
     # -----------------------
