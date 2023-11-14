@@ -68,55 +68,6 @@ def read_mira35_mmclx_vpt_multi(mmclxfiles, **kwargs):
 
     nsweep = len(mmclxfiles);
 
-def read_mira35_mmclx_ppistack(mmclxfiles, **kwargs):
-    """
-    Read a set of single-sweep netCDF mmclx files from MIRA-35 radar recorded as stack of PPIs at different elevations.
-
-    Parameters
-    ----------
-    mmclxfiles : list(str)
-        List of names of mmclx netCDF files to read data from.
-
-    Returns
-    -------
-    radar : Radar
-        Radar object.
-    """
-
-    mmclxfiles.sort();
-
-    nsweep = len(mmclxfiles);
-
-    sweep = np.array([nrays - 1], dtype="int32")
-
-    sweep_start_ray_index = filemetadata("sweep_start_ray_index")
-    sweep_end_ray_index = filemetadata("sweep_end_ray_index")
-    sweep_number = filemetadata("sweep_number")
-
-    for isweep in np.arange(nsweep):
-        sweep_start_ray_index["data"][isweep] = np.array([0], dtype="int32")
-        sweep_end_ray_index["data"][isweep] = np.array([nrays - 1], dtype="int32")
-        sweep_number["data"][isweep] = np.array([0], dtype="int32")
-
-    # -----------------------
-    # sweep_mode, fixed_angle
-    # -----------------------
-    sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi', 'vert' : 'vertical_pointing','man' : 'manual_rhi'}
-
-    sweep_mode = filemetadata("sweep_mode")
-
-    print(filename.lower());
-
-    scan_type = None;
-    sweep_mode["data"] = np.array(1 * [None]);
-
-    for key, value in sweep_modes.items():
-        print(key)
-        if key in filename.lower(): 
-            scan_type = value;
-            sweep_mode["data"] = np.array(1 * [value]);
-            sweep_mode["data"][0] = value;
-            break;
 
 
 def read_mira35_mmclx(filename, **kwargs):
