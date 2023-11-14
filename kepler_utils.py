@@ -5,12 +5,12 @@
 # Module for processing mmclx radar files from Kepler (MIRA-35) radar
 # Author: Chris Walden, UK Research & Innovation and
 #                       National Centre for Atmospheric Science
-# Last modified: 28-02-2023
+# Last modified: 02-10-2023
 # ==========================================================================
 
 """Module for processing mmclx radar data from Kepler (MIRA-35) radar."""
 
-module_version = 0.1;
+module_version = 0.2;
 
 import datetime, cftime
 
@@ -20,7 +20,7 @@ import numpy as np
 import getpass, socket
 import pyart
 
-from pyart.config import FileMetadata, get_fillvalue
+from pyart.config import FileMetadata, get_fillvalue, get_metadata
 from pyart.core.radar import Radar
 from pyart.io.common import _test_arguments, make_time_unit_str
 
@@ -30,6 +30,93 @@ import os, fnmatch
 
 from io import StringIO
 
+def read_mira35_mmclx_hsrhi(mmclxfiles, **kwargs):
+    """
+    Read a set of single-sweep netCDF mmclx files from MIRA-35 radar recorded as part of HSRHI scan strategy.
+
+    Parameters
+    ----------
+    mmclxfiles : list(str)
+        List of names of mmclx netCDF files to read data from.
+
+    Returns
+    -------
+    radar : Radar
+        Radar object.
+    """
+
+    mmclxfiles.sort();
+
+    nsweep = len(mmclxfiles);
+
+def read_mira35_mmclx_vpt_multi(mmclxfiles, **kwargs):
+    """
+    Read a set of netCDF mmclx files from MIRA-35 radar recorded as separate vertical pointing sweeps.
+
+    Parameters
+    ----------
+    mmclxfiles : list(str)
+        List of names of mmclx netCDF files to read data from.
+
+    Returns
+    -------
+    radar : Radar
+        Radar object.
+    """
+
+    mmclxfiles.sort();
+
+    nsweep = len(mmclxfiles);
+
+def read_mira35_mmclx_ppistack(mmclxfiles, **kwargs):
+    """
+    Read a set of single-sweep netCDF mmclx files from MIRA-35 radar recorded as stack of PPIs at different elevations.
+
+    Parameters
+    ----------
+    mmclxfiles : list(str)
+        List of names of mmclx netCDF files to read data from.
+
+    Returns
+    -------
+    radar : Radar
+        Radar object.
+    """
+
+    mmclxfiles.sort();
+
+    nsweep = len(mmclxfiles);
+
+    sweep = np.array([nrays - 1], dtype="int32")
+
+    sweep_start_ray_index = filemetadata("sweep_start_ray_index")
+    sweep_end_ray_index = filemetadata("sweep_end_ray_index")
+    sweep_number = filemetadata("sweep_number")
+
+    for isweep in np.arange(nsweep):
+        sweep_start_ray_index["data"][isweep] = np.array([0], dtype="int32")
+        sweep_end_ray_index["data"][isweep] = np.array([nrays - 1], dtype="int32")
+        sweep_number["data"][isweep] = np.array([0], dtype="int32")
+
+    # -----------------------
+    # sweep_mode, fixed_angle
+    # -----------------------
+    sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi', 'vert' : 'vertical_pointing','man' : 'manual_rhi'}
+
+    sweep_mode = filemetadata("sweep_mode")
+
+    print(filename.lower());
+
+    scan_type = None;
+    sweep_mode["data"] = np.array(1 * [None]);
+
+    for key, value in sweep_modes.items():
+        print(key)
+        if key in filename.lower(): 
+            scan_type = value;
+            sweep_mode["data"] = np.array(1 * [value]);
+            sweep_mode["data"][0] = value;
+            break;
 
 
 def read_mira35_mmclx(filename, **kwargs):
@@ -46,7 +133,7 @@ def read_mira35_mmclx(filename, **kwargs):
     radar : Radar
         Radar object.
     """
-
+    # List 
     # time, range, fields, metadata, scan_type, latitude, longitude, altitude, altitude_agl,
     # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
     # target_scan_rate, rays_are_indexed, ray_angle_res,
@@ -58,6 +145,7 @@ def read_mira35_mmclx(filename, **kwargs):
     # OK nrays
     # OK nsweeps
     
+    # This routine only applies to fixed platforms
     # The following are not required for a fixed platform
     rotation = None;
     tilt = None;
@@ -66,7 +154,8 @@ def read_mira35_mmclx(filename, **kwargs):
     heading = None;
     pitch = None;
     georefs_applied = None;
-    antenna_transition = None;
+
+    antenna_transition = None;  #  NEED TO CHECK THIS
      
     # -------------------------
     # test for non empty kwargs
@@ -327,24 +416,28 @@ def read_mira35_mmclx(filename, **kwargs):
     # ------
     # mmclx files contain the following: 
     # where x="g" (global),"" (hydrometeors),"plank" (plankton),"rain","cl" 
-    # SNRx 
-    # VELx
-    # RMSx
-    # LDRx
+    # SNRx - USE THIS
+    # VELx - USE THIS
+    # RMSx - USE THIS
+    # LDRx - USE THIS
+
     # LWC (liquid water content of peaks classified as rain)
     # RR (rain rate of peaks classified as rain)
     # Ze (equivalent radar reflectivity of all hydrometeors)
-    # Zg (equivalent radar relectivity of all targets (global))
-    # Z (similer to Ze but with Mie correction applied, and a pressure and temperature dependent value of |Kw|^2
+
+    # Zg (equivalent radar relectivity of all targets (global)) - USE THIS
+    
+    # Z (similar to Ze but with Mie correction applied, and a pressure and temperature dependent value of |Kw|^2
     # MeltHeiDet (melting layer height detected from LDR if detected, else -1)
     # MeltHeiDb (melting layer height as deduced from external sources)
     # MeltHei (melting layer height from both sources)
     # TEMP (temperature profile faked form external sources)
-    # ISDRco (ratio between power integrated over the largest peak and the noise level - to indicate saturation)
-    # ISDRcx (cross-polar channel version of ISDRco)
-    # RadarConst (radar constant related to 5km range, Zx = RadarConst*SNRx*(range/5 km)^2), with range at the centre of each range gate)
-    # SNRCorFaCo ()
-    # SNRCorFaCx ()
+
+    # ISDRco (ratio between power integrated over the largest peak and the noise level - to indicate saturation) - MAYBE USE
+    # ISDRcx (cross-polar channel version of ISDRco) - MAYBE USE
+    # RadarConst (radar constant related to 5km range, Zx = RadarConst*SNRx*(range/5 km)^2), with range at the centre of each range gate) - MAYBE USE
+    # SNRCorFaCo () - MAYBE USE
+    # SNRCorFaCx () - MAYBE USE
     
 
     fields = {}
@@ -483,24 +576,31 @@ def read_mira35_mmclx(filename, **kwargs):
 # CONVERSION ROUTINES
 # ===================
 
-def sweeps_to_volume(infile_list,outpath):
+def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
 
-    
+    """This routine converts mmclx data from the NCAS Mobile Ka-band Radar (Kepler) to Level 1 (cfradial) data, compliant with the 
+    NCAS Radar Data Standard v1.0.0.
 
-    return
-def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag):
-
-    """This routine converts mmclx data from the NCAS Mobile Ka-band Radar (Kepler) to Level 1 (cfradial) data.
     Metadata are added using information in two YAML files the yaml_project_file, and yaml_instrument_file.
 
-    :param infile: Full path of NetCDF Level 0a mmclx data file, e.g. `<path-to-file>/20220907_071502.vert.mmclx`
+    :param infile: Full path of NetCDF Level 0b mmclx data file, e.g. `<path-to-file>/20220907_071502.ppi.mmclx`
     :type infile: str
 
-    :param outfile: Full path of NetCDF Level 1 output file, e.g. `<path-to-file>/ncas-radar-mobile-ka-band-1_cao_20220907-071502_ppi_l1_v1.0.nc`
+    :param outpath: Path where NetCDF Level 1 output file will be written
     :type outfile: str
-    """
 
-    data_version = '1.0';
+    :param yaml_project_file: Full path of YAML file containing project-specific metadata
+    :type yaml_project_file: str
+
+    :param yaml_instrument_file: Full path of YAML file containing instrument-specific metadata
+    :type yaml_instrument_file: str
+
+    :param tracking_tag: AMOF tracking tag for the project
+    "type tracking_tag: str
+    
+    :param data_version: Version of data product in the format `n.m.p`, where n (major version), m (minor revision) and p (patch) are integers.
+    :type data_version: str
+    """
 
     instrument_tagname = "ncas-radar-mobile-ka-band-1"
 
@@ -552,13 +652,42 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
 
+    # ---------------------------------
     # Use PyART to create CfRadial file
+    # ---------------------------------
     pyart.io.write_cfradial(outfile, RadarDataset, format='NETCDF4', time_reference=True)
 
-    # -------------------------------------------------------
-    # Read freshly created cfradial file to add NCAS metadata
-    # -------------------------------------------------------
+    cfradial_add_ncas_metadata(outfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version)
+
+
+    # -----------------------
+    # Update history metadata
+    # -----------------------
     DS = nc4.Dataset(outfile,'r+');
+
+    user = getpass.getuser()
+
+    updttime = datetime.datetime.utcnow()
+    updttimestr = updttime.ctime()
+
+    history = updttimestr + (" - user:" + user
+    + " machine: " + socket.gethostname()
+    + " program: kepler_utils.convert_kepler_mmclx2l1"
+    + " version:" + str(module_version));
+
+    DS.history = history + "\n" + DS.history;
+
+    DS.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
+
+    DS.close();
+
+    return
+
+def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
+    # -------------------------------------------------------
+    # Read cfradial file to add NCAS metadata
+    # -------------------------------------------------------
+    DS = nc4.Dataset(cfradfile,'r+');
 
     DS.product_version = "v{}".format(data_version) ;
     DS.processing_level = "1" ;
@@ -568,6 +697,9 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     DS.platform = project_instrument["platform"]["location"];
     DS.platform_type = project_instrument["platform"]["type"];
+    DS.location_keywords = project_instrument["platform"]["location_keywords"];
+
+    DS.deployment_mode = project_instrument["platform"]["deployment_mode"];
 
     DS.title = project_instrument["title"];
 
@@ -687,24 +819,6 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     # The ones to use are:
     # SNR, VEL, RMS, LDR, NPK, RHO, DPS, HSDco, HSDcx, Ze, ISDRco, ISDRcx
 
-
-    # -----------------------
-    # Update history metadata
-    # -----------------------
-    user = getpass.getuser()
-
-    updttime = datetime.datetime.utcnow()
-    updttimestr = updttime.ctime()
-
-    history = updttimestr + (" - user:" + user
-    + " machine: " + socket.gethostname()
-    + " program: kepler_utils.convert_kepler_mmclx2l1"
-    + " version:" + str(module_version));
-
-    DS.history = history + "\n" + DS.history;
-
-    DS.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
-
     DS.close();
 
     return
@@ -720,7 +834,9 @@ def anglicise_cfradial(cfradfile):
     variable = nc_file.variables['my_variable']
     variable.setncattr('attribute_name', 'new_attribute_value')
 
-    DS.close()
+    DS.close();
+
+    return
 
 
 def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,tracking_tag):
@@ -740,7 +856,7 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file
         mmclxfiles += [os.path.join(root,f) for f in fnmatch.filter(files, pattern)];
         mmclxdirs += dirs;
 
-    data_version = "1.0";
+    data_version = "1.0.0";
 
     l1path = os.path.join(outpath,'L1',datestr);
 
@@ -757,6 +873,68 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file
 
 
 
+def hsrhi_mmclx2cfrad(
+    mmclxfiles,
+    output_dir,
+    scan_type="HSRHI",
+):
+    """
+    Aggregates single-sweep RHI data to a cfradial1 data.
+    input_dir(str): Enter path of single sweep data directory,
+    output_dir(str): Enter the path for output data,
+    scan_type(str): "HSRHI"
+    """
+    #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
+    in_dir = input_dir
+    out_dir = output_dir
+    files = sorted(mmclxfiles, key=natural_sort_key)
+    print("Number of files: ", len(files))
+ 
+    RadarDS = read_mira35_mmclx(files[0]);
+    
+    print("Merging all scans into one Volume")
+    for i in range(1, len(files)):
 
+        newRadarDS = read_mira35_mmclx(files[i])
+        RadarDS = pyart.util.join(RadarDS,newRadarDS)
+
+        fname = os.path.basename(files[0]).split(".nc")[0]
+
+        out_file = f"cfrad_{fname}.nc"
+        out_path = os.path.join(out_dir, out_file)
+        pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
+
+def ppistack_mmclx2cfrad(
+    mmclxfiles,
+    output_dir,
+    scan_type="BLPPI",
+):
+    """
+    Aggregates single-sweep PPI data to a cfradial1 data.
+    input_dir(str): Enter path of single sweep data directory,
+    output_dir(str): Enter the path for output data,
+    scan_type(str): "BLPPI"
+    """
+    #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
+    in_dir = input_dir
+    out_dir = output_dir
+    files = sorted(mmclxfiles, key=natural_sort_key)
+    print("Number of files: ", len(files))
+ 
+    RadarDS = read_mira35_mmclx(files[0]);
+    
+    print("Merging all scans into one Volume")
+    for i in range(1, len(files)):
+
+        newRadarDS = read_mira35_mmclx(files[i])
+        RadarDS = pyart.util.join(RadarDS,newRadarDS)
+
+        fname = os.path.basename(files[0]).split(".nc")[0]
+
+        out_file = f"cfrad_{fname}.nc"
+        out_path = os.path.join(out_dir, out_file)
+        pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
+
+    
 
 
