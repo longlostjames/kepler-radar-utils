@@ -308,14 +308,14 @@ def read_mira35_mmclx(filename, **kwargs):
             sweep_mode["data"][0] = value;
             break;
 
-    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
+    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
 
     fixed_angle = filemetadata("fixed_angle")
 
     if scan_type is not None:
-        fixed_angle["data"] = np.array(1 * [fixed_angles[scan_type]])
+        fixed_angle["data"] = np.array(1 * [fixed_angles[scan_type] % 360]) 
     else:
-        fixed_angle["data"] = np.array(1 * [None])
+        fixed_angle["data"] = np.array(1 * [None]) 
 
 
     # time
@@ -349,7 +349,7 @@ def read_mira35_mmclx(filename, **kwargs):
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
-    azimuth['data'] = ncvars['azi'][:]+ncvars['northangle'][:];
+    azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
     azimuth['units'] = "degree";
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
     azimuth['long_name'] = "sensor_to_target_azimuth_angle";
