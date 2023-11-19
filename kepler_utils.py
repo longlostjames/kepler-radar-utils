@@ -72,7 +72,7 @@ def read_mira35_mmclx_vpt_multi(mmclxfiles, **kwargs):
 
 
 
-def read_mira35_mmclx(filename, **kwargs):
+def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
     """
     Read a netCDF mmclx file from MIRA-35 radar.
 
