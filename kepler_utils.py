@@ -28,6 +28,8 @@ import yaml
 
 import os, fnmatch
 
+import gzip
+
 from io import StringIO
 
 def read_mira35_mmclx_hsrhi(mmclxfiles, **kwargs):
@@ -121,7 +123,12 @@ def read_mira35_mmclx(filename, **kwargs):
     # -----------------
     # Open netCDF4 file
     # -----------------
-    ncobj = nc4.Dataset(filename)
+    if gzip_flag:
+        with gzip.open('test.nc.gz') as gz:
+            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as ncobj:
+    else:
+        ncobj = nc4.Dataset(filename)
+    
     nrays = len(ncobj.dimensions["time"]);
     ngates = len(ncobj.dimensions["range"]);
     nsweeps = 1; # We only have single sweep files 
