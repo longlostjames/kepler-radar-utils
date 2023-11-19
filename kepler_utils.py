@@ -125,13 +125,13 @@ def read_mira35_mmclx(filename, **kwargs):
     # -----------------
     print(f"gzip_flag={gzip_flag}")
     if gzip_flag:
-        with gzip.open(filename) as gz:
-            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as ncobj:
+        gz = gzip.open(filename)
+        ncobj = nc4.Dataset('dummy', mode='r', memory=gz.read())
     else:
         ncobj = nc4.Dataset(filename)
     
     print(ncobj);
-    
+
     nrays = len(ncobj.dimensions["time"]);
     ngates = len(ncobj.dimensions["range"]);
     nsweeps = 1; # We only have single sweep files 
@@ -510,6 +510,8 @@ def read_mira35_mmclx(filename, **kwargs):
     #    instrument_parameters["radar_beam_width_h"] = dic
 
     ncobj.close()
+    if gzip_flag:
+        gz.close();
 
     return Radar(
         time,
