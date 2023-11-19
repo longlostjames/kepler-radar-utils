@@ -124,7 +124,7 @@ def read_mira35_mmclx(filename, **kwargs):
     # Open netCDF4 file
     # -----------------
     if gzip_flag:
-        with gzip.open('test.nc.gz') as gz:
+        with gzip.open(filename) as gz:
             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as ncobj:
     else:
         ncobj = nc4.Dataset(filename)
