@@ -130,6 +130,8 @@ def read_mira35_mmclx(filename, **kwargs):
     else:
         ncobj = nc4.Dataset(filename)
     
+    print(ncobj);
+    
     nrays = len(ncobj.dimensions["time"]);
     ngates = len(ncobj.dimensions["range"]);
     nsweeps = 1; # We only have single sweep files 
