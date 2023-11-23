@@ -338,7 +338,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
     base_time = dtime[0].replace(hour=0, minute=0, second=0, microsecond=0)
     
     time['units'] = make_time_unit_str(base_time)  
-    time['data']  = nc4.date2num(dtime,time['units']);
+    time['data']  = cftime.date2num(dtime,time['units']);
 
     # range
     # -----
