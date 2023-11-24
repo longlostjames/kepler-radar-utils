@@ -337,7 +337,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
             
     base_time = dtime[0].replace(hour=0, minute=0, second=0, microsecond=0)
     
-    time['units'] = make_time_unit_str(base_time)  
+    time['units'] = make_time_unit_str(base_time);  
     time['data']  = cftime.date2num(dtime,time['units']);
 
     # range
@@ -832,38 +832,222 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file
 
     return
 
+def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
+    # Convert the input times to datetime objects
+    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
 
+    # Define a list to store the found files
+    matching_files = []
 
-def hsrhi_mmclx2cfrad(
+    # Iterate through files in a specific directory
+    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
+        for file in files:
+            #print(file);
+            # Check if the file matches the criteria
+            # Example: check if the file name contains the sweep_type and falls within the time range
+            if gzip_flag:
+                if sweep_type in file and file.endswith('.mmclx.gz'):
+                    fullfile = os.path.join(root,file)
+                    with gzip.open(fullfile) as gz:
+                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
+                            if start_datetime <= file_time <= end_datetime:
+                                matching_files.append(os.path.join(root, file))
+            else:
+                if sweep_type in file and file.endswith('.mmclx'):
+                    nc_file = nc4.Dataset(os.path.join(root, file))
+                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
+                    nc_file.close()         
+                    if start_datetime <= file_time <= end_datetime:
+                        matching_files.append(os.path.join(root, file))
+
+    return sorted(matching_files)
+
+def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False):
+    # Convert the input times to datetime objects
+    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+    hrstr = start_datetime.strftime("%H");
+    # Define a list to store the found files
+    matching_files = []
+
+    # Iterate through files in a specific directory
+    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
+        for file in files:
+            # Check if the file matches the criteria
+            # Example: check if the file name contains the sweep_type and falls within the time range
+            if gzip_flag:
+                if "rhi" in file and hrstr in file and file.endswith('.mmclx.gz'):
+                    fullfile = os.path.join(root,file)
+                    with gzip.open(fullfile) as gz:
+                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
+                            azim = (nc['azi'][0]+nc['northangle'][0]) % 360;
+                            if start_datetime <= file_time <= end_datetime:
+                                print(file_time);
+                                if azim_min < azim <= azim_max:
+                                    matching_files.append(os.path.join(root, file))
+            else:
+                if "rhi" in file and hrstr in file and file.endswith('.mmclx'):
+                    nc = nc4.Dataset(os.path.join(root, file))
+                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
+                    azim = (nc['azi'][0]+nc['northangle'][0]) % 360;
+                    if start_datetime <= file_time <= end_datetime:
+                        print(file_time);
+                        if azim_min < azim <= azim_max:
+                            matching_files.append(os.path.join(root, file))
+                    nc.close()         
+    return sorted(matching_files)
+    
+
+def find_mmclx_ppi_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag=False):
+    # Convert the input times to datetime objects
+    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+    hrstr = start_datetime.strftime("%H");
+
+    # Define a list to store the found files
+    matching_files = []
+
+    # Iterate through files in a specific directory
+    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
+        for file in files:
+            if gzip_flag:
+                if "ppi" in file and hrstr in file and file.endswith('.mmclx.gz'):
+                    fullfile = os.path.join(root,file)
+                    with gzip.open(fullfile) as gz:
+                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
+                            elev = nc['elv'][0];
+                            if start_datetime <= file_time <= end_datetime:
+                                print(file_time);
+                                if elev_min <= elev <= elev_max:
+                                    matching_files.append(os.path.join(root, file))
+            else:
+                if "ppi" in file and hrstr in file and file.endswith('.mmclx'):
+                    nc = nc4.Dataset(os.path.join(root, file))
+                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
+                    elev = nc['elv'][0];
+                    if start_datetime <= file_time <= end_datetime:
+                        print(file_time);
+                        if elev_min <= elev <= elev_max:
+                            matching_files.append(os.path.join(root, file))
+                    nc.close()         
+    return sorted(matching_files)
+
+def find_mmclx_vad_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag=False):
+    # Convert the input times to datetime objects
+    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+
+    # Define a list to store the found files
+    matching_files = []
+
+    # Iterate through files in a specific directory
+    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
+        for file in files:
+            if gzip_flag:
+                if "ppi" in file and file.endswith('.mmclx.gz'):
+                    fullfile = os.path.join(root,file)
+                    with gzip.open(fullfile) as gz:
+                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
+                            elev = nc['elv'][0];
+                            if start_datetime <= file_time <= end_datetime:
+                                print(file_time);
+                                if elev_min <= elev <= elev_max:
+                                    matching_files.append(os.path.join(root, file))
+            else:
+                if "ppi" in file and file.endswith('.mmclx'):
+                    nc = nc4.Dataset(os.path.join(root, file))
+                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
+                    elev = nc['elv'][0];
+                    if start_datetime <= file_time <= end_datetime:
+                        print(file_time);
+                        if elev_min <= elev <= elev_max:
+                            matching_files.append(os.path.join(root, file))
+                    nc.close()         
+    return sorted(matching_files)
+
+def multi_mmclx2cfrad(
     mmclxfiles,
     output_dir,
     scan_type="HSRHI",
+    gzip_flag=False,
 ):
     """
     Aggregates single-sweep RHI data to a cfradial1 data.
-    input_dir(str): Enter path of single sweep data directory,
     output_dir(str): Enter the path for output data,
     scan_type(str): "HSRHI"
     """
     #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
-    in_dir = input_dir
-    out_dir = output_dir
-    files = sorted(mmclxfiles, key=natural_sort_key)
-    print("Number of files: ", len(files))
- 
-    RadarDS = read_mira35_mmclx(files[0]);
+
+    from kepler_utils import read_mira35_mmclx
     
+    #in_dir = input_dir
+    out_dir = output_dir
+    files = sorted(mmclxfiles)
+    print("Number of files: ", len(files))
+    print(f"gzip_flag={gzip_flag}");
+    RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag);
+
+    # Read time and microsec directly from mmclx file
+    import cftime
+    if gzip_flag:
+        with gzip.open(files[0]) as gz:
+            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                dtsec = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
+                usec = nc['microsec'][:];           
+    else:
+        nc = nc4.Dataset(files[0])
+        dtsec = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
+        usec = nc['microsec'][:]; 
+        nc.close();
+
+    dt_ref = dtsec[0].replace(hour=0,minute=0,second=0,microsecond=0);
+    time_reference = dt_ref.strftime('%Y-%m-%dT%H:%M:%SZ');
+    time_units = f'seconds since {time_reference}'; 
+
+    tsec = cftime.date2num(dtsec,time_units);
+    print(time_units);
+    
+    print(RadarDS.latitude['data']);
     print("Merging all scans into one Volume")
     for i in range(1, len(files)):
 
-        newRadarDS = read_mira35_mmclx(files[i])
-        RadarDS = pyart.util.join(RadarDS,newRadarDS)
+        newRadarDS = read_mira35_mmclx(files[i],gzip_flag=gzip_flag)
+        print(len(newRadarDS.latitude["data"]))
 
-        fname = os.path.basename(files[0]).split(".nc")[0]
+        if gzip_flag:
+            with gzip.open(files[i]) as gz:
+                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                    dtsec_new = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
+                    usec_new = nc['microsec'][:];           
+        else:
+            nc = nc4.Dataset(files[i])
+            dtsec_new = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
+            usec_new = nc['microsec'][:]; 
+            nc.close();
 
-        out_file = f"cfrad_{fname}.nc"
-        out_path = os.path.join(out_dir, out_file)
-        pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
+        tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
+        usec = np.append(usec,usec_new);
+
+        RadarDS = pyart.util.join_radar(RadarDS,newRadarDS)
+
+    RadarDS.time['units'] = time_units;
+    RadarDS.time['data'][:] = tsec+usec*1e-6;
+    
+    fname = os.path.basename(files[0]).split(".")[0]
+
+    out_file = f"{fname}_{scan_type.lower()}.nc"
+
+    print(out_file);
+    out_path = os.path.join(out_dir, out_file)
+    print(out_path);
+    pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
+
+    return RadarDS
 
 def ppistack_mmclx2cfrad(
     mmclxfiles,
@@ -896,6 +1080,41 @@ def ppistack_mmclx2cfrad(
         out_path = os.path.join(out_dir, out_file)
         pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
 
+
+def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
+    # Define the start and end times for the loop
+    start_date = datetime.datetime.strptime(datestr, '%Y%m%d');
+    end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
+
+    # Iterate through each half hour for HSRHI and BLPPI files
+    current_date = start_date
+    while current_date <= end_date:
+        print(current_date);
+        next_halfhour = current_date + datetime.timedelta(minutes=30);
+        
+        hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, woestpath,gzip_flag=True)
+        if (len(hsrhi1_files)>0):
+            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,radargwspath,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+        
+        hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 360, woestpath, gzip_flag=True)
+        if (len(hsrhi2_files)>0):
+            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,radargwspath,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+        
+        blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, woestpath,gzip_flag=True)
+        if (len(blppi_files)>0):
+            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,radargwspath,scan_type='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+
+        current_date = next_halfhour
+    # Vertically pointing files for whole day
+    vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', woestpath,gzip_flag=True);
+    if (len(vpt_files)>0):
+        RadarDS_VPT = multi_mmclx2cfrad(vpt_files,radargwspath,scan_type='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
     
+    # VAD files for whole day
+    vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
+    vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
+    vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, woestpath,gzip_flag=True);
+    if (len(vad_files)>0):
+        RadarDS_VAD = multi_mmclx2cfrad(vad_files,radargwspath,scan_type='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
 
 
