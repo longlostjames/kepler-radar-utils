@@ -975,6 +975,7 @@ def multi_mmclx2cfrad(
     output_dir,
     scan_type="HSRHI",
     gzip_flag=False,
+    azimuth_offset=0.0,
 ):
     """
     Aggregates single-sweep RHI data to a cfradial1 data.
