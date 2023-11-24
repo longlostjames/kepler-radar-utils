@@ -983,7 +983,7 @@ def multi_mmclx2cfrad(
     """
     #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    from kepler_utils import read_mira35_mmclx
+    #from kepler_utils import read_mira35_mmclx
     
     #in_dir = input_dir
     out_dir = output_dir
@@ -1092,29 +1092,29 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         print(current_date);
         next_halfhour = current_date + datetime.timedelta(minutes=30);
         
-        hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, woestpath,gzip_flag=True)
+        hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
         if (len(hsrhi1_files)>0):
-            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,radargwspath,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         
-        hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 360, woestpath, gzip_flag=True)
+        hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 360, indir, gzip_flag=True)
         if (len(hsrhi2_files)>0):
-            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,radargwspath,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         
-        blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, woestpath,gzip_flag=True)
+        blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
         if (len(blppi_files)>0):
-            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,radargwspath,scan_type='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_type='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
 
         current_date = next_halfhour
     # Vertically pointing files for whole day
-    vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', woestpath,gzip_flag=True);
+    vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
     if (len(vpt_files)>0):
-        RadarDS_VPT = multi_mmclx2cfrad(vpt_files,radargwspath,scan_type='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
+        RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_type='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
     
     # VAD files for whole day
     vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
     vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
-    vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, woestpath,gzip_flag=True);
+    vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
     if (len(vad_files)>0):
-        RadarDS_VAD = multi_mmclx2cfrad(vad_files,radargwspath,scan_type='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
+        RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_type='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
 
 
