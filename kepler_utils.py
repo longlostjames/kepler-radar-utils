@@ -1038,6 +1038,11 @@ def multi_mmclx2cfrad(
 
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
+
+    RadarDS.azimuth['data'] += azimuth_offset;
+
+    if 'RHI' in scan_type or 'rhi' in scan_type:
+        RadarDS.fixed_angle['data'] += azimuth_offset;
     
     fname = os.path.basename(files[0]).split(".")[0]
 
