@@ -1346,7 +1346,6 @@ def multi_mmclx2cfrad(
 
     RadarDS.azimuth['data'] += azimuth_offset;
 
-    RadarDS.scan_type = scan_type.lower();
 
     if 'RHI' in scan_type or 'rhi' in scan_type:
         RadarDS.fixed_angle['data'] += azimuth_offset;
@@ -1360,13 +1359,17 @@ def multi_mmclx2cfrad(
     print(out_path);
     pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
 
+    DS = nc4.Dataset(out_path,'r+');
+    DS.scan_type = scan_type.lower();
+    DS.close();
+
     # Update history
     update_string = 'Merge single sweep files into cfradial file'
     update_history_attribute(out_path,update_string)
 
     cfradial_add_ncas_metadata(out_path,yaml_project_file,yaml_instrument_file,tracking_tag,data_version);
     
-    return RadarDS
+    return
 
 def ppistack_mmclx2cfrad(
     mmclxfiles,
