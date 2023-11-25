@@ -931,6 +931,10 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
 
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
 
+
+    import pathlib
+    outpath = pathlib.Path(cfradfile).parent.resolve();
+
     outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
 
     if os.path.isfile(outfile):
