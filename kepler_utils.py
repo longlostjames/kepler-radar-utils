@@ -879,7 +879,7 @@ def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_
 
 def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
     
-     instrument_tagname = "ncas-radar-mobile-ka-band-1"
+    instrument_tagname = "ncas-radar-mobile-ka-band-1"
 
     # ---------------------------------------
     # Read metadata from YAML instrument file
@@ -1300,7 +1300,6 @@ def multi_mmclx2cfrad(
     RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag);
 
     # Read time and microsec directly from mmclx file
-    import cftime
     if gzip_flag:
         with gzip.open(files[0]) as gz:
             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
