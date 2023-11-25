@@ -1130,7 +1130,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
     
 def update_history_attribute(ncfile,update):
 
-    dataset = nc4.Dataset(ncfile);
+    dataset = nc4.Dataset(ncfile,'r+');
 
     user = getpass.getuser();
 
