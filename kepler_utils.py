@@ -925,7 +925,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
 
     scan_type = RadarDataset.scan_type;
 
-    time_coverage_start = RadarDataset.variables['time_coverage_start'][:];
+    time_coverage_start = str(RadarDataset.variables['time_coverage_start'][:]);
 
     file_timestamp = datetime.datetime.strptime(time_coverage_start,'%Y-%m-%dT%H:%M:%SZ');
 
