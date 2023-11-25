@@ -1102,7 +1102,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         if (len(hsrhi1_files)>0):
             RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         
-        hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 360, indir, gzip_flag=True)
+        hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir, gzip_flag=True)
         if (len(hsrhi2_files)>0):
             RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         
