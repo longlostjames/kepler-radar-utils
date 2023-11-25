@@ -1053,6 +1053,9 @@ def multi_mmclx2cfrad(
     print(out_path);
     pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
 
+    # Update history
+    update_string = 'Merge single sweep files into cfradial file'
+    update_history_attribute(out_path,update_string)
     return RadarDS
 
 def ppistack_mmclx2cfrad(
@@ -1124,3 +1127,22 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_type='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
 
 
+    
+def update_history_attribute(ncfile,update):
+
+    dataset = nc4.Dataset(ncfile);
+
+    user = getpass.getuser();
+
+    updttime = datetime.datetime.utcnow();
+    updttimestr = updttime.ctime();
+
+    history = updttimestr + (" - user:" + user
+    + " machine: " + socket.gethostname()
+    + " " + update);
+
+    dataset.history = history + "\n" + dataset.history;
+
+    dataset.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
+
+    dataset.close();
