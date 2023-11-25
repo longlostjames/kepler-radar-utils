@@ -784,6 +784,304 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
 
     return
 
+def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
+
+    """This routine converts multi-sweep cfradial data from the NCAS Mobile Ka-band Radar (Kepler) to 
+    Level 1 (cfradial) data, compliant with the NCAS Radar Data Standard v1.0.0.
+
+    Metadata are added using information in two YAML files the yaml_project_file, and yaml_instrument_file.
+
+    :param infile: Full path of NetCDF Level 1a cfradial data file, e.g. `<path-to-file>/20220907_071502_hsrhi.nc`
+    :type infile: str
+
+    :param outpath: Path where NetCDF Level 1 output file will be written
+    :type outfile: str
+
+    :param yaml_project_file: Full path of YAML file containing project-specific metadata
+    :type yaml_project_file: str
+
+    :param yaml_instrument_file: Full path of YAML file containing instrument-specific metadata
+    :type yaml_instrument_file: str
+
+    :param tracking_tag: AMOF tracking tag for the project
+    "type tracking_tag: str
+    
+    :param data_version: Version of data product in the format `n.m.p`, where n (major version), m (minor revision) and p (patch) are integers.
+    :type data_version: str
+    """
+
+    instrument_tagname = "ncas-radar-mobile-ka-band-1"
+
+    # ---------------------------------------
+    # Read metadata from YAML instrument file
+    # ---------------------------------------  
+    with open(yaml_instrument_file, "r") as stream:
+        try:
+            instruments = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    for elem in instruments:
+        if instrument_tagname in elem:
+            instrument = elem[instrument_tagname];
+
+    # -------------------------------------
+    # Read metadata from YAML projects file
+    # -------------------------------------  
+    with open(yaml_project_file, "r") as stream:
+        try:
+            projects = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    for p in projects:
+        if tracking_tag in p:
+            project = p[tracking_tag];
+
+    radar_name = instrument["instrument_name"].lower();
+
+    print(radar_name);
+
+    for n in project["ncas_instruments"]:
+        if radar_name in n:
+            project_instrument = n[radar_name];
+
+    print(project_instrument);
+
+    location = project_instrument['platform']['location'].lower();
+    
+    RadarDataset = nc4.Dataset(infile);
+
+    scan_type = RadarDataset.scan_type.lower();
+
+    file_timestamp = datetime.datetime.strptime(RadarDataset.metadata["time_coverage_start"],'%Y-%m-%dT%H:%M:%SZ');
+
+    dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
+
+    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
+
+    if os.path.isfile(outfile):
+        print("The file already exists")
+    else:
+        # Rename the file
+        os.rename(infile,outfile);
+    
+    cfradial_add_ncas_metadata(outfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version)
+
+    # -----------------------
+    # Update history metadata
+    # -----------------------
+    updatestr = "Add NCAS metadata"
+    update_history_attribute(outfile,updatestr)
+
+
+    return
+
+def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
+    
+     instrument_tagname = "ncas-radar-mobile-ka-band-1"
+
+    # ---------------------------------------
+    # Read metadata from YAML instrument file
+    # ---------------------------------------  
+    with open(yaml_instrument_file, "r") as stream:
+        try:
+            instruments = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    for elem in instruments:
+        if instrument_tagname in elem:
+            instrument = elem[instrument_tagname];
+
+    # -------------------------------------
+    # Read metadata from YAML projects file
+    # -------------------------------------  
+    with open(yaml_project_file, "r") as stream:
+        try:
+            projects = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    for p in projects:
+        if tracking_tag in p:
+            project = p[tracking_tag];
+
+    radar_name = instrument["instrument_name"].lower();
+
+    print(radar_name);
+
+    for n in project["ncas_instruments"]:
+        if radar_name in n:
+            project_instrument = n[radar_name];
+
+    print(project_instrument);
+
+    location = project_instrument['platform']['location'].lower();
+    
+    RadarDataset = nc4.Dataset(cfradfile);
+
+    scan_type = RadarDataset.scan_type.lower();
+
+    file_timestamp = datetime.datetime.strptime(RadarDataset.metadata["time_coverage_start"],'%Y-%m-%dT%H:%M:%SZ');
+
+    dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
+
+    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
+
+    if os.path.isfile(outfile):
+        print("The file already exists")
+    else:
+        # Rename the file
+        os.rename(cfradfile,outfile);
+    
+    RadarDataset.close();
+    
+    # -------------------------------------------------------
+    # Read cfradial file to add NCAS metadata
+    # -------------------------------------------------------
+    DS = nc4.Dataset(outfile,'r+');
+
+    DS.product_version = "v{}".format(data_version) ;
+    DS.processing_level = "1" ;
+
+    DS.licence = project_instrument["data_licence"];
+    DS.acknowledgement = project_instrument["acknowledgement"];
+
+    DS.platform = project_instrument["platform"]["location"];
+    DS.platform_type = project_instrument["platform"]["type"];
+    DS.location_keywords = project_instrument["platform"]["location_keywords"];
+
+    DS.deployment_mode = project_instrument["platform"]["deployment_mode"];
+
+    DS.title = project_instrument["title"];
+
+    DS.creator_name = project_instrument["data_creator"]["name"];
+    DS.creator_email = project_instrument["data_creator"]["email"];
+    DS.creator_url = project_instrument["data_creator"]["pid"];
+    DS.institution = project_instrument["data_creator"]["institution"];
+    DS.instrument_name = instrument["instrument_name"];
+    DS.instrument_software = project_instrument["instrument_software"]["name"];
+    DS.instrument_software_version = project_instrument["instrument_software"]["version"];
+    DS.instrument_manufacturer = instrument['instrument_manufacturer'];
+    DS.instrument_model = instrument['instrument_model'];
+    DS.instrument_serial_number = instrument['instrument_serial_number'];
+    DS.instrument_pid = instrument['instrument_pid']
+
+    DS.references = instrument['references'];
+    #DS.source = "NCAS Mobile Ka-band Radar (Kepler)";
+    #DS.comment = "";
+    DS.project = project["project_name"];
+    DS.project_principal_investigator = project["principal_investigator"]["name"];
+    DS.project_principal_investigator_email = project["principal_investigator"]["email"];
+    DS.project_principal_investigator_url = project["principal_investigator"]["pid"];
+
+    DS.processing_software_url = "";
+    DS.processing_software_version = "";
+
+    #DS.time_coverage_start = datetime.datetime.strftime(dt_start,'%Y-%m-%dT%H:%M:%SZ');
+    #DS.time_coverage_end = datetime.datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
+    #DS.geospatial_bounds = "51.1450N -1.4384E";
+
+    # -------------------------------------------------------
+    # Now clean up some variable attributes
+    # -------------------------------------------------------
+
+
+    # ----------------
+    # Scalar variables
+    # ----------------
+
+    #varin = DSin['latitude'];
+    #varout = DSout.createVariable('latitude',varin.datatype);
+    #varout.standard_name = 'latitude';
+    #varout.long_name = 'latitude of the antenna';
+    #varout.units = 'degree_north';
+    #varout[:]=51.1450;
+
+    #varin = DSin['longitude'];
+    #varout = DSout.createVariable('longitude',varin.datatype);
+    #varout.standard_name = 'longitude';
+    #varout.long_name = 'longitude of the antenna';
+    #varout.units = 'degree_east';
+    #varout[:]=-1.4384;
+
+    #varin = DSin['height'];
+    #varout = DSout.createVariable('altitude',varin.datatype);
+    #varout.standard_name = 'altitude';
+    #varout.long_name = 'altitude of the elevation axis above the geoid (WGS84)';
+    #varout.units = 'm';
+    #varout[:]=146.7;
+
+    #varout = DSout.createVariable('altitude_agl',varin.datatype);
+    #varout.standard_name = 'altitude';
+    #varout.long_name = 'altitude of the elevation axis above ground';
+    #varout.units = 'm';
+    #varout[:]=16.0;
+
+    #varin = DSin['frequency'];
+    #varout = DSout.createVariable('frequency',varin.datatype);
+    #varout.standard_name = 'radiation_frequency';
+    #varout.long_name = 'frequency of transmitted radiation';
+    #varout.units = 'GHz';
+    #varout[:]=varin[:];
+
+    #varin = DSin['prf'];
+    #varout = DSout.createVariable('prf',varin.datatype);
+    #varout.long_name = 'pulse repetition frequency';
+    #varout.units = 'Hz';
+    #varout[:]=varin[:];
+
+    #varin = DSin['beamwidthH'];
+    #varout = DSout.createVariable('beamwidthH',varin.datatype);
+    #varout.long_name = 'horizontal angular beamwidth';
+    #varout.units = 'degree';
+    #varout[:]=varin[:];
+
+    #varin = DSin['beamwidthV'];
+    #varout = DSout.createVariable('beamwidthV',varin.datatype);
+    #varout.long_name = 'vertical angular beamwidth';
+    #varout.units = 'degree';
+    #varout[:]=varin[:];
+
+    #varin = DSin['antenna_diameter'];
+    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
+    #varout.long_name = 'antenna diameter';
+    #varout.units = 'm';
+    #varout[:]=varin[:];
+
+    #varin = DSin['pulse_period'];
+    #varout = DSout.createVariable('pulse_width',varin.datatype);
+    #varout.long_name = 'pulse width';
+    #varout.units = 'us';
+    #varout[:]=varin[:];
+
+    #varin = DSin['transmit_power'];
+    #varout = DSout.createVariable('transmit_power',varin.datatype);
+    #varout.long_name = 'peak transmitted power';
+    #varout.units = 'W';
+    #varout[:]=varin[:];
+
+
+    # ---------------
+    # Field variables
+    # ---------------
+    # These are:
+    # SNR, VEL, RMS, LDR, NPK, SNRg, VELg, NPKg, RHO, DPS, RHOwav, DPSwav, 
+    # HSDco, HSDcx, Ze, Zg, ISDRco, ISDRcx
+    # The ones to use are:
+    # SNR, VEL, RMS, LDR, NPK, RHO, DPS, HSDco, HSDcx, Ze, ISDRco, ISDRcx
+
+    DS.close();
+
+    # -----------------------
+    # Update history metadata
+    # -----------------------
+    updatestr = "Add NCAS metadata"
+    update_history_attribute(outfile,updatestr)
+
+    return
+
 def anglicise_cfradial(cfradfile):
 
     # -------------------------------------------------------
@@ -976,9 +1274,12 @@ def multi_mmclx2cfrad(
     scan_type="HSRHI",
     gzip_flag=False,
     azimuth_offset=0.0,
+    tracking_tag="AMOF_20220922221548",
+    campaign="woest",
+    data_version=0.1,
 ):
     """
-    Aggregates single-sweep RHI data to a cfradial1 data.
+    Aggregates single-sweep mmclx data to a cfradial1 data.
     output_dir(str): Enter the path for output data,
     scan_type(str): "HSRHI"
     """
@@ -986,7 +1287,12 @@ def multi_mmclx2cfrad(
 
     #from kepler_utils import read_mira35_mmclx
     
-    #in_dir = input_dir
+    from pathlib import Path
+    homepath = Path.home()
+
+    yaml_project_file = os.path.join(homepath,'amof_campaigns','{}_project.yml'.format(campaign))
+    yaml_instrument_file = os.path.join(homepath,'amof_instruments','amof_instruments.yml')
+
     out_dir = output_dir
     files = sorted(mmclxfiles)
     print("Number of files: ", len(files))
@@ -1056,6 +1362,9 @@ def multi_mmclx2cfrad(
     # Update history
     update_string = 'Merge single sweep files into cfradial file'
     update_history_attribute(out_path,update_string)
+
+    cfradial_add_ncas_metadata(out_path,yaml_project_file,yaml_instrument_file,tracking_tag,data_version);
+    
     return RadarDS
 
 def ppistack_mmclx2cfrad(
