@@ -607,7 +607,7 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     scan_type = RadarDataset.scan_type
 
-    file_timestamp = datetime.datetime.strptime(RadarDataset.metadata["time_coverage_start"],'%Y-%m-%dT%H:%M:%SZ');
+    file_timestamp = datetime.datetime.strptime(RadarDataset["time_coverage_start"],'%Y-%m-%dT%H:%M:%SZ');
 
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
 
@@ -854,7 +854,7 @@ def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_
 
     scan_type = RadarDataset.scan_type.lower();
 
-    file_timestamp = datetime.datetime.strptime(RadarDataset.metadata["time_coverage_start"],'%Y-%m-%dT%H:%M:%SZ');
+    file_timestamp = datetime.datetime.strptime(RadarDataset["time_coverage_start"],'%Y-%m-%dT%H:%M:%SZ');
 
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
 
