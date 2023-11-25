@@ -1346,6 +1346,8 @@ def multi_mmclx2cfrad(
 
     RadarDS.azimuth['data'] += azimuth_offset;
 
+    RadarDS.scan_type = scan_type.lower();
+
     if 'RHI' in scan_type or 'rhi' in scan_type:
         RadarDS.fixed_angle['data'] += azimuth_offset;
     
