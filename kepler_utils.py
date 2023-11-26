@@ -999,12 +999,28 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
 
     DS.time_coverage_start = time_coverage_start;
     DS.time_coverage_end = time_coverage_end;
-    #DS.geospatial_bounds = "51.1450N -1.4384E";
+    DS.geospatial_bounds = "";
 
 
     # -------------------------------------------------------
     # Now clean up some variable attributes
     # -------------------------------------------------------
+    DS['range'].delncattr('standard_name');
+    DS['azimuth'].delncattr('standard_name');
+    DS['elevation'].delncattr('standard_name');
+    DS['DBZ'].standard_name = 'equivalent_reflectivity__factor';
+    DS['sweep_number'].delncattr('standard_name');
+    DS['sweep_mode'].delncattr('standard_name');
+    DS['fixed_angle'].delncattr('standard_name');
+    DS['latitude'].long_name = 'latitude';
+    DS['latitude'].standard_name = 'latitude';
+    DS['longitude'].long_name = 'longitude';
+    DS['longitude'].standard_name = 'longitude'; 
+    DS['altitude'].standard_name = 'altitude';
+    if DS['altitude'].units == 'meters':
+        DS['altitude'].units = 'metres';
+    DS['altitude'].long_name = 'altitude'
+
 
 
     # ----------------
