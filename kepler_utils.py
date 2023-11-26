@@ -1006,7 +1006,10 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     # -------------------------------------------------------
     # Now clean up some variable attributes
     # -------------------------------------------------------
+    DS['time'].comment = "";
     DS['range'].delncattr('standard_name');
+    DS['range'].comment = 'Range to centre of each bin';
+    DS['range'].meters_to_center_of_first_gate = DS['range']['data'][0];
     DS['azimuth'].delncattr('standard_name');
     DS['elevation'].delncattr('standard_name');
     DS['DBZ'].standard_name = 'equivalent_reflectivity__factor';
