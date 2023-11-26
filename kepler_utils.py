@@ -358,11 +358,12 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
     elevation = filemetadata('elevation')
 
     azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
-    azimuth['units'] = "degree";
+    azimuth['units'] = "degrees";
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
     azimuth['long_name'] = "sensor_to_target_azimuth_angle";
 
     elevation['data'] = ncvars['elv'][:];
+    elevation['units'] = "degrees";
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
     elevation['long_name'] = "sensor_to_target_elevation_angle";
 
