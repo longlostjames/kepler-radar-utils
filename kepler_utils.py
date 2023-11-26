@@ -87,7 +87,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         Radar object.
     """
     # List 
-    # time, range, fields, metadata, scan_type, latitude, longitude, altitude, altitude_agl,
+    # time, range, fields, metadata, scan_name, latitude, longitude, altitude, altitude_agl,
     # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
     # target_scan_rate, rays_are_indexed, ray_angle_res,
     # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
@@ -219,7 +219,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         "reference": "reference",
     }
 
- # time, range, fields, metadata, scan_type, latitude, longitude, altitude, altitude_agl,
+ # time, range, fields, metadata, scan_name, latitude, longitude, altitude, altitude_agl,
     # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
     # target_scan_rate, rays_are_indexed, ray_angle_res,
     # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
@@ -305,13 +305,13 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
 
     print(filename.lower());
 
-    scan_type = None;
+    scan_name = None;
     sweep_mode["data"] = np.array(1 * [None]);
 
     for key, value in sweep_modes.items():
         print(key)
         if key in filename.lower(): 
-            scan_type = value;
+            scan_name = value;
             sweep_mode["data"] = np.array(1 * [value]);
             sweep_mode["data"][0] = value;
             break;
@@ -320,8 +320,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
 
     fixed_angle = filemetadata("fixed_angle")
 
-    if scan_type is not None:
-        fixed_angle["data"] = np.array(1 * [fixed_angles[scan_type] % 360]) 
+    if scan_name is not None:
+        fixed_angle["data"] = np.array(1 * [fixed_angles[scan_name] % 360]) 
     else:
         fixed_angle["data"] = np.array(1 * [None]) 
 
@@ -516,7 +516,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         _range,
         fields,
         metadata,
-        scan_type,
+        scan_name,
         latitude,
         longitude,
         altitude,
@@ -605,13 +605,13 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     
     RadarDataset = read_mira35_mmclx(infile);
 
-    scan_type = RadarDataset.scan_type
+    scan_name = RadarDataset.scan_name
 
     file_timestamp = datetime.datetime.strptime(RadarDataset["time_coverage_start"][:],'%Y-%m-%dT%H:%M:%SZ');
 
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
 
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
+    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_name.replace('_','-',1),data_version));
 
     # ---------------------------------
     # Use PyART to create CfRadial file
@@ -852,7 +852,7 @@ def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_
     
     RadarDataset = nc4.Dataset(infile);
 
-    scan_type = RadarDataset.scan_type.lower();
+    scan_name = RadarDataset.scan_name.lower();
 
     time_coverage_start = nc4.chartostring(RadarDataset['time_coverage_start']['data'][0])[()];
 
@@ -860,7 +860,7 @@ def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_
 
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
 
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
+    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_name.replace('_','-',1),data_version));
 
     if os.path.isfile(outfile):
         print("The file already exists")
@@ -923,7 +923,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     
     RadarDataset = nc4.Dataset(cfradfile);
 
-    scan_type = RadarDataset.scan_type;
+    scan_name = RadarDataset.scan_name;
 
     time_coverage_start = str(nc4.chartostring(RadarDataset.variables['time_coverage_start'][:]));
     time_coverage_end = str(nc4.chartostring(RadarDataset.variables['time_coverage_end'][:]));
@@ -937,7 +937,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     import pathlib
     outpath = pathlib.Path(cfradfile).parent.resolve();
 
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_type.replace('_','-',1),data_version));
+    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_name.replace('_','-',1),data_version));
 
     if os.path.isfile(outfile):
         print("The file already exists")
