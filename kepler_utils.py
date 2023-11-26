@@ -1296,7 +1296,7 @@ def multi_mmclx2cfrad(
     """
     Aggregates single-sweep mmclx data to a cfradial1 data.
     output_dir(str): Enter the path for output data,
-    scan_type(str): "HSRHI"
+    scan_name(str): "HSRHI"
     """
     #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -1367,7 +1367,7 @@ def multi_mmclx2cfrad(
     
     fname = os.path.basename(files[0]).split(".")[0]
 
-    out_file = f"{fname}_{scan_type.lower()}.nc"
+    out_file = f"{fname}_{scan_name.lower()}.nc"
 
     print(out_file);
     out_path = os.path.join(out_dir, out_file)
