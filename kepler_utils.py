@@ -1022,7 +1022,9 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS['longitude'].standard_name = 'longitude'; 
     DS['altitude'].standard_name = 'altitude';
     DS['altitude'].comment = 'Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model' 
-    DS['altitude'].long_name = 'altitude'
+    DS['altitude'].long_name = 'altitude';
+    DS['altitude'].units = 'metres';
+    DS['altitude'].delncattr('positive'); 
 
 
 
