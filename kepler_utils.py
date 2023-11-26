@@ -347,7 +347,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
     _range['units'] = 'metres';
     #_range['metres_to_centre_of_first_gate'] = _range['data'][0];
     _range['proposed_standard_name'] = "projection_range_coordinate";
-    _range['long_name'] = "distance_to_centre_of_each_range_gate";
+    _range['long_name'] = "distance to centre of each range gate";
     # assuming the distance between all gates is constant, may not
     # always be true.
     #_range['metres_between_gates'] = (_range['data'][1] - _range['data'][0])
@@ -360,12 +360,12 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
     azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
     azimuth['units'] = "degrees";
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
-    azimuth['long_name'] = "sensor_to_target_azimuth_angle";
+    azimuth['long_name'] = "sensor to target azimuth angle";
 
     elevation['data'] = ncvars['elv'][:];
     elevation['units'] = "degrees";
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
-    elevation['long_name'] = "sensor_to_target_elevation_angle";
+    elevation['long_name'] = "sensor to target elevation angle";
 
 
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
@@ -423,7 +423,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dBZ'
         field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
-        field_dic['long_name'] =  "radar_equivalent_reflectivity_factor";
+        field_dic['long_name'] =  "radar equivalent reflectivity factor";
         field_dic['standard_name'] = "equivalent_reflectivity_factor";
         field_dic['proposed_standard_name'] =  "radar_equivalent_reflectivity_factor";   
         fields[field_name] = field_dic
@@ -436,7 +436,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'm s-1'
         field_dic['data'] = ncvars['VELg'][:];
-        field_dic['long_name'] =  "radial_velocity_of_scatterers_away_from_instrument";
+        field_dic['long_name'] =  "radial velocity of scatterers away from instrument";
         field_dic['standard_name'] = "radial_velocity_of_scatterers_away_from_instrument";
         fields[field_name] = field_dic
     else:
@@ -448,7 +448,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'm s-1'
         field_dic['data'] = ncvars['RMSg'][:];
-        field_dic['long_name'] =  "radar_doppler_spectrum_width";
+        field_dic['long_name'] =  "radar doppler spectrum width";
         field_dic['proposed_standard_name'] = "radar_doppler_spectrum_width";
         fields[field_name] = field_dic
     else:
@@ -460,7 +460,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:]);
-        field_dic['long_name'] =  "radar_linear_depolarization_ratio";
+        field_dic['long_name'] =  "radar linear depolarization ratio";
         field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
         fields[field_name] = field_dic
     else:
@@ -472,7 +472,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['SNRg'][:]);
-        field_dic['long_name'] =  "radar_signal_to_noise_ratio";
+        field_dic['long_name'] =  "radar signal to noise ratio";
         field_dic['proposed_standard_name'] = "radar_signal_to_noise_ratio";
         fields[field_name] = field_dic
     else:
@@ -1027,7 +1027,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS['altitude'].long_name = 'altitude';
     DS['altitude'].units = 'metres';
     DS['altitude'].delncattr('positive'); 
-    DS['volume_number'].long_name = 'volume_number';
+    DS['volume_number'].long_name = 'volume number';
 
 
 
