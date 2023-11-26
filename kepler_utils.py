@@ -1002,6 +1002,8 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS.time_coverage_end = time_coverage_end;
     DS.geospatial_bounds = "";
 
+    if "vpt" in DS.scan_name or "VPT" in DS.scan_name or "vertical_pointing" in DS.scan_name:
+        DS.featureType = 'timeSeriesProfile';
 
     # -------------------------------------------------------
     # Now clean up some variable attributes
@@ -1025,6 +1027,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS['altitude'].long_name = 'altitude';
     DS['altitude'].units = 'metres';
     DS['altitude'].delncattr('positive'); 
+    DS['volume_number'].long_name = 'volume_number';
 
 
 
@@ -1401,6 +1404,7 @@ def multi_mmclx2cfrad(
 
     DS = nc4.Dataset(out_path,'r+');
     DS.scan_name = scan_name.lower();
+
     DS.close();
 
     # Update history
