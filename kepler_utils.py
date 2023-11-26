@@ -963,7 +963,11 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS.platform = project_instrument["platform"]["location"];
     DS.platform_type = project_instrument["platform"]["type"];
     DS.location_keywords = project_instrument["platform"]["location_keywords"];
-    DS.platform_is_mobile = (project_instrument["platform"]["type"]=="stationary_platform");
+    if (project_instrument["platform"]["type"]=="stationary_platform"):
+        DS.platform_is_mobile = "true";
+    else:
+        DS.platform_is_mobile = "false";
+
 
     DS.deployment_mode = project_instrument["platform"]["deployment_mode"];
 
