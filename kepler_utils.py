@@ -926,6 +926,8 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     scan_type = RadarDataset.scan_type;
 
     time_coverage_start = str(nc4.chartostring(RadarDataset.variables['time_coverage_start'][:]));
+    time_coverage_end = str(nc4.chartostring(RadarDataset.variables['time_coverage_end'][:]));
+
 
     file_timestamp = datetime.datetime.strptime(time_coverage_start,'%Y-%m-%dT%H:%M:%SZ');
 
@@ -950,6 +952,8 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     # -------------------------------------------------------
     DS = nc4.Dataset(outfile,'r+');
 
+    DS.Conventions = "NCAS-Radar-1.0 CfRadial-1.4"
+    DS.delncattr('version');
     DS.product_version = "v{}".format(data_version) ;
     DS.processing_level = "1" ;
 
@@ -959,10 +963,12 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS.platform = project_instrument["platform"]["location"];
     DS.platform_type = project_instrument["platform"]["type"];
     DS.location_keywords = project_instrument["platform"]["location_keywords"];
+    DS.platform_is_mobile = (project_instrument["platform"]["type"]=="stationary_platform");
 
     DS.deployment_mode = project_instrument["platform"]["deployment_mode"];
 
     DS.title = project_instrument["title"];
+    DS.source = project_instrument["source"];
 
     DS.creator_name = project_instrument["data_creator"]["name"];
     DS.creator_email = project_instrument["data_creator"]["email"];
@@ -987,9 +993,10 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS.processing_software_url = "";
     DS.processing_software_version = "";
 
-    #DS.time_coverage_start = datetime.datetime.strftime(dt_start,'%Y-%m-%dT%H:%M:%SZ');
-    #DS.time_coverage_end = datetime.datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
+    DS.time_coverage_start = time_coverage_start;
+    DS.time_coverage_end = time_coverage_end;
     #DS.geospatial_bounds = "51.1450N -1.4384E";
+
 
     # -------------------------------------------------------
     # Now clean up some variable attributes
@@ -1279,7 +1286,7 @@ def find_mmclx_vad_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag
 def multi_mmclx2cfrad(
     mmclxfiles,
     output_dir,
-    scan_type="HSRHI",
+    scan_name="HSRHI",
     gzip_flag=False,
     azimuth_offset=0.0,
     tracking_tag="AMOF_20220922221548",
@@ -1355,7 +1362,7 @@ def multi_mmclx2cfrad(
     RadarDS.azimuth['data'] += azimuth_offset;
 
 
-    if 'RHI' in scan_type or 'rhi' in scan_type:
+    if 'RHI' in scan_name or 'rhi' in scan_name:
         RadarDS.fixed_angle['data'] += azimuth_offset;
     
     fname = os.path.basename(files[0]).split(".")[0]
@@ -1368,7 +1375,7 @@ def multi_mmclx2cfrad(
     pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
 
     DS = nc4.Dataset(out_path,'r+');
-    DS.scan_type = scan_type.lower();
+    DS.scan_name = scan_name.lower();
     DS.close();
 
     # Update history
@@ -1382,13 +1389,13 @@ def multi_mmclx2cfrad(
 def ppistack_mmclx2cfrad(
     mmclxfiles,
     output_dir,
-    scan_type="BLPPI",
+    scan_name="BLPPI",
 ):
     """
     Aggregates single-sweep PPI data to a cfradial1 data.
     input_dir(str): Enter path of single sweep data directory,
     output_dir(str): Enter the path for output data,
-    scan_type(str): "BLPPI"
+    scan_name(str): "BLPPI"
     """
     #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
     in_dir = input_dir
@@ -1424,28 +1431,28 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         
         hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
         if (len(hsrhi1_files)>0):
-            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         
         hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir, gzip_flag=True)
         if (len(hsrhi2_files)>0):
-            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_type='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         
         blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
         if (len(blppi_files)>0):
-            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_type='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
 
         current_date = next_halfhour
     # Vertically pointing files for whole day
     vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
     if (len(vpt_files)>0):
-        RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_type='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
+        RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
     
     # VAD files for whole day
     vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
     vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
     vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
     if (len(vad_files)>0):
-        RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_type='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
+        RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
 
 
     
