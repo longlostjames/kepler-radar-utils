@@ -785,6 +785,71 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
 
     return
 
+
+def cfradial_add_instrument_parameters(mmclxfile,cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
+    # -------------------------------------------------------
+    # Read cfradial file to add instrument parameters
+    # -------------------------------------------------------
+    DS = nc4.Dataset(cfradfile,'r+');
+
+    DSin = nc4.Dataset(mmclxfile,'r');
+
+    frequency = DS.createDimension("frequency", 1);
+
+    varin = DSin['frequency'];
+    varout = DSout.createVariable('frequency',varin.datatype,("frequency"));
+    varout.standard_name = 'radiation_frequency';
+    varout.long_name = 'frequency of transmitted radiation';
+    varout.units = 'GHz';
+    varout[:]=varin[:];
+    varout.meta_group = "instrument_parameters";
+
+    # ----------------
+    # Scalar variables
+    # ----------------
+
+    #varin = DSin['prf'];
+    #varout = DSout.createVariable('prf',varin.datatype);
+    #varout.long_name = 'pulse repetition frequency';
+    #varout.units = 'Hz';
+    #varout[:]=varin[:];
+
+    #varin = DSin['beamwidthH'];
+    #varout = DSout.createVariable('beamwidthH',varin.datatype);
+    #varout.long_name = 'horizontal angular beamwidth';
+    #varout.units = 'degree';
+    #varout[:]=varin[:];
+
+    #varin = DSin['beamwidthV'];
+    #varout = DSout.createVariable('beamwidthV',varin.datatype);
+    #varout.long_name = 'vertical angular beamwidth';
+    #varout.units = 'degree';
+    #varout[:]=varin[:];
+
+    #varin = DSin['antenna_diameter'];
+    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
+    #varout.long_name = 'antenna diameter';
+    #varout.units = 'm';
+    #varout[:]=varin[:];
+
+    #varin = DSin['pulse_period'];
+    #varout = DSout.createVariable('pulse_width',varin.datatype);
+    #varout.long_name = 'pulse width';
+    #varout.units = 'us';
+    #varout[:]=varin[:];
+
+    #varin = DSin['transmit_power'];
+    #varout = DSout.createVariable('transmit_power',varin.datatype);
+    #varout.long_name = 'peak transmitted power';
+    #varout.units = 'W';
+    #varout[:]=varin[:];
+
+
+    DSin.close();
+    DS.close();
+
+    return
+
 def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
 
     """This routine converts multi-sweep cfradial data from the NCAS Mobile Ka-band Radar (Kepler) to 
@@ -1014,7 +1079,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS['range'].meters_to_center_of_first_gate = DS['range'][0];
     DS['azimuth'].delncattr('standard_name');
     DS['elevation'].delncattr('standard_name');
-    DS['DBZ'].standard_name = 'equivalent_reflectivity__factor';
+    DS['DBZ'].standard_name = 'equivalent_reflectivity_factor';
     DS['sweep_number'].delncattr('standard_name');
     DS['sweep_mode'].delncattr('standard_name');
     DS['fixed_angle'].delncattr('standard_name');
@@ -1028,7 +1093,6 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS['altitude'].units = 'metres';
     DS['altitude'].delncattr('positive'); 
     DS['volume_number'].long_name = 'volume number';
-
 
 
     # ----------------
@@ -1458,31 +1522,44 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         print(current_date);
         next_halfhour = current_date + datetime.timedelta(minutes=30);
         
-        hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
-        if (len(hsrhi1_files)>0):
-            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-        
-        hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir, gzip_flag=True)
-        if (len(hsrhi2_files)>0):
-            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-        
-        blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
-        if (len(blppi_files)>0):
-            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+        try:
+            hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
+            if (len(hsrhi1_files)>0):
+                RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+        except:
+            pass
 
+        try:
+            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir, gzip_flag=True)
+            if (len(hsrhi2_files)>0):
+                RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+        except:
+            pass
+        
+        try:
+            blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
+            if (len(blppi_files)>0):
+                RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+        except:
+            pass
+       
         current_date = next_halfhour
     # Vertically pointing files for whole day
-    vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
-    if (len(vpt_files)>0):
-        RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
-    
+    try:
+        vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
+        if (len(vpt_files)>0):
+            RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
+    except:
+        pass
     # VAD files for whole day
     vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
     vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
-    vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
-    if (len(vad_files)>0):
-        RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
-
+    try:
+        vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
+        if (len(vad_files)>0):
+            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
+    except:
+        pass
 
     
 def update_history_attribute(ncfile,update):
