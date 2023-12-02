@@ -1524,6 +1524,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         
         try:
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
+            azimuths = [nc4.Dataset(f)['azi'][0] for f in hsrhi1_files];
+            print(azimuths);           
             if (len(hsrhi1_files)>0):
                 if (len(hsrhi1_files)>6):
                     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[:6],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
