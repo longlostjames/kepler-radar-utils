@@ -1550,11 +1550,11 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                     for f in hsrhi1_files:
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                                azims.append(nc['azi'][0]);
+                                azims.append(nc['azi']['data'][0]);
                 else:
                     for f in hsrhi1_files:
                         nc = nc4.Dataset(f);
-                        azims.append(nc['azi'][0]);
+                        azims.append(nc['azi']['data'][0]);
                         nc.close();
                 print(azims);
                 idx = split_monotonic_sequence(azims);
@@ -1587,11 +1587,11 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                     for f in blppi_files:
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                                elevs.append(nc['elv'][0]);
+                                elevs.append(nc['elv']['data'][0]);
                 else:
                     for f in blppi_files:
                         nc = nc4.Dataset(f);
-                        elevs.append(nc['elv'][0]);
+                        elevs.append(nc['elv']['data'][0]);
                         nc.close();
 
                 print(elevs);
