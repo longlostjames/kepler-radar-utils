@@ -1530,7 +1530,7 @@ def split_monotonic_sequence(sequence):
     startindices =  endindex+1 - [len(s) for s in subseq];
     return list(zip(startindices,endindices))
 
-def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
+def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag=True):
     # Define the start and end times for the loop
     start_date = datetime.datetime.strptime(datestr, '%Y%m%d');
     end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
@@ -1545,8 +1545,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
             
             if (len(hsrhi1_files)>0):
+                azims = [];
                 if gzip_flag:
-                    azims = [];
                     for f in hsrhi1_files:
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
@@ -1560,9 +1560,9 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
                 idx = split_monotonic_sequence(azims);
                 for l in idx:
                     if l[0]==l[1]:
-                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
                     else:   
-                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
 
                # if (len(hsrhi1_files)>6):
                #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[:6],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
@@ -1573,16 +1573,16 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
             pass
 
         try:
-            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir, gzip_flag=True)
+            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir, gzip_flag=gzip_flag)
             if (len(hsrhi2_files)>0):
-                RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
         except:
             pass
         
         try:
-            blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
+            blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=gzip_flag)
+            elevs=[];
             if (len(blppi_files)>0):
-                elevs = [];
                 if gzip_flag:
                     for f in blppi_files:
                         with gzip.open(f) as gz:
