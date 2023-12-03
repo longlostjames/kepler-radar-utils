@@ -1581,6 +1581,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
                     elevations.append(DS['elv'][0]);
                     DS.close();
                 idx = split_monotonic_sequence(elevations);
+                print(idx);
                 for l in idx:
                     if l[0]==l[1]:
                         RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
