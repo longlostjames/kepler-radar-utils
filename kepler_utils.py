@@ -1510,6 +1510,25 @@ def ppistack_mmclx2cfrad(
         out_path = os.path.join(out_dir, out_file)
         pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
 
+def split_monotonic_sequence(sequence):
+    subsequences = [];
+    increasing_subsequence = []
+    for i in range(len(sequence)):
+        if i == 0:
+            increasing_subsequence.append(sequence[i])
+            continue
+        if np.round(10*sequence[i],decimals=1) > np.round(10*sequence[i-1],decimals=1):
+            increasing_subsequence.append(sequence[i])
+        else:
+            if increasing_subsequence:
+                subsequences.append(increasing_subsequence);
+                increasing_subsequence = [sequence[i]]
+
+    if increasing_subsequence:
+        subsequences.append(increasing_subsequence);
+    endindices = np.cumsum([len(s) for s in subseq])-1;
+    startindices =  endindex+1 - [len(s) for s in subseq];
+    return list(zip(startindices,endindices))
 
 def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
     # Define the start and end times for the loop
@@ -1524,14 +1543,25 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         
         try:
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
-            azimuths = [nc4.Dataset(f)['azi'][0] for f in hsrhi1_files];
-            print(azimuths);           
+       
             if (len(hsrhi1_files)>0):
-                if (len(hsrhi1_files)>6):
-                    RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[:6],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-                    RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[6:],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-                else:
-                    RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                azimuths = [];
+                for f in hsrhi1_files:
+                    DS = nc4.Dataset(f);
+                    azimuths.append(DS['azi'][0]);
+                    DS.close();
+                idx = split_monotonic_sequence(azimuths);
+                for l in idx:
+                    if l[0]==l[1]:
+                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                    else:   
+                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+
+               # if (len(hsrhi1_files)>6):
+               #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[:6],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+               #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[6:],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
+               # else:
+               #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         except:
             pass
 
@@ -1545,7 +1575,17 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         try:
             blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
             if (len(blppi_files)>0):
-                RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                elevations = [];
+                for f in blppi_files:
+                    DS = nc4.Dataset(f);
+                    elevations.append(DS['elv'][0]);
+                    DS.close();
+                idx = split_monotonic_sequence(elevations);
+                for l in idx:
+                    if l[0]==l[1]:
+                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                    else:   
+                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:l[1]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
         except:
             pass
        
