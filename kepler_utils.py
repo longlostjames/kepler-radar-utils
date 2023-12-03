@@ -1582,8 +1582,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         try:
             blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
             if (len(blppi_files)>0):
+                elevs = [];
                 if gzip_flag:
-                    elevs = [];
                     for f in blppi_files:
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
@@ -1593,7 +1593,6 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
                         nc = nc4.Dataset(f);
                         elevs.append(nc['elv'][0]);
                         nc.close();
-                elevs = [];
 
                 print(elevs);
                 idx = split_monotonic_sequence(elevs);
