@@ -1550,11 +1550,13 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                     for f in hsrhi1_files:
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                                nc.set_auto_mask(False);
                                 az = nc['azi'][0];
                                 azims.append(az);
                 else:
                     for f in hsrhi1_files:
                         nc = nc4.Dataset(f);
+                        nc.set_auto_mask(False);
                         az = nc['azi'][0];
                         azims.append(az);
                         nc.close();
@@ -1589,11 +1591,13 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                     for f in blppi_files:
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                                nc.set_auto_mask(False);
                                 el = nc['elv'][0];
                                 elevs.append(el);
                 else:
                     for f in blppi_files:
-                        nc = nc4.Dataset(f);
+                        nc = nc4.Dataset(f,'r');
+                        nc.set_auto_mask(False);
                         el = nc['elv'][0];
                         elevs.append(el);
                         nc.close();
