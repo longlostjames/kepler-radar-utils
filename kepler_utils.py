@@ -1566,7 +1566,9 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                 for l in idx:
                     if l[0]==l[1]:
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
-                    else:   
+                    elif l[1]==len(hsrhi1_files)-1:
+                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+                    else:
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
 
                # if (len(hsrhi1_files)>6):
@@ -1609,7 +1611,9 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                 for l in idx:
                     if l[0]==l[1]:
                         RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
-                    else:   
+                    elif l[1]==len(blppi_files)-1:   
+                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                    else:
                         RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:l[1]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
         except:
             pass
