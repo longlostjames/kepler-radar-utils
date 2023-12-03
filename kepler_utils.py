@@ -1574,6 +1574,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         
         try:
             blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
+            print(blppi_files);
             if (len(blppi_files)>0):
                 elevations = [];
                 for f in blppi_files:
