@@ -1562,6 +1562,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         nc.close();
                 print(azims);
                 idx = split_monotonic_sequence(azims);
+                print(idx);
                 for l in idx:
                     if l[0]==l[1]:
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
