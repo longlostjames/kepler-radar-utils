@@ -1543,14 +1543,21 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         
         try:
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
-       
+            
             if (len(hsrhi1_files)>0):
-                azimuths = [];
-                for f in hsrhi1_files:
-                    DS = nc4.Dataset(f);
-                    azimuths.append(DS['azi'][0]);
-                    DS.close();
-                idx = split_monotonic_sequence(azimuths);
+                if gzip_flag:
+                    azims = [];
+                    for f in hsrhi1_files:
+                        with gzip.open(f) as gz:
+                            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                                azims.append(nc['azi'][0]);
+                else:
+                    for f in hsrhi1_files:
+                        nc = nc4.Dataset(f);
+                        azims.append(nc['azi'][0]);
+                        nc.close();
+                print(azims);
+                idx = split_monotonic_sequence(azims);
                 for l in idx:
                     if l[0]==l[1]:
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
@@ -1575,16 +1582,21 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset):
         try:
             blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=True)
             if (len(blppi_files)>0):
-                print(blppi_files);
-                elevations = [];
-                for f in blppi_files:
-                    DS = nc4.Dataset(f);
-                    el = DS['elv'][0];
-                    print(el);
-                    elevations.append(el);
-                    DS.close();
-                print(elevations);
-                idx = split_monotonic_sequence(elevations);
+                if gzip_flag:
+                    elevs = [];
+                    for f in blppi_files:
+                        with gzip.open(f) as gz:
+                            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                                elevs.append(nc['elv'][0]);
+                else:
+                    for f in blppi_files:
+                        nc = nc4.Dataset(f);
+                        elevs.append(nc['elv'][0]);
+                        nc.close();
+                elevs = [];
+
+                print(elevs);
+                idx = split_monotonic_sequence(elevs);
                 print(idx);
                 for l in idx:
                     if l[0]==l[1]:
