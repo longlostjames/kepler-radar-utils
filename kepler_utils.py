@@ -1402,6 +1402,7 @@ def multi_mmclx2cfrad(
 
     out_dir = output_dir
     files = sorted(mmclxfiles)
+    print(files)
     print("Number of files: ", len(files))
     print(f"gzip_flag={gzip_flag}");
     RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag);
