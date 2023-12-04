@@ -1569,6 +1569,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
                     elif l[1]==len(hsrhi1_files)-1:
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+                    elif len(hsrhi1_files)==1:
+                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
                     else:
                         RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
 
@@ -1607,6 +1609,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
                     elif l[1]==len(hsrhi2_files)-1:
                         RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+                    elif len(hsrhi2_files)==1:
+                        RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
                     else:
                         RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
         except:
@@ -1640,6 +1644,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
                     elif l[1]==len(blppi_files)-1:   
                         RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                    elif len(blppi_files)==1:
+                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
                     else:
                         RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:l[1]+1],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
         except:
