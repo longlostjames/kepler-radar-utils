@@ -1544,9 +1544,9 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
         
         try:
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
-            
+            print(hsrhi1_files)
+            azims = [];
             if (len(hsrhi1_files)>0):
-                azims = [];
                 if gzip_flag:
                     for f in hsrhi1_files:
                         with gzip.open(f) as gz:
@@ -1584,9 +1584,9 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
 
         try:
             hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir,gzip_flag=True)
-            
+            print(hsrhi2_files);
+            azims = [];
             if (len(hsrhi2_files)>0):
-                azims = [];
                 if gzip_flag:
                     for f in hsrhi2_files:
                         with gzip.open(f) as gz:
