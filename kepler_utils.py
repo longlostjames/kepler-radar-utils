@@ -1613,6 +1613,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
         
         try:
             blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, indir,gzip_flag=gzip_flag)
+            print(blppi_files);
             elevs=[];
             if (len(blppi_files)>0):
                 if gzip_flag:
