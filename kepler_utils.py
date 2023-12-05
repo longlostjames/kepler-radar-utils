@@ -1544,7 +1544,8 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
         
         try:
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True, azimuth_offset=azimuth_offset)
-            print(hsrhi1_files)
+            print(hsrhi1_files);
+            print(len(hsrhi1_files));
             azims = [];
             if (len(hsrhi1_files)>0):
                 if gzip_flag:
@@ -1581,6 +1582,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                # else:
                #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
         except:
+            print("Problem");
             pass
 
         try:
@@ -1616,6 +1618,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                     else:
                         RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
         except:
+            print('Problem');
             pass
         
         try:
