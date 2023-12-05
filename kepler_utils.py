@@ -1552,13 +1552,13 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                                 nc.set_auto_mask(False);
-                                az = nc['azi'][0]+azimuth_offset;
+                                az = nc['azi'][0]+nc['northangle'][0]+azimuth_offset;
                                 azims.append(az);
                 else:
                     for f in hsrhi1_files:
                         nc = nc4.Dataset(f);
                         nc.set_auto_mask(False);
-                        az = nc['azi'][0]+azimuth_offset;
+                        az = nc['azi'][0]+nc['northangle'][0]+azimuth_offset;
                         azims.append(az);
                         nc.close();
                 azims += azimuth_offset;
@@ -1593,13 +1593,13 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                                 nc.set_auto_mask(False);
-                                az = nc['azi'][0]+azimuth_offset;
+                                az = nc['azi'][0]+nc['northangle'][0]+azimuth_offset;
                                 azims.append(az);
                 else:
                     for f in hsrhi2_files:
                         nc = nc4.Dataset(f);
                         nc.set_auto_mask(False);
-                        az = nc['azi'][0]+azimuth_offset;
+                        az = nc['azi'][0]+nc['northangle'][0]+azimuth_offset;
                         azims.append(az);
                         nc.close();
                 azims += azimuth_offset;
