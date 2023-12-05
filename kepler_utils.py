@@ -1527,6 +1527,7 @@ def split_monotonic_sequence(sequence):
 
     if increasing_subsequence:
         subsequences.append(increasing_subsequence);
+    print(subsequences);
     endindices = np.cumsum([len(s) for s in subsequences])-1;
     startindices =  [1+endindices[i] - len(subsequences[i]) for i in range(len(endindices))];
     return list(zip(startindices,endindices))
