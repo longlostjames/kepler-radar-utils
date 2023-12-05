@@ -1527,7 +1527,6 @@ def split_monotonic_sequence(sequence):
 
     if increasing_subsequence:
         subsequences.append(increasing_subsequence);
-    print(subsequences);
     endindices = np.cumsum([len(s) for s in subsequences])-1;
     startindices =  [1+endindices[i] - len(subsequences[i]) for i in range(len(endindices))];
     return list(zip(startindices,endindices))
@@ -1564,8 +1563,6 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
                         azims.append(az);
                         nc.close();
-                print(azims);
-                azims += azimuth_offset;
                 print(azims);
                 idx = split_monotonic_sequence(azims);
                 print(idx);
@@ -1607,7 +1604,6 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset)%360;
                         azims.append(az);
                         nc.close();
-                azims += azimuth_offset;
                 print(azims);
                 idx = split_monotonic_sequence(azims);
                 print(idx);
