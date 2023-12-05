@@ -1550,6 +1550,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
             if (len(hsrhi1_files)>0):
                 if gzip_flag:
                     for f in hsrhi1_files:
+                        print(f);
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                                 nc.set_auto_mask(False);
