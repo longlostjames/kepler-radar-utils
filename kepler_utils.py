@@ -1269,7 +1269,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
 
     return sorted(matching_files)
 
-def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False):
+def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=0):
     # Convert the input times to datetime objects
     start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
     end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
@@ -1288,7 +1288,7 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                     with gzip.open(fullfile) as gz:
                         with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                             file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
-                            azim = (nc['azi'][0]+nc['northangle'][0]) % 360;
+                            azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
                             if start_datetime <= file_time <= end_datetime:
                                 print(file_time);
                                 if azim_min < azim <= azim_max:
@@ -1297,7 +1297,7 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                 if "rhi" in file and hrstr in file and file.endswith('.mmclx'):
                     nc = nc4.Dataset(os.path.join(root, file))
                     file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
-                    azim = (nc['azi'][0]+nc['northangle'][0]) % 360;
+                    azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
                     if start_datetime <= file_time <= end_datetime:
                         print(file_time);
                         if azim_min < azim <= azim_max:
@@ -1543,7 +1543,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
         next_halfhour = current_date + datetime.timedelta(minutes=30);
         
         try:
-            hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True)
+            hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True, azimuth_offset=azimuth_offset)
             print(hsrhi1_files)
             azims = [];
             if (len(hsrhi1_files)>0):
@@ -1584,7 +1584,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
             pass
 
         try:
-            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir,gzip_flag=True)
+            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir,gzip_flag=True,azimuth_offset=azimuth_offset)
             print(hsrhi2_files);
             azims = [];
             if (len(hsrhi2_files)>0):
