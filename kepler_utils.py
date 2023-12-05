@@ -1563,6 +1563,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         az = nc['azi'][0]+nc['northangle'][0]+azimuth_offset;
                         azims.append(az);
                         nc.close();
+                print(azims);
                 azims += azimuth_offset;
                 print(azims);
                 idx = split_monotonic_sequence(azims);
