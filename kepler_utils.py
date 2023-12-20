@@ -316,7 +316,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
             sweep_mode["data"][0] = value;
             break;
 
-    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
+    #    #fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
+    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+revised_northangle, 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
 
     fixed_angle = filemetadata("fixed_angle")
 
@@ -357,7 +358,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, **kwargs):
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
-    azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
+    #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
+    azimuth['data'] = (ncvars['azi'][:]+revised_northangle) % 360;
+
     azimuth['units'] = "degrees";
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
     azimuth['long_name'] = "sensor to target azimuth angle";
@@ -1381,6 +1384,7 @@ def multi_mmclx2cfrad(
     scan_name="HSRHI",
     gzip_flag=False,
     azimuth_offset=0.0,
+    revised_northangle=302.74,
     tracking_tag="AMOF_20220922221548",
     campaign="woest",
     data_version=0.1,
@@ -1405,7 +1409,7 @@ def multi_mmclx2cfrad(
     print(files)
     print("Number of files: ", len(files))
     print(f"gzip_flag={gzip_flag}");
-    RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag);
+    RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag,revised_northangle=revised_northangle);
 
     # Read time and microsec directly from mmclx file
     if gzip_flag:
@@ -1531,10 +1535,13 @@ def split_monotonic_sequence(sequence):
     startindices =  [1+endindices[i] - len(subsequences[i]) for i in range(len(endindices))];
     return list(zip(startindices,endindices))
 
-def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag=True):
+def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag=True,revised_northangle=302.74):
     # Define the start and end times for the loop
     start_date = datetime.datetime.strptime(datestr, '%Y%m%d');
     end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
+
+    # Correct azimuth offset based on use of revised northangle
+    azimuth_offset = 0.0;
 
     # Iterate through each half hour for HSRHI and BLPPI files
     current_date = start_date
@@ -1554,13 +1561,15 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                                 nc.set_auto_mask(False);
-                                az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                                #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                                az = (nc['azi'][0]+revised_northangle) %360;
                                 azims.append(az);
                 else:
                     for f in hsrhi1_files:
                         nc = nc4.Dataset(f);
                         nc.set_auto_mask(False);
-                        az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                        #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                        az = (nc['azi'][0]+revised_northangle) %360;
                         azims.append(az);
                         nc.close();
                 print(azims);
@@ -1595,13 +1604,15 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
                         with gzip.open(f) as gz:
                             with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                                 nc.set_auto_mask(False);
-                                az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                                #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                                az = (nc['azi'][0]+revised_northangle) %360;
                                 azims.append(az);
                 else:
                     for f in hsrhi2_files:
                         nc = nc4.Dataset(f);
                         nc.set_auto_mask(False);
-                        az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset)%360;
+                        #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
+                        az = (nc['azi'][0]+revised_northangle) %360;
                         azims.append(az);
                         nc.close();
                 print(azims);
