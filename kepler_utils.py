@@ -1411,8 +1411,12 @@ def multi_mmclx2cfrad(
     print(files)
     print("Number of files: ", len(files))
     print(f"gzip_flag={gzip_flag}");
+
+    print('Start to read mmclx')
+
     RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag,revised_northangle=revised_northangle);
 
+    print('Done reading mmclx')
     # Read time and microsec directly from mmclx file
     if gzip_flag:
         with gzip.open(files[0]) as gz:
