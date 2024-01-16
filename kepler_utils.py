@@ -648,6 +648,36 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
 
     return
 
+def cfradial_add_bbox(cfradfile):
+    Radar = pyart.io.read_cfradial(cfradfile);
+    latmin = np.min(Radar.gate_latitude['data']);
+    lonmin = np.min(Radar.gate_longitude['data']);
+    latmax = np.max(Radar.gate_latitude['data']);
+    lonmax = np.max(Radar.gate_longitude['data']); 
+    boundingbox = f'Bounding box: {latmin:.2f}N {lonmin:.2f}E, {latmax:.2f}N {lonmax:.2f}E'
+    DS = nc4.Dataset(cfradfile,'r+');
+    DS.geospatial_bounds = boundingbox;
+
+    # -----------------------
+    # Update history metadata
+    # -----------------------
+    user = getpass.getuser()
+
+    updttime = datetime.datetime.utcnow()
+    updttimestr = updttime.ctime()
+
+    history = updttimestr + (" - user:" + user
+    + " machine: " + socket.gethostname()
+    + " program: kepler_utils.cfradial_add_bbox"
+    + " version:" + str(module_version));
+
+    DS.history = history + "\n" + DS.history;
+
+    DS.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
+
+    DS.close();
+
+
 def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
     # -------------------------------------------------------
     # Read cfradial file to add NCAS metadata
