@@ -357,6 +357,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=302.74, **kw
     # ------------------
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
+    
 
     #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
     azimuth['data'] = (ncvars['azi'][:]+revised_northangle) % 360;
