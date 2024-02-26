@@ -370,6 +370,16 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=302.74, **kw
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
     elevation['long_name'] = "sensor to target elevation angle";
 
+    # scan rate
+    # ---------
+    scan_rates = {'ppi' : ncvars['aziv']['data'], 'rhi' : ncvars['elvv']['data']}
+
+    fixed_angle = filemetadata("fixed_angle")
+
+    if scan_name in  ["ppi","rhi"]:
+        scan_rate = filemetadata("scan_rate");
+        scan_rate["data"] = scan_rates[scan_name];
+
 
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
@@ -483,7 +493,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=302.74, **kw
     
 
     # instrument_parameters
-    instrument_parameters = {}
+    instrument_parameters = {'scan_rate'}
 
     radar_calibration = {}
 
