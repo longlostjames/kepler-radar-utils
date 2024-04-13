@@ -72,7 +72,7 @@ def read_mira35_mmclx_vpt_multi(mmclxfiles, **kwargs):
 
 
 
-def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=302.74, **kwargs):
+def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwargs):
     """
     Read a netCDF mmclx file from MIRA-35 radar.
 
@@ -355,17 +355,24 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=302.74, **kw
 
     # azimuth, elevation
     # ------------------
+    ray_duration0 = time['data'][1]-time['data'][0]; 
+    ray_duration = np.insert(time['data'][1:]-time['data'][:-1],0,ray_duration0);
+
+    
+
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
     #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
     azimuth['data'] = (ncvars['azi'][:]+revised_northangle) % 360;
-
+    azimuth['data'] -= 0.5*ray_duration * ncvars['aziv'][:] ;
     azimuth['units'] = "degrees";
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
     azimuth['long_name'] = "sensor to target azimuth angle";
 
+
     elevation['data'] = ncvars['elv'][:];
+    elevation['data'] -= 0.5*ray_duration * ncvars['elvv'][:];
     elevation['units'] = "degrees";
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
     elevation['long_name'] = "sensor to target elevation angle";
@@ -1022,7 +1029,8 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS = nc4.Dataset(outfile,'r+');
 
     DS.Conventions = "NCAS-Radar-1.0 CfRadial-1.4"
-    DS.delncattr('version');
+
+    #DS.delncattr('version');
     DS.product_version = "v{}".format(data_version) ;
     DS.processing_level = "1" ;
 
@@ -1077,15 +1085,34 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     # Now clean up some variable attributes
     # -------------------------------------------------------
     DS['time'].comment = "";
-    DS['range'].delncattr('standard_name');
+    try:
+        DS['range'].delncattr('standard_name');
+    except: 
+        pass
+    
     DS['range'].comment = 'Range to centre of each bin';
     DS['range'].meters_to_center_of_first_gate = DS['range'][0];
-    DS['azimuth'].delncattr('standard_name');
-    DS['elevation'].delncattr('standard_name');
+    try:
+        DS['azimuth'].delncattr('standard_name');
+    except:
+        pass
+    try:
+        DS['elevation'].delncattr('standard_name');
+    except:
+        pass
     DS['DBZ'].standard_name = 'equivalent_reflectivity_factor';
-    DS['sweep_number'].delncattr('standard_name');
-    DS['sweep_mode'].delncattr('standard_name');
-    DS['fixed_angle'].delncattr('standard_name');
+    try:
+        DS['sweep_number'].delncattr('standard_name');
+    except:
+        pass
+    try:
+        DS['sweep_mode'].delncattr('standard_name');
+    except:
+        pass
+    try:
+        DS['fixed_angle'].delncattr('standard_name');
+    except:
+        pass
     DS['latitude'].long_name = 'latitude';
     DS['latitude'].standard_name = 'latitude';
     DS['longitude'].long_name = 'longitude';
@@ -1094,7 +1121,10 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS['altitude'].comment = 'Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model' 
     DS['altitude'].long_name = 'altitude';
     DS['altitude'].units = 'metres';
-    DS['altitude'].delncattr('positive'); 
+    try:
+        DS['altitude'].delncattr('positive'); 
+    except:
+        pass
     DS['volume_number'].long_name = 'volume number';
 
 
@@ -1224,6 +1254,7 @@ def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file
     for root,dirs,files in os.walk(datepath):
         mmclxfiles += [os.path.join(root,f) for f in fnmatch.filter(files, pattern)];
         mmclxdirs += dirs;
+        
 
     data_version = "1.0.0";
 
@@ -1272,7 +1303,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
 
     return sorted(matching_files)
 
-def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=0,revised_northangle=302.74):
+def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=0,revised_northangle=55.7):
     # Convert the input times to datetime objects
     start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
     end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
@@ -1286,7 +1317,8 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
             # Check if the file matches the criteria
             # Example: check if the file name contains the sweep_type and falls within the time range
             if gzip_flag:
-                if "rhi" in file and hrstr in file and file.endswith('.mmclx.gz'):
+                #if "rhi" in file and hrstr in file and file.endswith('.mmclx.gz'):
+                if "rhi" in file and file.endswith('.mmclx.gz'):
                     fullfile = os.path.join(root,file)
                     with gzip.open(fullfile) as gz:
                         with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
@@ -1298,7 +1330,8 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                                 if azim_min < azim <= azim_max:
                                     matching_files.append(os.path.join(root, file))
             else:
-                if "rhi" in file and hrstr in file and file.endswith('.mmclx'):
+                #if "rhi" in file and hrstr in file and file.endswith('.mmclx'):
+                if "rhi" in file and file.endswith('.mmclx'):
                     nc = nc4.Dataset(os.path.join(root, file))
                     file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
                     #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
@@ -1324,7 +1357,8 @@ def find_mmclx_ppi_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag
     for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
         for file in files:
             if gzip_flag:
-                if "ppi" in file and hrstr in file and file.endswith('.mmclx.gz'):
+                #if "ppi" in file and hrstr in file and file.endswith('.mmclx.gz'):
+                if "ppi" in file and file.endswith('.mmclx.gz'):
                     fullfile = os.path.join(root,file)
                     with gzip.open(fullfile) as gz:
                         with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
@@ -1335,7 +1369,8 @@ def find_mmclx_ppi_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag
                                 if elev_min <= elev <= elev_max:
                                     matching_files.append(os.path.join(root, file))
             else:
-                if "ppi" in file and hrstr in file and file.endswith('.mmclx'):
+                #if "ppi" in file and hrstr in file and file.endswith('.mmclx'):
+                if "ppi" in file and file.endswith('.mmclx'):
                     nc = nc4.Dataset(os.path.join(root, file))
                     file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
                     elev = nc['elv'][0];
@@ -1688,6 +1723,58 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
         vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
         if (len(vad_files)>0):
             RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
+    except:
+        pass
+
+
+def process_kepler_ccrest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_instrument_file,azimuth_offset,gzip_flag=True,revised_northangle=55.7):
+    # Define the start and end times for the loop
+    start_date = datetime.datetime.strptime(datestr, '%Y%m%d');
+    end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
+
+    # Correct azimuth offset based on use of revised northangle
+    azimuth_offset = 0.0;
+
+    rhi_files_270 = find_mmclx_rhi_files(start_date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), 260, 280, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=55.7)
+    rhi_files_246 = find_mmclx_rhi_files(start_date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), 236, 256, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=55.7)
+
+    
+    print(rhi_files_270);
+    print(rhi_files_246);
+    print(len(rhi_files_270));
+    print(len(rhi_files_246));
+
+    if (len(rhi_files_270)>0):
+        if gzip_flag:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI_CCREST1',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+        else:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI_CCREST1',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+
+
+    if (len(rhi_files_246)>0):
+        if gzip_flag:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI_CCREST2',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+        else:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI_CCREST2',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+
+    
+    # Vertically pointing files for whole day
+    try:
+        vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
+        vpt_files_unzipped = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=False);
+        if (len(vpt_files)>0):
+            RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+        elif (len(vpt_files_unzipped)>0):
+            RadarDS_VPT = multi_mmclx2cfrad(vpt_files_unzipped,outdir,scan_name='VPT',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+    except:
+        pass
+    # VAD files for whole day
+    vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
+    vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
+    try:
+        vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
+        if (len(vad_files)>0):
+            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
     except:
         pass
 
