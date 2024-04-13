@@ -377,6 +377,16 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
     elevation['long_name'] = "sensor to target elevation angle";
 
+    # scan rate
+    # ---------
+    scan_rates = {'ppi' : ncvars['aziv']['data'], 'rhi' : ncvars['elvv']['data']}
+
+    fixed_angle = filemetadata("fixed_angle")
+
+    if scan_name in  ["ppi","rhi"]:
+        scan_rate = filemetadata("scan_rate");
+        scan_rate["data"] = scan_rates[scan_name];
+
 
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
@@ -490,7 +500,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     
 
     # instrument_parameters
-    instrument_parameters = {}
+    instrument_parameters = {'scan_rate'}
 
     radar_calibration = {}
 
@@ -654,6 +664,36 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     DS.close();
 
     return
+
+def cfradial_add_bbox(cfradfile):
+    Radar = pyart.io.read_cfradial(cfradfile);
+    latmin = np.min(Radar.gate_latitude['data']);
+    lonmin = np.min(Radar.gate_longitude['data']);
+    latmax = np.max(Radar.gate_latitude['data']);
+    lonmax = np.max(Radar.gate_longitude['data']); 
+    boundingbox = f'Bounding box: {latmin:.2f}N {lonmin:.2f}E, {latmax:.2f}N {lonmax:.2f}E'
+    DS = nc4.Dataset(cfradfile,'r+');
+    DS.geospatial_bounds = boundingbox;
+
+    # -----------------------
+    # Update history metadata
+    # -----------------------
+    user = getpass.getuser()
+
+    updttime = datetime.datetime.utcnow()
+    updttimestr = updttime.ctime()
+
+    history = updttimestr + (" - user:" + user
+    + " machine: " + socket.gethostname()
+    + " program: kepler_utils.cfradial_add_bbox"
+    + " version:" + str(module_version));
+
+    DS.history = history + "\n" + DS.history;
+
+    DS.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
+
+    DS.close();
+
 
 def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
     # -------------------------------------------------------
