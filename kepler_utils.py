@@ -107,8 +107,6 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     heading = None;
     pitch = None;
     georefs_applied = None;
-
-    antenna_transition = None;  #  NEED TO CHECK THIS
      
     # -------------------------
     # test for non empty kwargs
@@ -309,12 +307,13 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     sweep_mode["data"] = np.array(1 * [None]);
 
     for key, value in sweep_modes.items():
-        print(key)
         if key in filename.lower(): 
             scan_name = value;
             sweep_mode["data"] = np.array(1 * [value]);
             sweep_mode["data"][0] = value;
             break;
+    
+    print(scan_name);
 
     #    #fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
     fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+revised_northangle, 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
@@ -355,10 +354,42 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
 
     # azimuth, elevation
     # ------------------
-    ray_duration0 = time['data'][1]-time['data'][0]; 
-    ray_duration = np.insert(time['data'][1:]-time['data'][:-1],0,ray_duration0);
+    #ray_duration0 = time['data'][1]-time['data'][0]; 
+    #ray_duration = np.insert(time['data'][1:]-time['data'][:-1],0,ray_duration0);
+    ray_duration = time['data'][1:]-time['data'][:-1];
 
+    # scan rate
+    # ---------
+    scan_rates = {'ppi' : ncvars['aziv'][:], 'rhi' : ncvars['elvv'][:]}
+
+    scan_rate = filemetadata("scan_rate")
+
+    if scan_name in  ['ppi','rhi']:
+        scan_rate['data'] = scan_rates[scan_name];
+        scan_rate['units']='degrees_per_second';
     
+    antenna_transition = filemetadata("antenna_transition")
+    antenna_transition['data'] = abs(scan_rate['data'])<0.01;
+    
+    target_scan_rate = filemetadata("target_scan_rate")
+    target_scan_rate["data"] = np.array([4.0], dtype="float")
+
+    scanning_indices = np.where(antenna_transition['data']==False)[0];
+    target_scan_rate['data'] = np.median(scan_rate['data'][scanning_indices]);
+    at_speed = np.where(abs(scan_rate['data']-target_scan_rate['data'])<0.06)[0];
+    target_scan_rate['data'] = np.round(np.median(scan_rate['data'][at_speed]),2);
+
+
+    target_ray_duration = np.round(np.median(ray_duration),3);
+    ok_duration = np.where(ray_duration/target_ray_duration<1.5);
+    target_ray_duration = np.round(np.median(ray_duration[ok_duration]),3);
+
+    print(target_ray_duration);
+
+    ray_duration = np.insert(ray_duration,0,target_ray_duration);
+
+    long_duration  = np.where(ray_duration/target_ray_duration>1.5)[0];
+
 
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
@@ -370,26 +401,26 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
     azimuth['long_name'] = "sensor to target azimuth angle";
 
+    # Special case for long-duration glitches
+    azimuth['data'][long_duration] = (ncvars['azi'][long_duration]+revised_northangle) % 360;
+    azimuth['data'][long_duration] -= 0.5*target_ray_duration * ncvars['aziv'][long_duration];
+    
 
     elevation['data'] = ncvars['elv'][:];
+
     elevation['data'] -= 0.5*ray_duration * ncvars['elvv'][:];
     elevation['units'] = "degrees";
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
     elevation['long_name'] = "sensor to target elevation angle";
 
-    # scan rate
-    # ---------
-    scan_rates = {'ppi' : ncvars['aziv']['data'], 'rhi' : ncvars['elvv']['data']}
-
-    fixed_angle = filemetadata("fixed_angle")
-
-    if scan_name in  ["ppi","rhi"]:
-        scan_rate = filemetadata("scan_rate");
-        scan_rate["data"] = scan_rates[scan_name];
-
+    # Special case for long-duration glitches
+    elevation['data'][long_duration] = ncvars['elv'][long_duration];
+    elevation['data'][long_duration] -= 0.5*target_ray_duration * ncvars['elvv'][long_duration];
 
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
+
+
 
     # ------
     # fields
@@ -447,6 +478,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['standard_name'] = "equivalent_reflectivity_factor";
         field_dic['proposed_standard_name'] =  "radar_equivalent_reflectivity_factor";   
         fields[field_name] = field_dic
+        fields[field_name]['data'][long_duration,:] = np.ma.masked;
+        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("Zg does not exist")
 
@@ -459,6 +492,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['long_name'] =  "radial velocity of scatterers away from instrument";
         field_dic['standard_name'] = "radial_velocity_of_scatterers_away_from_instrument";
         fields[field_name] = field_dic
+        fields[field_name]['data'][long_duration,:] = np.ma.masked;
+        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("VELg does not exist")
 
@@ -471,6 +506,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['long_name'] =  "radar doppler spectrum width";
         field_dic['proposed_standard_name'] = "radar_doppler_spectrum_width";
         fields[field_name] = field_dic
+        fields[field_name]['data'][long_duration,:] = np.ma.masked;
+        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("RMSg does not exist")
 
@@ -483,6 +520,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['long_name'] =  "radar linear depolarization ratio";
         field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
         fields[field_name] = field_dic
+        fields[field_name]['data'][long_duration,:] = np.ma.masked;
+        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("LDRg does not exist")
 
@@ -495,12 +534,15 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['long_name'] =  "radar signal to noise ratio";
         field_dic['proposed_standard_name'] = "radar_signal_to_noise_ratio";
         fields[field_name] = field_dic
+        fields[field_name]['data'][long_duration,:] = np.ma.masked;
+        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("SNRg does not exist")
     
 
+
     # instrument_parameters
-    instrument_parameters = {'scan_rate'}
+    instrument_parameters = {}
 
     radar_calibration = {}
 
@@ -548,6 +590,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         sweep_end_ray_index,
         azimuth,
         elevation,
+        target_scan_rate=target_scan_rate,
+        scan_rate=scan_rate,
+        antenna_transition=antenna_transition,
         instrument_parameters=instrument_parameters,
         radar_calibration=radar_calibration
     )
