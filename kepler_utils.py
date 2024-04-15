@@ -369,12 +369,12 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         scan_rate['units']='degrees_per_second';
     
     antenna_transition = filemetadata("antenna_transition")
-    antenna_transition['data'] = abs(scan_rate['data'])<0.01;
+    antenna_transition['data'] = (abs(scan_rate['data'])<0.01).as_type('u1');
     
     target_scan_rate = filemetadata("target_scan_rate")
     target_scan_rate["data"] = np.array([4.0], dtype="f4")
 
-    scanning_indices = np.where(antenna_transition['data']==False)[0];
+    scanning_indices = np.where(antenna_transition['data']==0)[0];
     target_scan_rate['data'] = np.median(scan_rate['data'][scanning_indices]);
     at_speed = np.where(abs(scan_rate['data']-target_scan_rate['data'])<0.06)[0];
     target_scan_rate['data'] = np.round(np.median(scan_rate['data'][at_speed]),2);
