@@ -474,12 +474,12 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dBZ'
         field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
+        field_dic['data'][long_duration,:] = field_dic['_FillValue'];
+        field_dic['data'][long_duration-1,:] = field_dic['_FieldValue'];
         field_dic['long_name'] =  "radar equivalent reflectivity factor";
         field_dic['standard_name'] = "equivalent_reflectivity_factor";
         field_dic['proposed_standard_name'] =  "radar_equivalent_reflectivity_factor";   
         fields[field_name] = field_dic
-        fields[field_name]['data'][long_duration,:] = np.ma.masked;
-        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("Zg does not exist")
 
@@ -489,11 +489,11 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'm s-1'
         field_dic['data'] = ncvars['VELg'][:];
+        field_dic['data'][long_duration,:] = field_dic['_FillValue'];
+        field_dic['data'][long_duration-1,:] = field_dic['_FieldValue'];
         field_dic['long_name'] =  "radial velocity of scatterers away from instrument";
         field_dic['standard_name'] = "radial_velocity_of_scatterers_away_from_instrument";
         fields[field_name] = field_dic
-        fields[field_name]['data'][long_duration,:] = np.ma.masked;
-        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("VELg does not exist")
 
@@ -503,11 +503,11 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'm s-1'
         field_dic['data'] = ncvars['RMSg'][:];
+        field_dic['data'][long_duration,:] = field_dic['_FillValue'];
+        field_dic['data'][long_duration-1,:] = field_dic['_FieldValue'];
         field_dic['long_name'] =  "radar doppler spectrum width";
         field_dic['proposed_standard_name'] = "radar_doppler_spectrum_width";
         fields[field_name] = field_dic
-        fields[field_name]['data'][long_duration,:] = np.ma.masked;
-        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("RMSg does not exist")
 
@@ -517,11 +517,11 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:]);
+        field_dic['data'][long_duration,:] = field_dic['_FillValue'];
+        field_dic['data'][long_duration-1,:] = field_dic['_FieldValue'];
         field_dic['long_name'] =  "radar linear depolarization ratio";
         field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
         fields[field_name] = field_dic
-        fields[field_name]['data'][long_duration,:] = np.ma.masked;
-        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("LDRg does not exist")
 
@@ -531,11 +531,11 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['SNRg'][:]);
+        field_dic['data'][long_duration,:] = field_dic['_FillValue'];
+        field_dic['data'][long_duration-1,:] = field_dic['_FieldValue'];
         field_dic['long_name'] =  "radar signal to noise ratio";
         field_dic['proposed_standard_name'] = "radar_signal_to_noise_ratio";
         fields[field_name] = field_dic
-        #fields[field_name]['data'][long_duration,:] = field_dic['_FillValue'];
-        #fields[field_name]['data'][long_duration-1,:] = field_dic['_FillValue'];
     else:
         print("SNRg does not exist")
     
