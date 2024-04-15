@@ -521,7 +521,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
         fields[field_name] = field_dic
         fields[field_name]['data'][long_duration,:] = np.ma.masked;
-        fields[field_name]['data'][long_duration-1,:] = fnp.ma.masked;
+        fields[field_name]['data'][long_duration-1,:] = np.ma.masked;
     else:
         print("LDRg does not exist")
 
