@@ -518,7 +518,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:]);
         field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-        field_dic['data'][long_duration-1,:] = field_dic['_FilldValue'];
+        field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
         field_dic['long_name'] =  "radar linear depolarization ratio";
         field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
         fields[field_name] = field_dic
