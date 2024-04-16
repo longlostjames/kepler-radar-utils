@@ -375,14 +375,14 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     target_scan_rate["data"] = np.array([4.0], dtype="f4")
 
     scanning_indices = np.where(antenna_transition['data']==0)[0];
-    target_scan_rate['data'] = np.median(scan_rate['data'][scanning_indices]);
+    target_scan_rate['data'] = np.mean(scan_rate['data'][scanning_indices]);
     at_speed = np.where(abs(scan_rate['data']-target_scan_rate['data'])<0.06)[0];
-    target_scan_rate['data'] = np.round(np.median(scan_rate['data'][at_speed]),2);
+    target_scan_rate['data'] = np.round(np.mean(scan_rate['data'][at_speed]),2);
 
 
-    target_ray_duration = np.round(np.median(ray_duration),3);
+    target_ray_duration = np.round(np.mean(ray_duration),3);
     ok_duration = np.where(ray_duration/target_ray_duration<1.5);
-    target_ray_duration = np.round(np.median(ray_duration[ok_duration]),3);
+    target_ray_duration = np.round(np.mean(ray_duration[ok_duration]),3);
 
     print(target_ray_duration);
 
