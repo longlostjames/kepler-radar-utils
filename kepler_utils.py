@@ -697,10 +697,6 @@ def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_fil
     # -----------------------
     DS = nc4.Dataset(outfile,'r+');
 
-    DBZ = DS['DBZ']['data'];
-    isnan = np.isnan(DBZ);
-    DBZ[isnan] = DBZ._FillValue;
-
     user = getpass.getuser()
 
     updttime = datetime.datetime.utcnow()
