@@ -480,8 +480,10 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['standard_name'] = "equivalent_reflectivity_factor";
         field_dic['proposed_standard_name'] =  "radar_equivalent_reflectivity_factor";   
         fields[field_name] = field_dic
+        print(field_dic['_FillValue'])
     else:
         print("Zg does not exist")
+
 
     if "VELg" in ncvars:
         field_name = fields_keymap['VELg']
