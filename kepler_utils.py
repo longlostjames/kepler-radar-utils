@@ -475,6 +475,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['units'] = 'dBZ'
         field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
         isnan = np.isnan(field_dic['data'][:])
+        print(isnan)
         field_dic['data'][isnan] = field_dic['_FillValue'];
         field_dic['data'][long_duration,:] = field_dic['_FillValue'];
         field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
