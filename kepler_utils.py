@@ -1568,8 +1568,6 @@ def multi_mmclx2cfrad(
         newRadarDS = read_mira35_mmclx(files[i],gzip_flag=gzip_flag)
         print(len(newRadarDS.latitude["data"]))
 
-        print(newRadarDS.scan_rate);
-
         if gzip_flag:
             with gzip.open(files[i]) as gz:
                 with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
@@ -1586,6 +1584,8 @@ def multi_mmclx2cfrad(
 
         RadarDS = pyart.util.join_radar(RadarDS,newRadarDS)
 
+        print(RadarDS.scan_rate);
+    
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
 
