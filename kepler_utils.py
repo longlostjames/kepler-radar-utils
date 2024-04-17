@@ -1566,7 +1566,6 @@ def multi_mmclx2cfrad(
     for i in range(1, len(files)):
 
         newRadarDS = read_mira35_mmclx(files[i],gzip_flag=gzip_flag)
-        print(len(newRadarDS.latitude["data"]))
 
         if gzip_flag:
             with gzip.open(files[i]) as gz:
@@ -1588,10 +1587,10 @@ def multi_mmclx2cfrad(
         new_sweep_start = RadarDS.sweep_start_ray_index['data'][i];
         new_sweep_end   = RadarDS.sweep_end_ray_index['data'][i];
 
-        RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data'])
-    
-        print(len(RadarDS.scan_rate['data']));
-    
+        RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
+        RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
+
+        
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
 
