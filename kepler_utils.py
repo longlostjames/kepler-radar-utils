@@ -1590,6 +1590,8 @@ def multi_mmclx2cfrad(
 
         RadarDS.scan_rate['data'][new_sweep_start:new_sweep_end] = newRadarDS.scan_rate['data'];
     
+        print(len(RadarDS.scan_rate['data']));
+    
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
 
