@@ -1588,7 +1588,7 @@ def multi_mmclx2cfrad(
         new_sweep_start = RadarDS.sweep_start_ray_index['data'][i];
         new_sweep_end   = RadarDS.sweep_end_ray_index['data'][i];
 
-        RadarDS.scan_rate['data'][new_sweep_start:new_sweep_end] = newRadarDS.scan_rate['data'];
+        RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data'])
     
         print(len(RadarDS.scan_rate['data']));
     
