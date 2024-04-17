@@ -1568,7 +1568,7 @@ def multi_mmclx2cfrad(
         newRadarDS = read_mira35_mmclx(files[i],gzip_flag=gzip_flag)
         print(len(newRadarDS.latitude["data"]))
 
-        print(newRadarDS['scan_rate']);
+        print(newRadarDS.scan_rate);
 
         if gzip_flag:
             with gzip.open(files[i]) as gz:
