@@ -1581,14 +1581,12 @@ def multi_mmclx2cfrad(
         tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
         usec = np.append(usec,usec_new);
 
-        RadarDS = pyart.util.join_radar(RadarDS,newRadarDS)
+        if np.max(newRadarDS.elevation['data'])-np.min(newRadarDS.elevation['data'])!=0:
+            print(f'sweep = {s}');
+            RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
 
-        # Fix scan_rate join which doesn't seem to be working
-        new_sweep_start = RadarDS.sweep_start_ray_index['data'][i];
-        new_sweep_end   = RadarDS.sweep_end_ray_index['data'][i];
-
-        RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
-        RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
+            RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
+            RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
 
         
     RadarDS.time['units'] = time_units;
