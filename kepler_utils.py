@@ -1582,7 +1582,7 @@ def multi_mmclx2cfrad(
         usec = np.append(usec,usec_new);
 
         if np.max(newRadarDS.elevation['data'])-np.min(newRadarDS.elevation['data'])!=0:
-            print(f'sweep = {s}');
+            print(f'sweep = {i}');
             RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
 
             RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
