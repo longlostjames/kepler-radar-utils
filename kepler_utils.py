@@ -1584,7 +1584,11 @@ def multi_mmclx2cfrad(
 
         RadarDS = pyart.util.join_radar(RadarDS,newRadarDS)
 
-        print(RadarDS.scan_rate);
+        # Fix scan_rate join which doesn't seem to be working
+        new_sweep_start = RadarDS.sweep_start_ray_index['data'][i];
+        new_sweep_end   = RadarDS.sweep_end_ray_index['data'][i];
+
+        RadarDS.scan_rate['data'][new_sweep_start:new_sweep_end] = newRadarDS.scan_rate['data'];
     
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
