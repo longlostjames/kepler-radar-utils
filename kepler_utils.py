@@ -1873,7 +1873,8 @@ def process_kepler_ccrest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_
     # Vertically pointing files for whole day
     try:
         vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
-       #vpt_files_unzipped = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=False);
+        print(vpt_files)
+        #vpt_files_unzipped = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=False);
         if (len(vpt_files)>0):
             RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
         #elif (len(vpt_files_unzipped)>0):
