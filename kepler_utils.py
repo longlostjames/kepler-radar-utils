@@ -363,6 +363,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     scan_rates = {'ppi' : ncvars['aziv'][:], 'rhi' : ncvars['elvv'][:]}
 
     scan_rate = filemetadata("scan_rate")
+    antenna_transition = filemetadata("antenna_transition")
 
     if scan_name in  ['ppi','rhi']:
         scan_rate['data'] = scan_rates[scan_name];
