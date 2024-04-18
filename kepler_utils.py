@@ -367,30 +367,30 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     if scan_name in  ['ppi','rhi']:
         scan_rate['data'] = scan_rates[scan_name];
         scan_rate['units']='degrees_per_second';
+        antenna_transition = filemetadata("antenna_transition")
+        antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0);
+        target_scan_rate = filemetadata("target_scan_rate")
+        target_scan_rate["data"] = np.array([4.0], dtype="f4")
+        scanning_indices = np.where(antenna_transition['data']==0)[0];
+        target_scan_rate['data'] = np.mean(scan_rate['data'][scanning_indices]);
+        at_speed = np.where(abs(scan_rate['data']-target_scan_rate['data'])<0.06)[0];
+        target_scan_rate['data'] = np.round(np.mean(scan_rate['data'][at_speed]),2);
+
+        target_ray_duration = np.round(np.mean(ray_duration),3);
+        ok_duration = np.where(ray_duration/target_ray_duration<1.5);
+        target_ray_duration = np.round(np.mean(ray_duration[ok_duration]),3);
+
+        print(target_ray_duration);
+
+        ray_duration = np.insert(ray_duration,0,target_ray_duration);
+
+        long_duration  = np.where(ray_duration/target_ray_duration>1.5)[0];
+
+    else:
+        scan_rate['data'] = None;
+        antenna_transition['data'] = None;
     
-    antenna_transition = filemetadata("antenna_transition")
-    antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0);
     
-    target_scan_rate = filemetadata("target_scan_rate")
-    target_scan_rate["data"] = np.array([4.0], dtype="f4")
-
-    scanning_indices = np.where(antenna_transition['data']==0)[0];
-    target_scan_rate['data'] = np.mean(scan_rate['data'][scanning_indices]);
-    at_speed = np.where(abs(scan_rate['data']-target_scan_rate['data'])<0.06)[0];
-    target_scan_rate['data'] = np.round(np.mean(scan_rate['data'][at_speed]),2);
-
-
-    target_ray_duration = np.round(np.mean(ray_duration),3);
-    ok_duration = np.where(ray_duration/target_ray_duration<1.5);
-    target_ray_duration = np.round(np.mean(ray_duration[ok_duration]),3);
-
-    print(target_ray_duration);
-
-    ray_duration = np.insert(ray_duration,0,target_ray_duration);
-
-    long_duration  = np.where(ray_duration/target_ray_duration>1.5)[0];
-
-
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
@@ -402,10 +402,10 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     azimuth['long_name'] = "sensor to target azimuth angle";
 
     # Special case for long-duration glitches
-    azimuth['data'][long_duration] = (ncvars['azi'][long_duration]+revised_northangle) % 360;
-    azimuth['data'][long_duration] -= 0.5*target_ray_duration * ncvars['aziv'][long_duration];
+    if scan_name in  ['ppi','rhi']:
+        azimuth['data'][long_duration] = (ncvars['azi'][long_duration]+revised_northangle) % 360;
+        azimuth['data'][long_duration] -= 0.5*target_ray_duration * ncvars['aziv'][long_duration];
     
-
     elevation['data'] = ncvars['elv'][:];
 
     elevation['data'] -= 0.5*ray_duration * ncvars['elvv'][:];
@@ -414,8 +414,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     elevation['long_name'] = "sensor to target elevation angle";
 
     # Special case for long-duration glitches
-    elevation['data'][long_duration] = ncvars['elv'][long_duration];
-    elevation['data'][long_duration] -= 0.5*target_ray_duration * ncvars['elvv'][long_duration];
+    if scan_name in  ['ppi','rhi']:   
+        elevation['data'][long_duration] = ncvars['elv'][long_duration];
+        elevation['data'][long_duration] -= 0.5*target_ray_duration * ncvars['elvv'][long_duration];
 
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
