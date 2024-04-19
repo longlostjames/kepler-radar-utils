@@ -1882,18 +1882,18 @@ def process_kepler_ccrest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_
     print(len(rhi_files_270));
     print(len(rhi_files_246));
 
-    #if (len(rhi_files_270)>0):
-    #    if gzip_flag:
-    #        RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI_CCREST1',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
-    #    else:
-    #        RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI_CCREST1',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+    if (len(rhi_files_270)>0):
+        if gzip_flag:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI_CCREST1',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+        else:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI_CCREST1',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
 
 
-    #if (len(rhi_files_246)>0):
-    #    if gzip_flag:
-    #        RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI_CCREST2',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
-    #    else:
-    #        RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI_CCREST2',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+    if (len(rhi_files_246)>0):
+        if gzip_flag:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI_CCREST2',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+        else:
+            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI_CCREST2',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
 
     
     # Vertically pointing files for whole day
@@ -1909,14 +1909,14 @@ def process_kepler_ccrest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_
         print("VPT problem")
         pass
     # VAD files for whole day
-    #vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
-    #vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
-    #try:
-    #    vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
-    #    if (len(vad_files)>0):
-    #        RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
-    #except:
-    #    pass
+    vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
+    vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
+    try:
+        vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
+        if (len(vad_files)>0):
+            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
+    except:
+        pass
 
     
 def update_history_attribute(ncfile,update):
