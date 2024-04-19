@@ -425,7 +425,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
 
-
+    print("now i am here")
 
     # ------
     # fields
@@ -479,8 +479,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dBZ'
         field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
-        isnan = np.isnan(field_dic['data'][:])
-        print(isnan)
+        isnan = np.isnan(field_dic['data'][:]);
         field_dic['data'][isnan] = field_dic['_FillValue'];
         if scan_name in  ['ppi','rhi']:
             field_dic['data'][long_duration,:] = field_dic['_FillValue'];
@@ -489,10 +488,10 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['standard_name'] = "equivalent_reflectivity_factor";
         field_dic['proposed_standard_name'] =  "radar_equivalent_reflectivity_factor";   
         fields[field_name] = field_dic
-        print(field_dic['_FillValue'])
     else:
         print("Zg does not exist")
 
+    print("Done Zg")
 
     if "VELg" in ncvars:
         field_name = fields_keymap['VELg']
@@ -500,6 +499,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'm s-1'
         field_dic['data'] = ncvars['VELg'][:];
+        isnan = np.isnan(field_dic['data'][:]);
+        field_dic['data'][isnan] = field_dic['_FillValue'];
         if scan_name in  ['ppi','rhi']:
             field_dic['data'][long_duration,:] = field_dic['_FillValue'];
             field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
@@ -509,12 +510,17 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     else:
         print("VELg does not exist")
 
+    print("Done VELg")
+
+
     if "RMSg" in ncvars:
         field_name = fields_keymap['RMSg']
         field_dic = filemetadata(field_name)
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'm s-1'
         field_dic['data'] = ncvars['RMSg'][:];
+        isnan = np.isnan(field_dic['data'][:]);
+        field_dic['data'][isnan] = field_dic['_FillValue'];
         if scan_name in  ['ppi','rhi']:
             field_dic['data'][long_duration,:] = field_dic['_FillValue'];
             field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
@@ -524,12 +530,16 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     else:
         print("RMSg does not exist")
 
+    print("Done RMSg");
+
     if "LDRg" in ncvars:
         field_name = fields_keymap['LDRg']
         field_dic = filemetadata(field_name)
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:]);
+        isnan = np.isnan(field_dic['data'][:]);
+        field_dic['data'][isnan] = field_dic['_FillValue'];
         if scan_name in  ['ppi','rhi']:
             field_dic['data'][long_duration,:] = field_dic['_FillValue'];
             field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
@@ -539,12 +549,16 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     else:
         print("LDRg does not exist")
 
+    print("Done LDRg");
+
     if "SNRg" in ncvars:
         field_name = fields_keymap['SNRg']
         field_dic = filemetadata(field_name)
         field_dic['_FillValue'] = get_fillvalue();
         field_dic['units'] = 'dB'
         field_dic['data'] = 10.0*np.log10(ncvars['SNRg'][:]);
+        isnan = np.isnan(field_dic['data'][:]);
+        field_dic['data'][isnan] = field_dic['_FillValue'];
         if scan_name in  ['ppi','rhi']:
             field_dic['data'][long_duration,:] = field_dic['_FillValue'];
             field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
@@ -554,7 +568,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     else:
         print("SNRg does not exist")
     
-
+    print("Done SNRg");
 
     # instrument_parameters
     instrument_parameters = {}
