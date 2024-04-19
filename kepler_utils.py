@@ -604,7 +604,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     if gzip_flag:
         gz.close();
 
-    return Radar(
+    radar = Radar(
         time,
         _range,
         fields,
@@ -626,6 +626,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         instrument_parameters=instrument_parameters,
         radar_calibration=radar_calibration
     )
+
+    print("last line")
+    return radar
 
 
 
