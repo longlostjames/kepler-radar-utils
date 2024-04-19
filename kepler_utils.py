@@ -1607,11 +1607,12 @@ def multi_mmclx2cfrad(
             usec_new = nc['microsec'][:]; 
             nc.close();
 
-
         if 'RHI' in scan_name or 'rhi' in scan_name:
             if np.max(newRadarDS.elevation['data'])-np.min(newRadarDS.elevation['data'])!=0:
                 print(f'sweep = {i}');
                 RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
+                tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
+                usec = np.append(usec,usec_new);
 
                 RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
                 RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
@@ -1619,17 +1620,20 @@ def multi_mmclx2cfrad(
             if np.max(newRadarDS.azimuth['data'])-np.min(newRadarDS.azimuth['data'])!=0:
                 print(f'sweep = {i}');
                 RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
+                tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
+                usec = np.append(usec,usec_new);
 
                 RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
                 RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
         elif 'VPT' in scan_name or 'vpt' in scan_name or 'VERT' in scan_name or 'vert' in scan_name:        
             RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
+            tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
+            usec = np.append(usec,usec_new);
 
             #RadarDS.scan_rate['data'] = None;
             #RadarDS.antenna_transition['data'] = None;
         
-        tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
-        usec = np.append(usec,usec_new);
+ 
         
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
