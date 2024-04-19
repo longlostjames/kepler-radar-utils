@@ -580,6 +580,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     #    dic["data"] = dset.variables["Beamwidth"][:]
     #    instrument_parameters["radar_beam_width_h"] = dic
 
+    print("now i am here");
+    
     ncobj.close()
     if gzip_flag:
         gz.close();
