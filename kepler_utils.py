@@ -369,7 +369,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     if scan_name in  ['ppi','rhi']:
         scan_rate['data'] = scan_rates[scan_name];
         scan_rate['units']='degrees_per_second';
-        antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0).astype('int');
+        antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0).astype('int32');
         target_scan_rate = filemetadata("target_scan_rate")
         target_scan_rate["data"] = np.array([4.0], dtype="f4")
         scanning_indices = np.where(antenna_transition['data']==0)[0];
