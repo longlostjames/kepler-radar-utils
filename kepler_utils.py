@@ -161,7 +161,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     z = StringIO(ncobj.getncattr('Altitude'))
     
     z1 = np.genfromtxt(z, dtype=None, names=['alt','zs2'])
-    altitude['data'] = np.array([z1['alt']])
+    altitude['data'] = np.array([z1['alt']],dtype='f4')
 
     # Original mmclx metadata
     # -----------------------
@@ -369,8 +369,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     if scan_name in  ['ppi','rhi']:
         scan_rate['data'] = scan_rates[scan_name];
         scan_rate['units']='degrees_per_second';
-        antenna_transition = filemetadata("antenna_transition")
-        antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0);
+        antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0).astype('int');
         target_scan_rate = filemetadata("target_scan_rate")
         target_scan_rate["data"] = np.array([4.0], dtype="f4")
         scanning_indices = np.where(antenna_transition['data']==0)[0];
