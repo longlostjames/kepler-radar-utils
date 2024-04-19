@@ -1625,8 +1625,8 @@ def multi_mmclx2cfrad(
         elif 'VPT' in scan_name or 'vpt' in scan_name or 'VERT' in scan_name or 'vert' in scan_name:        
             RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
 
-            RadarDS.scan_rate['data'] = None;
-            RadarDS.antenna_transition['data'] = None;
+            #RadarDS.scan_rate['data'] = None;
+            #RadarDS.antenna_transition['data'] = None;
         
         tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
         usec = np.append(usec,usec_new);
