@@ -398,6 +398,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     azimuth['data'] = (ncvars['azi'][:]+revised_northangle) % 360;
     elevation['data'] = ncvars['elv'][:];
 
+    print("i am here")
+
     if scan_name in  ['ppi','rhi']:
         #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
         azimuth['data'] -= 0.5*ray_duration * ncvars['aziv'][:] ;
