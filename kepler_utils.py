@@ -1391,7 +1391,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
                     nc_file.close()         
                     if start_datetime <= file_time <= end_datetime:
                         matching_files.append(os.path.join(root, file))
-        print(sorted(matching_files)
+        print(sorted(matching_files));
 
     return sorted(matching_files)
 
