@@ -364,6 +364,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
 
     scan_rate = filemetadata("scan_rate")
     antenna_transition = filemetadata("antenna_transition")
+    target_scan_rate = filemetadata("target_scan_rate")
 
     if scan_name in  ['ppi','rhi']:
         scan_rate['data'] = scan_rates[scan_name];
@@ -620,9 +621,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         sweep_end_ray_index,
         azimuth,
         elevation,
-        target_scan_rate=target_scan_rate,
+        #target_scan_rate=target_scan_rate,
         #scan_rate=scan_rate,
-        antenna_transition=antenna_transition,
+        #antenna_transition=antenna_transition,
         instrument_parameters=instrument_parameters,
         radar_calibration=radar_calibration
     )
