@@ -395,29 +395,30 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
 
-    #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
     azimuth['data'] = (ncvars['azi'][:]+revised_northangle) % 360;
-    azimuth['data'] -= 0.5*ray_duration * ncvars['aziv'][:] ;
-    azimuth['units'] = "degrees";
-    azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
-    azimuth['long_name'] = "sensor to target azimuth angle";
+    elevation['data'] = ncvars['elv'][:];
 
-    # Special case for long-duration glitches
     if scan_name in  ['ppi','rhi']:
+        #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
+        azimuth['data'] -= 0.5*ray_duration * ncvars['aziv'][:] ;
+        azimuth['units'] = "degrees";
+        azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
+        azimuth['long_name'] = "sensor to target azimuth angle";
+
+        # Special case for long-duration glitches
         azimuth['data'][long_duration] = (ncvars['azi'][long_duration]+revised_northangle) % 360;
         azimuth['data'][long_duration] -= 0.5*target_ray_duration * ncvars['aziv'][long_duration];
     
-    elevation['data'] = ncvars['elv'][:];
 
-    elevation['data'] -= 0.5*ray_duration * ncvars['elvv'][:];
-    elevation['units'] = "degrees";
-    elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
-    elevation['long_name'] = "sensor to target elevation angle";
+        elevation['data'] -= 0.5*ray_duration * ncvars['elvv'][:];
+        elevation['units'] = "degrees";
+        elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
+        elevation['long_name'] = "sensor to target elevation angle";
 
-    # Special case for long-duration glitches
-    if scan_name in  ['ppi','rhi']:   
+        # Special case for long-duration glitches
         elevation['data'][long_duration] = ncvars['elv'][long_duration];
         elevation['data'][long_duration] -= 0.5*target_ray_duration * ncvars['elvv'][long_duration];
+
 
     metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
     metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
