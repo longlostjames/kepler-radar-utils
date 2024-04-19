@@ -1374,7 +1374,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
     # Iterate through files in a specific directory
     for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
         for file in files:
-            #print(file);
+            print(file);
             # Check if the file matches the criteria
             # Example: check if the file name contains the sweep_type and falls within the time range
             if gzip_flag:
@@ -1595,8 +1595,7 @@ def multi_mmclx2cfrad(
 
                 RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
                 RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
-        elif 'VPT' in scan_name or 'vpt' in scan_name or 'VERT' in scan_name or 'vert' in scan_name:
-            print("I am VPT");
+        elif 'VPT' in scan_name or 'vpt' in scan_name or 'VERT' in scan_name or 'vert' in scan_name:        
             RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
 
             RadarDS.scan_rate['data'] = None;
