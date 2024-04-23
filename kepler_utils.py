@@ -1739,6 +1739,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
             print(len(hsrhi1_files));
             azims = [];
             if (len(hsrhi1_files)>0):
+                hsrhi1_files.sort();
                 if gzip_flag:
                     for f in hsrhi1_files:
                         print(f);
@@ -1784,6 +1785,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
             print(hsrhi2_files);
             azims = [];
             if (len(hsrhi2_files)>0):
+                hsrhi2_files.sort();
                 if gzip_flag:
                     for f in hsrhi2_files:
                         with gzip.open(f) as gz:
@@ -1821,6 +1823,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
             print(blppi_files);
             elevs=[];
             if (len(blppi_files)>0):
+                blppi_files.sort();
                 if gzip_flag:
                     for f in blppi_files:
                         with gzip.open(f) as gz:
@@ -1858,6 +1861,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
         vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
         print(vpt_files);
         if (len(vpt_files)>0):
+            vpt_files.sort();
             RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
     except:
         pass
@@ -1867,6 +1871,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
     try:
         vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
         if (len(vad_files)>0):
+            vad_files.sort();
             RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
     except:
         pass
