@@ -1540,7 +1540,7 @@ def multi_mmclx2cfrad(
     scan_name="HSRHI",
     gzip_flag=False,
     azimuth_offset=0.0,
-    revised_northangle=302.74,
+    revised_northangle=303.15,
     tracking_tag="AMOF_20220922221548",
     campaign="woest",
     data_version=0.1,
