@@ -1732,6 +1732,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
         next_halfhour = current_date + datetime.timedelta(minutes=30);
         
         try:
+            print("searching for hsrhs1 files")
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True, azimuth_offset=azimuth_offset)
             print(hsrhi1_files);
             print(len(hsrhi1_files));
@@ -1777,6 +1778,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag
             pass
 
         try:
+            print("searching for hsrhs2 files")
             hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir,gzip_flag=True,azimuth_offset=azimuth_offset)
             print(hsrhi2_files);
             azims = [];
