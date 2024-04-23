@@ -1717,7 +1717,8 @@ def split_monotonic_sequence(sequence):
     startindices =  [1+endindices[i] - len(subsequences[i]) for i in range(len(endindices))];
     return list(zip(startindices,endindices))
 
-def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag=True,revised_northangle=303.15):
+def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_instrument_file,azimuth_offset,gzip_flag=True,revised_northangle=303.15):
+#def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag=True,revised_northangle=303.15):
     # Define the start and end times for the loop
     start_date = datetime.datetime.strptime(datestr, '%Y%m%d');
     end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
