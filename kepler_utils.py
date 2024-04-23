@@ -1446,8 +1446,12 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                             azim = (nc['azi'][0]+revised_northangle) % 360;
                             if start_datetime <= file_time <= end_datetime:
                                 print(file_time);
-                                if azim_min < azim <= azim_max:
-                                    matching_files.append(os.path.join(root, file))
+                                if azim_min < 0:
+                                    if azim_min < azim-180 <= azim_max:
+                                        matching_files.append(os.path.join(root, file))
+                                else:
+                                    if azim_min < azim <= azim_max:
+                                        matching_files.append(os.path.join(root, file))
             else:
                 #if "rhi" in file and hrstr in file and file.endswith('.mmclx'):
                 if "rhi" in file and file.endswith('.mmclx'):
