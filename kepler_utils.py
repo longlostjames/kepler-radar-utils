@@ -1443,7 +1443,9 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                         with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                             file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
                             #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
-                            azim = (nc['azi'][0]+revised_northangle) % 360 - 180;
+                            azim = (nc['azi'][0]+revised_northangle) % 360;
+                            if azim > 350.0:
+                                azim -= 360.0;
                             if start_datetime <= file_time <= end_datetime:
                                 print(file_time);
                                 
