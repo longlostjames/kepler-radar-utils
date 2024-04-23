@@ -1734,7 +1734,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
         
         try:
             print("searching for hsrhs1 files")
-            hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True, azimuth_offset=azimuth_offset)
+            hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -15, 165, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
             print(hsrhi1_files);
             print(len(hsrhi1_files));
             azims = [];
@@ -1781,7 +1781,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
 
         try:
             print("searching for hsrhs2 files")
-            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir,gzip_flag=True,azimuth_offset=azimuth_offset)
+            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 165, 345, indir,gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
             print(hsrhi2_files);
             azims = [];
             if (len(hsrhi2_files)>0):
