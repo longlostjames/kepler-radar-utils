@@ -325,7 +325,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         fixed_angle["data"] = np.array(1 * [fixed_angle_value], dtype='f'); 
     elif scan_name in ['ppi','vertical_pointing']:
         fixed_angle_value = np.round(ncvars['elv'][0],2);
-        fixed_angle["data"] = np.array(1 * [fixed_angle_value, dtype='f']);
+        fixed_angle["data"] = np.array(1 * [fixed_angle_value], dtype='f');
     else:
         fixed_angle["data"] = np.array(1 * [None]);
     
