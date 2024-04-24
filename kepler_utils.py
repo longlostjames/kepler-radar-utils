@@ -1415,7 +1415,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
                 if sweep_type in file and file.endswith('.mmclx'):
                     nc_file = nc4.Dataset(os.path.join(root, file))
                     file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
-                    nc_file.close()         
+                    nc_file.close()      
                     if start_datetime <= file_time <= end_datetime:
                         matching_files.append(os.path.join(root, file))
         print(sorted(matching_files));
@@ -1445,9 +1445,9 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                             #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
                             azim = (nc['azi'][0]+revised_northangle) % 360;
                             if start_datetime <= file_time <= end_datetime:
-                                print(f'{file_time} {azim}');
+                                print(f'{file_time} {(azim+15)%360}');
                                 
-                                if azim_min <= (azim+6.85)%360 < azim_max:
+                                if azim_min <= (azim+15)%360 < azim_max:
                                         matching_files.append(os.path.join(root, file))
                                
             else:
@@ -1458,9 +1458,9 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                     #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
                     azim = (nc['azi'][0]+revised_northangle) % 360;
                     if start_datetime <= file_time <= end_datetime:
-                        print(f'{file_time} {azim}');
+                        print(f'{file_time} {(azim+15)%360}');
 
-                        if azim_min < (azim+6.85)%360 <= azim_max:
+                        if azim_min < (azim+15)%360 <= azim_max:
                             matching_files.append(os.path.join(root, file))
                     nc.close()         
     return sorted(matching_files)
