@@ -782,7 +782,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     # -------------------------------------------------------
     DS = nc4.Dataset(cfradfile,'r+');
 
-    DS.product_version = "v{}".format(data_version) ;
+    DS.product_version = f"v{data_version}";
     DS.processing_level = "1" ;
 
     DS.licence = project_instrument["data_licence"];
@@ -1152,7 +1152,7 @@ def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,
     DS.Conventions = "NCAS-Radar-1.0 CfRadial-1.4"
 
     #DS.delncattr('version');
-    DS.product_version = "v{}".format(data_version) ;
+    DS.product_version = f"v{data_version}";
     DS.processing_level = "1" ;
 
     DS.licence = project_instrument["data_licence"];
@@ -1548,7 +1548,7 @@ def multi_mmclx2cfrad(
     revised_northangle=303.15,
     tracking_tag="AMOF_20220922221548",
     campaign="woest",
-    data_version=0.1.1,
+    data_version="0.1.1",
 ):
     """
     Aggregates single-sweep mmclx data to a cfradial1 data.
