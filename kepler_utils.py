@@ -1751,14 +1751,14 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
                                 nc.set_auto_mask(False);
                                 #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
                                 az = (nc['azi'][0]+revised_northangle) %360;
-                                azims.append(az);
+                                azims.append((az+15)%360);
                 else:
                     for f in hsrhi1_files:
                         nc = nc4.Dataset(f);
                         nc.set_auto_mask(False);
                         #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
                         az = (nc['azi'][0]+revised_northangle) %360;
-                        azims.append(az);
+                        azims.append((az+15)%360);
                         nc.close();
                 print(azims);
                 idx = split_monotonic_sequence(azims);
@@ -1796,14 +1796,14 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
                                 nc.set_auto_mask(False);
                                 #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
                                 az = (nc['azi'][0]+revised_northangle) %360;
-                                azims.append(az);
+                                azims.append((az+15)%360);
                 else:
                     for f in hsrhi2_files:
                         nc = nc4.Dataset(f);
                         nc.set_auto_mask(False);
                         #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
                         az = (nc['azi'][0]+revised_northangle) %360;
-                        azims.append(az);
+                        azims.append((az+15)%360);
                         nc.close();
                 print(azims);
                 idx = split_monotonic_sequence(azims);
