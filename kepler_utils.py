@@ -1812,11 +1812,11 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
                     #if len(hsrhi2_files)==1:
                     #    RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
                     if l[0]==l[1]:
-                        RadarDS_HSRHI2 = multi_mmclx2cfrad([hsrhi2_files[l[0]]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+                        RadarDS_HSRHI2 = multi_mmclx2cfrad([hsrhi2_files[l[0]]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
                     elif l[1]==len(hsrhi2_files)-1:
-                        RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+                        RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
                     else:
-                        RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+                        RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
         except:
             print('Problem');
             pass
@@ -1849,11 +1849,11 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
                     #if len(blppi_files)==1:
                     #    RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
                     if l[0]==l[1]:
-                        RadarDS_BLPPI = multi_mmclx2cfrad([blppi_files[l[0]]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                        RadarDS_BLPPI = multi_mmclx2cfrad([blppi_files[l[0]]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
                     elif l[1]==len(blppi_files)-1:   
-                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
                     else:
-                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:l[1]+1],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
+                        RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:l[1]+1],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
         except:
             pass
        
@@ -1865,7 +1865,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
         print(vpt_files);
         if (len(vpt_files)>0):
             vpt_files.sort();
-            RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
     except:
         pass
     # VAD files for whole day
@@ -1875,7 +1875,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
         vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
         if (len(vad_files)>0):
             vad_files.sort();
-            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset);
+            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
     except:
         pass
 
