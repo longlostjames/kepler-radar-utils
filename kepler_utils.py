@@ -316,16 +316,16 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     print(scan_name);
 
     #    #fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
-    fixed_angles = {'ppi' : ncvars['elv'][10], 'rhi' : ncvars['azi'][10]+revised_northangle, 'vertical_pointing' : ncvars['elv'][10], "manual_rhi" : ncvars['azi'][10]}
-
-    print(fixed_angles);
+    #fixed_angles = {'ppi' : ncvars['elv'][10], 'rhi' : ncvars['azi'][10]+revised_northangle, 'vertical_pointing' : ncvars['elv'][10], "manual_rhi" : ncvars['azi'][10]}
 
     fixed_angle = filemetadata("fixed_angle")
 
-    if scan_name is not None:
-        fixed_angle_value = np.round(fixed_angles[scan_name]%360,2);
-        
+    if scan_name is 'rhi' or scan_name is 'manual_rhi':
+        fixed_angle_value = np.round((ncvars['azi'][0]+revised_northangle)%360,2);
         fixed_angle["data"] = np.array(1 * [fixed_angle_value]); 
+    elif scan_name is 'ppi' or scan_name is 'vertical_pointing':
+        fixed_angle_value = np.round(ncvars['elv'][0],2);
+        fixed_angle["data"] = np.array(1 * [fixed_angle_value]);
     else:
         fixed_angle["data"] = np.array(1 * [None]);
     
