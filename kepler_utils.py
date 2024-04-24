@@ -316,7 +316,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     print(scan_name);
 
     #    #fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
-    fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+revised_northangle, 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
+    fixed_angles = {'ppi' : ncvars['elv'][10], 'rhi' : ncvars['azi'][10]+revised_northangle, 'vertical_pointing' : ncvars['elv'][10], "manual_rhi" : ncvars['azi'][10]}
 
     fixed_angle = filemetadata("fixed_angle")
 
@@ -324,6 +324,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
         fixed_angle["data"] = np.round(np.array(1 * [fixed_angles[scan_name] % 360]),2); 
     else:
         fixed_angle["data"] = np.array(1 * [None]);
+    
+    print(fixed_angle["data"])
 
 
     # time
