@@ -320,10 +320,10 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
 
     fixed_angle = filemetadata("fixed_angle")
 
-    if scan_name is 'rhi' or scan_name is 'manual_rhi':
+    if scan_name in ['rhi','manual_rhi']:
         fixed_angle_value = np.round((ncvars['azi'][0]+revised_northangle)%360,2);
         fixed_angle["data"] = np.array(1 * [fixed_angle_value]); 
-    elif scan_name is 'ppi' or scan_name is 'vertical_pointing':
+    elif scan_name in ['ppi','vertical_pointing']:
         fixed_angle_value = np.round(ncvars['elv'][0],2);
         fixed_angle["data"] = np.array(1 * [fixed_angle_value]);
     else:
