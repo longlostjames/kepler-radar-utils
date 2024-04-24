@@ -321,9 +321,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwar
     fixed_angle = filemetadata("fixed_angle")
 
     if scan_name is not None:
-        fixed_angle["data"] = np.array(1 * [fixed_angles[scan_name] % 360]) 
+        fixed_angle["data"] = np.round(np.array(1 * [fixed_angles[scan_name] % 360]),2); 
     else:
-        fixed_angle["data"] = np.array(1 * [None]) 
+        fixed_angle["data"] = np.array(1 * [None]);
 
 
     # time
@@ -1546,7 +1546,7 @@ def multi_mmclx2cfrad(
     revised_northangle=303.15,
     tracking_tag="AMOF_20220922221548",
     campaign="woest",
-    data_version=0.1,
+    data_version=0.1.1,
 ):
     """
     Aggregates single-sweep mmclx data to a cfradial1 data.
@@ -1641,11 +1641,11 @@ def multi_mmclx2cfrad(
     RadarDS.time['units'] = time_units;
     RadarDS.time['data'][:] = tsec+usec*1e-6;
 
-    RadarDS.azimuth['data'] += azimuth_offset;
+    #RadarDS.azimuth['data'] += azimuth_offset;
 
 
-    if 'RHI' in scan_name or 'rhi' in scan_name:
-        RadarDS.fixed_angle['data'] += azimuth_offset;
+    #if 'RHI' in scan_name or 'rhi' in scan_name:
+    #    RadarDS.fixed_angle['data'] += azimuth_offset;
     
     fname = os.path.basename(files[0]).split(".")[0]
 
