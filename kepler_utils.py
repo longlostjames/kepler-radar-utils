@@ -1429,9 +1429,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
     return sorted(matching_files)
 
 def convert_angle(angle):
-    if angle <= 179:    
-        return angle - 180
-    else:
+    if angle >= 350:    
         return angle - 360
     
 def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=0,revised_northangle=55.7):
