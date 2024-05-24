@@ -1453,6 +1453,7 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                 #if "rhi" in file and hrstr in file and file.endswith('.mmclx.gz'):
                 if "rhi" in file and file.endswith('.mmclx.gz'):
                     fullfile = os.path.join(root,file)
+                    print(fullfile)
                     with gzip.open(fullfile) as gz:
                         with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                             file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
