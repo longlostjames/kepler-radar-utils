@@ -1432,6 +1432,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
     return sorted(matching_files)
 
 def convert_angle(angle,offset):
+    print(angle,offset)
     if angle >= 360+round(offset):    
         angle -= 360
     return angle
