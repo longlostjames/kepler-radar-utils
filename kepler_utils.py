@@ -633,8 +633,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=303.15, **kw
         scan_rate=scan_rate,
         antenna_transition=antenna_transition,
         instrument_parameters=instrument_parameters,
-        radar_calibration=radar_calibration,
-        geometry_correction=geometry_correction
+        radar_calibration=radar_calibration
     )
 
     print("last line")
@@ -1684,7 +1683,8 @@ def multi_mmclx2cfrad(
     update_history_attribute(out_path,update_string)
 
     cfradial_add_ncas_metadata(out_path,yaml_project_file,yaml_instrument_file,tracking_tag,data_version);
-    
+    cfradial_add_instrument_parameters(mmclxfiles[0],out_path,yaml_project_file,yaml_instrument_file,tracking_tag, data_version)
+
     return
 
 def ppistack_mmclx2cfrad(
