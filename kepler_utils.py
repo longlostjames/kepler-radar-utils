@@ -1458,7 +1458,6 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                             file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
                             #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
                             azim = (nc['azi'][0]+revised_northangle) % 360;
-                            print(azim)
  
                             if start_datetime <= file_time <= end_datetime:
                                 print(f'{file_time} {azim_min} {convert_angle(azim)} {azim_max}');
