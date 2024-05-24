@@ -1457,9 +1457,9 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                             azim = (nc['azi'][0]+revised_northangle) % 360;
 
                             if start_datetime <= file_time <= end_datetime:
-                                #print(f'{file_time} {(azim)%360}');
+                                print(f'{file_time} {azim_min} {convert_angle(azim)} {azim_max}');
                                 if azim_min <= convert_angle(azim) < azim_max:
-                                        print(f'{file_time} {convert_angle(azim)}');
+                                        #print(f'{file_time} {convert_angle(azim)}');
                                         matching_files.append(os.path.join(root, file))
                                
             else:
@@ -1471,8 +1471,9 @@ def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag
                     azim = (nc['azi'][0]+revised_northangle) % 360;
 
                     if start_datetime <= file_time <= end_datetime:
+                        print(f'{file_time} {azim_min} {convert_angle(azim)} {azim_max}');
                         if azim_min <= convert_angle(azim) < azim_max:
-                            print(f'{file_time} {convert_angle(azim)}');
+                            #print(f'{file_time} {convert_angle(azim)}');
                             matching_files.append(os.path.join(root, file))
                     nc.close()         
     return sorted(matching_files)
