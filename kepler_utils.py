@@ -1430,7 +1430,7 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
 
 def convert_angle(angle):
     if angle >= 350:    
-        angle - 360
+        angle -= 360
     return angle
     
 def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=0,revised_northangle=55.7):
