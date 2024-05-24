@@ -631,9 +631,9 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=303.15, **kw
         elevation,
         target_scan_rate=target_scan_rate,
         scan_rate=scan_rate,
-        antenna_transition=antenna_transition,
-        instrument_parameters=instrument_parameters,
-        radar_calibration=radar_calibration
+        antenna_transition=antenna_transition
+        #instrument_parameters=instrument_parameters,
+        #radar_calibration=radar_calibration
     )
 
     print("last line")
