@@ -72,7 +72,7 @@ def read_mira35_mmclx_vpt_multi(mmclxfiles, **kwargs):
 
 
 
-def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=-56.85, **kwargs):
+def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=303.15, **kwargs):
     """
     Read a netCDF mmclx file from MIRA-35 radar.
 
@@ -582,6 +582,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=-56.85, **kw
 
     radar_calibration = {}
 
+    geometry_correction = {'azimuth_correction': = revised_northangle}
+
 
     #if "PRF-value" in dset.ncattrs():
     #    dic = filemetadata("prt")
@@ -631,7 +633,8 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=-56.85, **kw
         scan_rate=scan_rate,
         antenna_transition=antenna_transition,
         instrument_parameters=instrument_parameters,
-        radar_calibration=radar_calibration
+        radar_calibration=radar_calibration,
+        geometry_correction=geometry_correction
     )
 
     print("last line")
@@ -1428,12 +1431,12 @@ def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
 
     return sorted(matching_files)
 
-def convert_angle(angle):
-    if angle >= 350:    
+def convert_angle(angle,offset):
+    if angle >= 360+offset:    
         angle -= 360
     return angle
     
-def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=0,revised_northangle=55.7):
+def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=-7.85,revised_northangle=302.15):
     # Convert the input times to datetime objects
     start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
     end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
