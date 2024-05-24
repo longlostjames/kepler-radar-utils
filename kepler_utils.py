@@ -1757,38 +1757,40 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
             hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -10, 175, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
             print(hsrhi1_files);
             print(len(hsrhi1_files));
-            azims = [];
-            if (len(hsrhi1_files)>0):
-                hsrhi1_files.sort();
-                if gzip_flag:
-                    for f in hsrhi1_files:
-                        print(f);
-                        with gzip.open(f) as gz:
-                            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                                nc.set_auto_mask(False);
+            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+
+            #azims = [];
+            #if (len(hsrhi1_files)>0):
+                #hsrhi1_files.sort();
+            #    if gzip_flag:
+            #        for f in hsrhi1_files:
+            #            print(f);
+            #            with gzip.open(f) as gz:
+            #                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+            #                    nc.set_auto_mask(False);
                                 #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
-                                az = (nc['azi'][0]+revised_northangle) %360;
-                                azims.append((az+15)%360);
-                else:
-                    for f in hsrhi1_files:
-                        nc = nc4.Dataset(f);
-                        nc.set_auto_mask(False);
+            #                    az = (nc['azi'][0]+revised_northangle) %360;
+            #                    azims.append(az);
+            #    else:
+            #        for f in hsrhi1_files:
+            #            nc = nc4.Dataset(f);
+            #            nc.set_auto_mask(False);
                         #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
-                        az = (nc['azi'][0]+revised_northangle) %360;
-                        azims.append((az+15)%360);
-                        nc.close();
-                print(azims);
-                idx = split_monotonic_sequence(azims);
-                print(idx);
-                for l in idx:
+            #            az = (nc['azi'][0]+revised_northangle) %360;
+            #            azims.append(az);
+            #            nc.close();
+            #    print(azims);
+            #    idx = split_monotonic_sequence(azims);
+            #    print(idx);
+            #    for l in idx:
                     #if len(hsrhi1_files)==1:
                     #    RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-                    if l[0]==l[1]:
-                        RadarDS_HSRHI1 = multi_mmclx2cfrad([hsrhi1_files[l[0]]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
-                    elif l[1]==len(hsrhi1_files)-1:
-                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
-                    else:
-                        RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+            #        if l[0]==l[1]:
+            #            RadarDS_HSRHI1 = multi_mmclx2cfrad([hsrhi1_files[l[0]]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+            #        elif l[1]==len(hsrhi1_files)-1:
+            #            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
+            #        else:
+            #            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
 
                # if (len(hsrhi1_files)>6):
                #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[:6],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
