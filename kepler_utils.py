@@ -1745,7 +1745,7 @@ def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_i
     end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
 
     # Correct azimuth offset based on use of revised northangle
-    azimuth_offset = 0.0;
+    
 
     # Iterate through each half hour for HSRHI and BLPPI files
     current_date = start_date
