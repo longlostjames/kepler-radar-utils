@@ -582,7 +582,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=303.15, **kw
 
     radar_calibration = {}
 
-    #geometry_correction = {'azimuth_correction': revised_northangle}
+    geometry_correction = {'azimuth_correction': revised_northangle}
 
 
     #if "PRF-value" in dset.ncattrs():
