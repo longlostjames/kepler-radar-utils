@@ -929,7 +929,11 @@ def cfradial_add_instrument_parameters(mmclxfile,cfradfile,yaml_project_file,yam
     # -------------------------------------------------------
     DS = nc4.Dataset(cfradfile,'r+');
 
-    DSin = nc4.Dataset(mmclxfile,'r');
+    if mmclxfile.endswith('.mmclx.gz'):
+        with gzip.open(fullfile) as gz:
+            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as DSin
+    else:
+        DSin = nc4.Dataset(mmclxfile,'r');
 
     frequency = DS.createDimension("frequency", 1);
 
