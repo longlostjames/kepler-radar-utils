@@ -582,7 +582,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=303.15, **kw
 
     radar_calibration = {}
 
-    geometry_correction = {'azimuth_correction': revised_northangle}
+    #geometry_correction = {'azimuth_correction': revised_northangle}
 
 
     #if "PRF-value" in dset.ncattrs():
@@ -634,7 +634,7 @@ def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=303.15, **kw
         antenna_transition=antenna_transition,
         instrument_parameters=instrument_parameters,
         radar_calibration=radar_calibration,
-        geometry_correction=geometry_correction,
+        #geometry_correction=geometry_correction,
     )
 
     print("last line")
