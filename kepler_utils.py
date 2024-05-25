@@ -1686,6 +1686,7 @@ def multi_mmclx2cfrad(
     update_string = 'Merge single sweep files into cfradial file'
     update_history_attribute(out_path,update_string)
 
+    cfradial_add_bbox(out_path)
     cfradial_add_ncas_metadata(out_path,yaml_project_file,yaml_instrument_file,tracking_tag,data_version);
     cfradial_add_instrument_parameters(mmclxfiles[0],out_path,yaml_project_file,yaml_instrument_file,tracking_tag, data_version)
 
