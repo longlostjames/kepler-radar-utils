@@ -543,8 +543,8 @@ def make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False):
 
 
 make_ccrest_vpt_plot_day(datestr,inpath,figpath,blflag=False);
-#make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=False);
-#make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False);
-#zlevels = np.arange(100, 15000, 100);  # height above radar
-#make_ccrest_vad_plot_day(datestr,inpath,figpath,zlevels);
+make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=False);
+make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False);
+zlevels = np.arange(100, 15000, 100);  # height above radar
+make_ccrest_vad_plot_day(datestr,inpath,figpath,zlevels);
 
