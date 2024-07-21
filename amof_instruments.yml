@@ -1,0 +1,115 @@
+---
+
+- ncas-radar-mobile-ka-band-1:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    nickname: Kepler
+    instrument_name: ncas-radar-mobile-ka-band-1
+    instrument_manufacturer: Meteorologische Messtechnik (Metek) GmbH
+    instrument_model: MIRA-35S
+    instrument_serial_number: BX3C
+    instrument_pid: https://hdl.handle.net/21.12132/3.b7a8298b7a54405f
+
+    # Note - instrument_software and instrument_software_version are declared in separate YAML project entry
+    # This allows project specific versions to be specified     
+
+    references: www.metek.de
+  
+- ncas-radar-ka-band-1:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    nickname: Copernicus
+    instrument_name: ncas-radar-ka-band-1
+    instrument_manufacturer: Rutherford Appleton Laboratory
+    instrument_model: Copernicus
+    instrument_serial_number: 
+    instrument_pid: https://hdl.handle.net/21.12132/3.c3e825b4aa71435c
+
+    # Note - instrument_software and instrument_software_version are declared in separate YAML project entry     
+    # This allows project specific versions to be specified     
+
+    references: 
+
+- ncas-radar-w-band-1:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    nickname: Galileo
+    instrument_name: ncas-radar-w-band-1
+    instrument_manufacturer: Rutherford Appleton Laboratory and Officine Galileo
+    instrument_model: Galileo
+    instrument_serial_number: ""
+    instrument_pid: https://hdl.handle.net/21.12132/3.981da267085b4966
+    
+    # Note - instrument_software and instrument_software_version are declared in separate YAML project entry     
+    # This allows project specific versions to be specified     
+
+    references: ""
+
+- ncas-radar-camra-1:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    nickname: CAMRa (Chilbolton Advanced Meteorological Radar)
+    instrument_name: ncas-radar-camra-1
+    instrument_manufacturer: Rutherford Appleton Laboratory
+    instrument_model: CAMRa
+    instrument_serial_number:  ""
+    instrument_pid: 
+    instrument_type: radar
+    primary_axis: axis_z
+    latitude: 
+    longitude:
+    altitude:
+    altitude_agl:
+    antenna_diameter:
+
+    radar_parameters:
+        radar_antenna_gain_h:
+            units: dB
+            value:
+        radar_antenna_gain_v:
+            units: dB
+            value:
+        radar_beam_width_h:
+            units: degree
+            value:
+        radar_beam_width_v:
+            units: degree  
+            value:
+        radar_receiver_bandwidth:
+            units: s-1
+            value:
+
+    radar_calibration:
+   
+        
+
+
+    # Note - instrument_software and instrument_software_version are declared in separate YAML project entry     
+    # This allows project specific versions to be specified     
+
+    references: https://doi.org/10.1049/ecej:19940205; http://purl.org/net/epubs/work/63318; https://doi.org/10.1109/IGARSS.2006.429; https://doi.org/10.3390/atmos10110714;
+
+- ncas-scanning-radiometer-3:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    nickname: CAO-HATPRO
+    instrument_name: ncas-scanning-radiometer-3
+    instrument_manufacturer: Radiometer Physics GmbH (RPG)
+    instrument_model: HATPRO-G5
+    instrument_serial_number: 30136
+    instrument_pid: https://hdl.handle.net/21.12132/3.5f5640d6deb6491d
+
+    # Note - instrument_software and instrument_software_version are declared in separate YAML project entry
+    # This allows project specific versions to be specified     
+
+    references: https://www.radiometer-physics.de/
