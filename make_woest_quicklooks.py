@@ -458,6 +458,7 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
 
     DS = nc4.Dataset(vad_file);
     product_version = DS.product_version;
+    print(f'product version = {product_version}')
     DS.close();
 
     radar = pyart.io.read_cfradial(vad_file);
@@ -477,11 +478,10 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
 
     for s in range(radar.nsweeps):
         radar_1sweep = radar.extract_sweeps([s])
-        print(f"sweep = {s+1}/{radar.nsweeps}");
         #vel_texture = pyart.retrieve.calculate_velocity_texture(radar_1sweep, vel_field='VEL', wind_size=6, nyq=4.7, check_nyq_uniform=True)
         #radar_1sweep.add_field('txtVEL',vel_texture)
         gatefilter = pyart.correct.GateFilter(radar_1sweep)
-#        gatefilter.exclude_below('SNR', -5.8)
+        #gatefilter.exclude_below('SNR', -5.8)
         gatefilter.exclude_below('SNR', 0)
         vad = pyart.retrieve.vad_browning(radar_1sweep, "VEL", z_want=zlevels,gatefilter=gatefilter) 
         u_allsweeps.append(vad.u_wind)
@@ -498,9 +498,7 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
     speed = np.sqrt(u_vel**2 + v_vel**2)
 
     speed = ma.masked_where(speed>100.,speed);
-    speed = ma.masked_invalid(speed);
-    speed_mask = ma.getmask(speed);
-    orientation = ma.masked_where(speed_mask,orientation);
+    orientation = ma.masked_where(speed>100.,orientation);
 
     vad_duration = (dt_vad_end-dt_vad_start);
     dt_vad_mid = dt_vad_start + 0.5*vad_duration; 
@@ -509,7 +507,7 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
     import matplotlib.dates as mdates
     myFmt = mdates.DateFormatter('%H:%M');
 
-    fig, ax = plt.subplots(2,1,figsize=(12,12),constrained_layout=True);
+    fig, ax = plt.subplots(2,1,figsize=(12,8),constrained_layout=True);
     fig.set_constrained_layout_pads(w_pad=2 / 72, h_pad=2 / 72, hspace=0.2,wspace=0.2);
 
     dtime = cftime.num2pydate(radar.time['data'],radar.time['units'])
@@ -521,37 +519,31 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
     ax[0].grid(True);
     h1 = ax[0].pcolormesh([dt_vad_start[0]-0.5*vad_duration[0],dt_vad_end[0]+0.5*vad_duration[0]],
                           zlevels/1000.,orientation[0:1,:-1].transpose(),cmap='twilight_shifted',vmin=0,vmax=360);
-#    h1 = ax[0].pcolormesh([dt_vad_start[0]-0.5*vad_duration[0],dt_vad_end[0]+0.5*vad_duration[0]],
-#                          zlevels/1000.,orientation[0:1,:-1].transpose(),cmap=cmocean.cm.phase,vmin=0,vmax=360);
     ax[0].set_ylim(0,12);
     ax[0].set_ylabel('Distance above radar [km]');
     cb0 = plt.colorbar(h1,ax=ax[0],orientation='horizontal',shrink=0.8);
-    cb0.ax.set_xlabel("Wind from direction (degree)");
-    cb0.set_ticks([0,45,90,135,180,225,270,315,360]);
+    cb0.ax.set_xlabel("Wind from direction (deg)");
     ax[0].set_facecolor('white');
     for s in range(1,radar.nsweeps):
         ax[0].pcolormesh([dt_vad_start[s]-0.5*vad_duration[s],dt_vad_end[s]+0.5*vad_duration[s]],
                          zlevels/1000.,orientation[s:s+1,:-1].transpose(),cmap='twilight_shifted',vmin=0,vmax=360);
-#        ax[0].pcolormesh([dt_vad_start[s]-0.5*vad_duration[s],dt_vad_end[s]+0.5*vad_duration[s]],
-#                         zlevels/1000.,orientation[s:s+1,:-1].transpose(),cmap=cmocean.cm.phase,vmin=0,vmax=360);
 
     ax[0].set_xlabel("Time (UTC)");
 
     ax[1].xaxis.set_major_formatter(myFmt);
     ax[1].grid(True);
     h2 = ax[1].pcolormesh([dt_vad_start[0]-0.5*vad_duration[0],dt_vad_end[0]+0.5*vad_duration[0]],
-                          zlevels/1000.,speed[0:1,:-1].transpose(),cmap='pyart_Bu10',vmin=0,vmax=50);
+                          zlevels/1000.,speed[0:1,:-1].transpose(),cmap='viridis',vmin=0,vmax=50);
     ax[1].grid(True);
     ax[1].set_ylim(0,12);
     ax[1].set_ylabel('Distance above radar (km)');
+    cb1 = plt.colorbar(h2,ax=ax[1],orientation='horizontal',shrink=0.8);
+    cb1.ax.set_xlabel("Wind speed (m/s)");
+    ax[1].set_facecolor('gainsboro');
 
-#    cb1 = plt.colorbar(h2,ax=ax[1],orientation='horizontal',shrink=0.8);
-#    cb1.ax.set_xlabel("Horizontal wind speed (m/s)");
-    ax[1].set_facecolor('white');
 
     for s in range(1,radar.nsweeps):
-        print(f"sweep = {s}");
-        ax[1].pcolormesh([dt_vad_start[s]-0.5*vad_duration[s],dt_vad_end[s]+0.5*vad_duration[s]],zlevels/1000.,speed[s:s+1,:-1].transpose(),cmap='pyart_Bu10',vmin=0,vmax=50);
+        ax[1].pcolormesh([dt_vad_start[s]-0.5*vad_duration[s],dt_vad_end[s]+0.5*vad_duration[s]],zlevels/1000.,speed[s:s+1,:-1].transpose(),cmap='viridis',vmin=0,vmax=50);
 
     nlevels = zlevels.shape[0];
     nsweeps = radar.nsweeps
@@ -559,24 +551,17 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
     x = np.tile(dt_vad_mid,[nlevels,1]).transpose();
     y = np.tile(zlevels/1000.,[nsweeps,1]);
     print(x.shape,y.shape)
-
-    for s in range(0,radar.nsweeps):
-        print(f"barbs for {s}");
-    #    ax[1].barbs(x[:5,::10],y[:,5::10],u_vel[:,5::10], v_vel[:,5::10],sizes=dict(emptybarb=0.),length=6,barbcolor='gainsboro')
-        print(speed[s,:]);
-        if (speed[s,:].all() is not np.ma.masked):
-            ax[1].barbs(x[s,4::5],y[s,4::5],u_vel[s,4::5], v_vel[s,4::5],length=5)
-    ax[1].set_facecolor('white');
+#    ax[1].barbs(x[:,5::10],y[:,5::10],u_vel[:,5::10], v_vel[:,5::10],sizes=dict(emptybarb=0.),length=6,barbcolor='sandybrown')
+    ax[1].barbs(x[:,5::10],y[:,5::10],u_vel[:,5::10], v_vel[:,5::10],np.sqrt(u_vel[:,5::10]**2+v_vel[:,5::10]),sizes=dict(emptybarb=0.),length=6,cmap='Grays',clim=[0,50])
+    ax[1].set_facecolor('gainsboro');
     ax[1].set_xlabel("Time (UTC)");
-    cb1 = plt.colorbar(h2,ax=ax[1],orientation='horizontal',shrink=0.8);
-    cb1.ax.set_xlabel("Horizontal wind speed (m/s)");
-    print("Done with barbs");
+
     dtime = cftime.num2pydate(radar.time['data'],radar.time['units'])[0];
     time_str = dtime.strftime("%Y-%m-%d");
     title0 =  f"{pyart.graph.common.generate_radar_name(radar)} {time_str}" + "\n"; 
-    title0 += f"Wind direction from VAD at elevation {radar.fixed_angle['data'][0]:.2f}$\degree$";
+    title0 += f"Wind direction from VAD at elevation {radar.fixed_angle['data'][0]}";
     title1 =  f"{pyart.graph.common.generate_radar_name(radar)} {time_str}" + "\n"; 
-    title1 += f"Wind speed from VAD at elevation {radar.fixed_angle['data'][0]:.2f}$\degree$";
+    title1 += f"Wind speed from VAD at elevation {radar.fixed_angle['data'][0]}";
 
     ax[0].set_xlim(dt_min,dt_max);
     ax[1].set_xlim(dt_min,dt_max);
@@ -590,11 +575,9 @@ def make_woest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
     if not os.path.isdir(figpath): 
         os.makedirs(figpath);
 
-    plt.savefig(os.path.join(figpath,f'ncas-radar-mobile-ka-band-1_lyneham_{datestr}_vad_l1_{product_version}.png'),dpi=300)
+    plt.savefig(os.path.join(figpath,f'ncas-radar-mobile-ka-band-1_chilbolton_ccrest-m_{datestr}_vad_l1_{product_version}.png'),dpi=300)
 
     plt.close();
-
-
 
 
 def make_woest_blppi_plots_day(datestr,inpath,figpath):
