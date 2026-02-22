@@ -25,16 +25,16 @@ import cftime
 
 version = 0.1
 
-sys.path.append('/home/users/cjwalden/git/kepler-radar-utils')
+sys.path.append('/home/users/cjwalden/git/kepler-radar-utils-cobalt')
 
-import kepler_utils
+import kepler_utils_old
 
 from pathlib import Path
 homepath = Path.home()
 
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "d:i:o:", ["date=","inpath=","outpath="])
+    opts, args = getopt.getopt(sys.argv[1:], "d:i:o:l", ["date=","inpath=","outpath="])
 except getopt.GetoptError as err:
         # print help information and exit:
         print(err) # will print something like "option -a not recognized
@@ -42,9 +42,9 @@ except getopt.GetoptError as err:
 
 data_date = datetime.datetime.now()
 datestr = data_date.strftime('%Y%m%d')
-tracking_tag = 'AMOF_20230201132601';
+tracking_tag = 'AMOF_20231120125118';
 
-campaign = 'ccrest-m';
+campaign = 'cobalt';
 
 data_version = "1.0.0"
 
@@ -54,6 +54,8 @@ yaml_instrument_file = os.path.join(homepath,'amof_instruments','amof_instrument
 
 print(yaml_project_file);
 
+latest = False;
+
 for o, a in opts:
     if o == "-d":
         datestr = a;
@@ -61,17 +63,28 @@ for o, a in opts:
         inpath = a;
     elif o == "-o":
         outpath = a;
+    elif o == "-l":
+        latest = True
     else:
         assert False, "unhandled option"
 
+yearstr = datestr[0:4];
 
-keplerpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1';
-ncas_radar_vol1_path = '/gws/nopw/j04/ncas_radar_vol1';
+#keplerpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1';
+ncas_radar_path = '/gws/nopw/j04/ncas_radar_vol2';
+keplerpath = os.path.join(ncas_radar_path,'cjw','projects');
 amof_proc_path = '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-radar-mobile-ka-band-1'
-inpath = os.path.join(keplerpath,'data','campaign',campaign,'mom',datestr);
+#inpath = os.path.join(keplerpath,'data','campaign',campaign,'mom',yearstr,datestr);
 
+if latest:
+    inpath = os.path.join(keplerpath,campaign,'mom',datestr,'latest');
+    gzip_flag = False
+else:
+    inpath = os.path.join(keplerpath,campaign,'mom',datestr);
+    gzip_flag=True
+    
 #outpath = os.path.join(ncas_radar_vol1_path,'cjw','projects',campaign,'kepler','L1b',datestr);
-outpath = os.path.join(amof_proc_path,campaign,'L1b',datestr);
+outpath = os.path.join(keplerpath,campaign,'L1',datestr);
 
 
 if not os.path.isdir(outpath): 
@@ -80,5 +93,8 @@ if not os.path.isdir(outpath):
 
 azimuth_offset =0.0;
 
+print(inpath);
+print(f'latest = {latest}')
+print(f'gzip_flag={gzip_flag}')
 
-kepler_utils.process_kepler_ccrest_day_step1(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,azimuth_offset=azimuth_offset,revised_northangle=55.7,gzip_flag=True,data_version=data_version);
+kepler_utils_old.process_kepler_cobalt_day_step1_latest(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,azimuth_offset=azimuth_offset,revised_northangle=55.7,gzip_flag=gzip_flag,data_version=data_version);

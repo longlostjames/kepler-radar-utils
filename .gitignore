@@ -1,0 +1,21 @@
+# Emacs backups and autosave
+*~
+\#*\#
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Logs
+*.log
+
+# Shell script backups
+*.backup.*
+
+# NetCDF / data files
+*.nc
+*.mmclx
+
+# Misc
+BAD_SCANS

@@ -1,2387 +1,2514 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ==========================================================================
-# Module for processing mmclx radar files from Kepler (MIRA-35) radar
-# Author: Chris Walden, UK Research & Innovation and
-#                       National Centre for Atmospheric Science
-# Last modified: 02-10-2023
-# ==========================================================================
+"""
+kepler_utils_new.py
 
-"""Module for processing mmclx radar data from Kepler (MIRA-35) radar."""
+Module for processing mmclx radar files from Kepler (MIRA-35) radar
 
-module_version = 0.2;
+This module provides functions to:
+- Read MIRA-35 radar data in mmclx format
+- Convert to CF-Radial format
+- Add NCAS metadata
+- Process data for various campaigns (WOEST, CCREST, COBALT, KASBEX)
 
-import datetime, cftime
+Author: Chris Walden, UK Research & Innovation and
+        National Centre for Atmospheric Science
+Last modified: 10-08-2025
+Version: 1.1.0
+"""
 
+from typing import List, Dict, Tuple, Optional, Union, Any
+import datetime
+import cftime
 import netCDF4 as nc4
 import numpy as np
-
-import getpass, socket
+import getpass
+import socket
 import pyart
-
 from pyart.config import FileMetadata, get_fillvalue, get_metadata
 from pyart.core.radar import Radar
 from pyart.io.common import _test_arguments, make_time_unit_str
-
 import yaml
-
-import os, fnmatch
+import os
+import fnmatch
 import re
-
 import gzip
-
 from io import StringIO
+from pathlib import Path
 
-def read_mira35_mmclx_hsrhi(mmclxfiles, **kwargs):
+module_version = "1.1.0"
+
+def read_mira35_mmclx_hsrhi(mmclxfiles: List[str], **kwargs) -> Radar:
     """
     Read a set of single-sweep netCDF mmclx files from MIRA-35 radar recorded as part of HSRHI scan strategy.
-
-    Parameters
-    ----------
-    mmclxfiles : list(str)
-        List of names of mmclx netCDF files to read data from.
-
-    Returns
-    -------
-    radar : Radar
-        Radar object.
+    
+    Args:
+        mmclxfiles: List of paths to mmclx netCDF files to read data from
+        **kwargs: Additional keyword arguments
+        
+    Returns:
+        Radar object containing the merged data
+        
+    Note:
+        This function is currently incomplete and needs implementation.
     """
+    mmclxfiles.sort()
+    nsweep = len(mmclxfiles)
+    # TODO: Implement HSRHI reading functionality
+    pass
 
-    mmclxfiles.sort();
-
-    nsweep = len(mmclxfiles);
-
-def read_mira35_mmclx_vpt_multi(mmclxfiles, **kwargs):
+def read_mira35_mmclx_vpt_multi(mmclxfiles: List[str], **kwargs) -> Radar:
     """
     Read a set of netCDF mmclx files from MIRA-35 radar recorded as separate vertical pointing sweeps.
-
-    Parameters
-    ----------
-    mmclxfiles : list(str)
-        List of names of mmclx netCDF files to read data from.
-
-    Returns
-    -------
-    radar : Radar
-        Radar object.
-    """
-
-    mmclxfiles.sort();
-
-    nsweep = len(mmclxfiles);
-
-
-
-def read_mira35_mmclx(filename, gzip_flag=False, revised_northangle=55.7, **kwargs):
-    """
-    Read a netCDF mmclx file from MIRA-35 radar.
-
-    Parameters
-    ----------
-    filename : str
-        Name of mmclx netCDF file to read data from.
-
-    Returns
-    -------
-    radar : Radar
-        Radar object.
-    """
-    # List 
-    # time, range, fields, metadata, scan_name, latitude, longitude, altitude, altitude_agl,
-    # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
-    # target_scan_rate, rays_are_indexed, ray_angle_res,
-    # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
-    # scan_rate, antenna_transition, 
-    # instrument_parameters
-    # radar_calibration
-    # OK ngates
-    # OK nrays
-    # OK nsweeps
     
-    # This routine only applies to fixed platforms
-    # The following are not required for a fixed platform
-    rotation = None;
-    tilt = None;
-    roll = None;
-    drift = None;
-    heading = None;
-    pitch = None;
-    georefs_applied = None;
-     
-    # -------------------------
-    # test for non empty kwargs
-    # -------------------------
+    Args:
+        mmclxfiles: List of paths to mmclx netCDF files to read data from
+        **kwargs: Additional keyword arguments
+        
+    Returns:
+        Radar object containing the merged VPT data
+        
+    Note:
+        This function is currently incomplete and needs implementation.
+    """
+    mmclxfiles.sort()
+    nsweep = len(mmclxfiles)
+    # TODO: Implement VPT multi-sweep reading functionality
+    pass
+
+def read_mira35_mmclx(
+    filename: str, 
+    gzip_flag: bool = False, 
+    revised_northangle: float = 55.9, 
+    **kwargs
+) -> Radar:
+    """
+    Read a netCDF mmclx file from MIRA-35 radar and convert to PyART Radar object.
+    
+    This function reads a single mmclx file (either compressed or uncompressed) and converts
+    it to a PyART Radar object with appropriate metadata and field mappings.
+    
+    Args:
+        filename: Path to the mmclx netCDF file
+        gzip_flag: If True, treat file as gzip-compressed
+        revised_northangle: North angle correction in degrees (default: 55.7)
+        **kwargs: Additional keyword arguments passed to PyART
+        
+    Returns:
+        PyART Radar object containing the radar data
+        
+    Raises:
+        IOError: If file cannot be opened
+        ValueError: If required variables are missing from file
+        
+    Example:
+        >>> radar = read_mira35_mmclx('data.mmclx', gzip_flag=False, revised_northangle=56.0)
+        >>> print(f"Number of gates: {radar.ngates}")
+    """
+    # Validate arguments
     _test_arguments(kwargs)
-
-    # --------------------------------
-    # create metadata retrieval object
-    # --------------------------------
+    
+    # Initialize metadata handler
     filemetadata = FileMetadata('mmclx')
-
-    # -----------------
-    # Open netCDF4 file
-    # -----------------
-    print(f"gzip_flag={gzip_flag}")
+    
+    # Open file (compressed or uncompressed)
+    print(f"Reading file: {filename}, gzip_flag={gzip_flag}")
+    
     if gzip_flag:
-        gz = gzip.open(filename)
-        ncobj = nc4.Dataset('dummy', mode='r', memory=gz.read())
+        with gzip.open(filename) as gz:
+            ncobj = nc4.Dataset('dummy', mode='r', memory=gz.read())
     else:
         ncobj = nc4.Dataset(filename)
     
-    nrays = len(ncobj.dimensions["time"]);
-    ngates = len(ncobj.dimensions["range"]);
-    nsweeps = 1; # We only have single sweep files 
-    
-    ncvars = ncobj.variables;
-
-    # --------------------------------
-    # latitude, longitude and altitude
-    # --------------------------------
-    latitude = filemetadata('latitude')
-    longitude = filemetadata('longitude')
-    altitude = filemetadata('altitude')
-
-    z = StringIO(ncobj.getncattr('Latitude'))
-    
-    z1 = np.genfromtxt(z, dtype=None, names=['lat','zs2'])
-    if z1['zs2']==b'S' and z1['lat']>0: 
-        latitude['data'] = np.array([-z1['lat']],dtype='f4');
-    else:
-        latitude['data'] = np.array([z1['lat']],dtype='f4');  
+    try:
+        # Get dimensions
+        nrays = len(ncobj.dimensions["time"])
+        ngates = len(ncobj.dimensions["range"])
+        nsweeps = 1  # Single sweep files only
         
-    z = StringIO(ncobj.getncattr('Longitude'))
-    
-    z1 = np.genfromtxt(z, dtype=None, names=['lon','zs2'])
-    
-    if z1['zs2']==b'W' and z1['lon']>0: 
-        longitude['data'] = np.array([-z1['lon']],dtype='f4');
-    else:
-        longitude['data'] = np.array([z1['lon']],dtype='f4');  
-    
-    z = StringIO(ncobj.getncattr('Altitude'))
-    
-    z1 = np.genfromtxt(z, dtype=None, names=['alt','zs2'])
-    altitude['data'] = np.array([z1['alt']],dtype='f4')
-
-    # Original mmclx metadata
-    # -----------------------
-    # convention: "CF-1.0"
-    # location: "Chilbolton"
-    # Altitude:
-    # Latitude:
-    # Longitude:
-    # system: "B3XC"
-    # title: "MIRA Cloud Radar Data"
-    # institution: "National Centre for Atmospheric Science (NCAS)"
-    # source: "220520_101223.pds"
-    # reference: "Ka Band Cloud Radar MIRA 35, METEK GmbH www.metek.de"
-
-    # Most important information from the header structure
-    # ----------------------------------------------------
-    # nfft: "number_of_fft_points"
-    # NyquistVelocity: 
-    # nave: "number_of_spectral_averages"
-    # ovl: "overlapping_ffts_flag"
-    # zrg: "number_of_range_gates"
-    # rg0: "number_of_lowest_range_gate"
-    # drg: "range_resolution"
-    # lambda: "wavelength"
-    # range: "range_from_antenna_to_centre_of_each_range_gate"
-
-    # Most important information from the SRVI struture given at each dwell time
-    # ---------------------------------------------------------------------------
-    # time: "seconds since 1970-01-01T00:00:00Z"
-    # # microsec: 
-    # tpow: "average_transmit_power"
-    # npw1: "noise_power_co-channel"
-    # npw2: "noise_power_cross-channel"
-    # cpw1: "snr_of_calibration_signal_co-channel"
-    # cpw2: "snr_of_calibration_signal_cross-channel"
-    # grst: "general_radar_state"
-    # azi: "azimuth"
-    # elv: "elevation"
-    # aziv: "azimuth_angle_velocity"
-    # northangle: "north_angle"
-    # elvv: "elevation_angle_velocity"
-    # LO_Frequency: "transmit_frequency"
-    # DetuneFine: "detuning_of_local_scillator_detected_from_Txn_footprint"
-
-    metadata_keymap = {
-        "location": "platform",
-        "Longitude": "longitude",
-        "Latitude": "latitude",
-        "Altitude": "altitude",
-        "system": "instrument_serial_nnmber",
-        "title": "title",
-        "institution": "institution",
-        "reference": "reference",
-    }
-
- # time, range, fields, metadata, scan_name, latitude, longitude, altitude, altitude_agl,
-    # sweep_number, sweep_mode, fixed_angle, sweep_start_ray_index, sweep_end_ray_index, rays_per_sweep,
-    # target_scan_rate, rays_are_indexed, ray_angle_res,
-    # azimuth, elevation, gate_x, gate_y, gate_z, gate_longitude, gate_latitude, projection, gate_altitude,
-    # scan_rate, antenna_transition, 
-    # None rotation, tilt, roll, drift, heading, pitch
-    # ?? georefs_applied
-    # instrument_parameters
-    # radar_calibration
-
-
-
-    variables_keymap = {
-        "elv": "elevation",
-        "elvv": "elevation_angle_velocity",
-        "azi": "azimuth_angle",
-        "aziv": "azimuth_angle_velocity",
-        "nfft": "nfft",
-        "nave": "nave",
-        "prf": "prf",
-        "rg0": "rg0",
-    }
-
-    fields_keymap = {
-        "Zg": "DBZ",
-        "VELg": "VEL",
-        "RMSg": "WIDTH",
-        "LDRg": "LDR",
-        "SNRg": "SNR",
-        "RHO": "RHOHX",
-        "DPS": "PHIHX",
-    }
-
-    variables = list(variables_keymap.keys())
-
-    # SNRg, VELg, RMSg, LDRg, NPKg, SNRg
-    #RHO DPS PHOwav LDRnormal
-    # HSDco HSDcx Zg ISDRco ISDRcx 
-    # MRMco MRMcx RadarConst SNRCorFaCo SNRCorFaCx SKWg
-
-    # Variables
-    # nfft
-    # prf
-    # NyquistVelocity
-    # nave
-    
-    # metadata
-    #metadata = filemetadata("metadata")
-    #metadata_mapping = {
-    #    "vcp-value": "vcp",
-    #    "radarName-value": "radar_name",
-    #    "ConversionPlugin": "conversion_software",
-    #}
-    #for netcdf_attr, metadata_key in metadata_mapping.items():
-    #    if netcdf_attr in dset.ncattrs():
-    #        metadata[metadata_key] = dset.getncattr(netcdf_attr)
-
-    # --------
-    # metadata
-    # --------
-    metadata = filemetadata('metadata')
-    for k in ['institution', 'title', 'used_algorithms']:
-        if k in ncobj.ncattrs(): 
-            metadata[k] = ncobj.getncattr(k)
-
-    metadata['instrument_name']='ncas-radar-mobile-ka-band-1'
-
-    # ------------------------------------------
-    # sweep_start_ray_index, sweep_end_ray_index
-    # ------------------------------------------
-    sweep_start_ray_index = filemetadata("sweep_start_ray_index")
-    sweep_end_ray_index = filemetadata("sweep_end_ray_index")
-    sweep_start_ray_index["data"] = np.array([0], dtype="int32")
-    sweep_end_ray_index["data"] = np.array([nrays - 1], dtype="int32")
-
-    # ------------
-    # sweep number
-    # ------------
-    sweep_number = filemetadata("sweep_number")
-    sweep_number["data"] = np.array([0], dtype="int32")
-
-    # -----------------------
-    # sweep_mode, fixed_angle
-    # -----------------------
-    sweep_modes = {'ppi' : 'ppi', 'rhi' : 'rhi', 'vert' : 'vertical_pointing','man' : 'manual_rhi'}
-
-    sweep_mode = filemetadata("sweep_mode")
-
-    print(filename.lower());
-
-    scan_name = None;
-    sweep_mode["data"] = np.array(1 * [None]);
-
-    for key, value in sweep_modes.items():
-        if key in filename.lower(): 
-            scan_name = value;
-            sweep_mode["data"] = np.array(1 * [value]);
-            sweep_mode["data"][0] = value;
-            break;
-    
-    print(scan_name);
-
-    #    #fixed_angles = {'ppi' : ncvars['elv'][0], 'rhi' : ncvars['azi'][0]+ncvars['northangle'][0], 'vertical_pointing' : ncvars['elv'][0], "manual_rhi" : ncvars['azi'][0]}
-    #fixed_angles = {'ppi' : ncvars['elv'][10], 'rhi' : ncvars['azi'][10]+revised_northangle, 'vertical_pointing' : ncvars['elv'][10], "manual_rhi" : ncvars['azi'][10]}
-
-    fixed_angle = filemetadata("fixed_angle")
-
-    if scan_name in ['rhi','manual_rhi']:
-        fixed_angle_value = np.round((ncvars['azi'][5]+revised_northangle)%360,2);
-        fixed_angle["data"] = np.array(1 * [fixed_angle_value], dtype='f'); 
-    elif scan_name in ['ppi','vertical_pointing']:
-        fixed_angle_value = np.round(ncvars['elv'][5],2);
-        fixed_angle["data"] = np.array(1 * [fixed_angle_value], dtype='f');
-    else:
-        fixed_angle["data"] = np.array(1 * [None]);
-    
-    print(fixed_angle["data"])
-
-
-    # time
-    # interpolate between the first and last timestamps in the Time variable
-    time = filemetadata('time')
-    
-    dtime = cftime.num2pydate(ncvars['time'][:],'seconds since 1970-01-01 00:00:00')
-
-    for idx, x in np.ndenumerate(dtime):
-        dtime[idx]=x.replace(microsecond=ncvars['microsec'][idx])
-            
-    base_time = dtime[0].replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    time['units'] = make_time_unit_str(base_time);  
-    time['data']  = cftime.date2num(dtime,time['units']);
-
-    # range
-    # -----
-    _range = filemetadata('range');
-    _range['data'] = ncvars['range'][:];
-    _range['units'] = 'metres';
-    #_range['metres_to_centre_of_first_gate'] = _range['data'][0];
-    _range['proposed_standard_name'] = "projection_range_coordinate";
-    _range['long_name'] = "distance to centre of each range gate";
-    # assuming the distance between all gates is constant, may not
-    # always be true.
-    #_range['metres_between_gates'] = (_range['data'][1] - _range['data'][0])
-
-    # azimuth, elevation
-    # ------------------
-    #ray_duration0 = time['data'][1]-time['data'][0]; 
-    #ray_duration = np.insert(time['data'][1:]-time['data'][:-1],0,ray_duration0);
-    ray_duration = time['data'][1:]-time['data'][:-1];
-
-    # scan rate
-    # ---------
-    scan_rates = {'ppi' : ncvars['aziv'][:], 'rhi' : ncvars['elvv'][:]}
-
-    scan_rate = filemetadata("scan_rate")
-    antenna_transition = filemetadata("antenna_transition")
-    target_scan_rate = filemetadata("target_scan_rate")
-
-    if scan_name in  ['ppi','rhi']:
-        scan_rate['data'] = scan_rates[scan_name];
-        scan_rate['units']='degrees_per_second';
-        scan_rate['_FillValue'] = -9999.
-        scan_rate['long_name'] = 'antenna angle scan rate';
-        antenna_transition['data'] = np.where(abs(scan_rate['data'])<0.01,1,0).astype('int8');
-        antenna_transition['long_name'] = "antenna is in transition between sweeps" ;
-        antenna_transition['units'] = "" ;
-        antenna_transition['_FillValue'] = -128 ;
-        antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise" ;
-
-        target_scan_rate = filemetadata("target_scan_rate")
-        target_scan_rate["data"] = np.array([4.0], dtype="f4")
-        scanning_indices = np.where(antenna_transition['data']==0)[0];
-        target_scan_rate['data'] = np.mean(scan_rate['data'][scanning_indices]);
-        at_speed = np.where(abs(scan_rate['data']-target_scan_rate['data'])<0.06)[0];
-        target_scan_rate['data'] = np.round(np.mean(scan_rate['data'][at_speed]),2);
-        target_scan_rate['long_name'] = 'target scan rate for sweep';
-        target_ray_duration = np.round(np.mean(ray_duration),3);
-        ok_duration = np.where(ray_duration/target_ray_duration<1.5);
-        target_ray_duration = np.round(np.mean(ray_duration[ok_duration]),3);
-
-        print(target_ray_duration);
-
-        ray_duration = np.insert(ray_duration,0,target_ray_duration);
-
-        long_duration  = np.where(ray_duration/target_ray_duration>1.5)[0];
-    
-        print(f'long-duration indices:{long_duration}')
-
-    else:
-        scan_rate  = None;
-        antenna_transition = None;
-        target_scan_rate = None;
-    
-    
-    azimuth = filemetadata('azimuth')
-    elevation = filemetadata('elevation')
-
-    azimuth['data'] = (ncvars['azi'][:]+revised_northangle) % 360;
-    elevation['data'] = ncvars['elv'][:];
-
-    print("i am here")
-
-    if scan_name in  ['ppi','rhi']:
-        #azimuth['data'] = (ncvars['azi'][:]+ncvars['northangle'][:]) % 360;
-        azimuth['data'] -= 0.5*ray_duration * ncvars['aziv'][:] ;
-        azimuth['units'] = "degrees";
-        azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle";
-        azimuth['long_name'] = "sensor to target azimuth angle";
-
-        # Special case for long-duration glitches
-        azimuth['data'][long_duration] = (ncvars['azi'][long_duration]+revised_northangle) % 360;
-        azimuth['data'][long_duration] -= 0.5*target_ray_duration * ncvars['aziv'][long_duration];
-    
-
-        elevation['data'] -= 0.5*ray_duration * ncvars['elvv'][:];
-        elevation['units'] = "degrees";
-        elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle";
-        elevation['long_name'] = "sensor to target elevation angle";
-
-        # Special case for long-duration glitches
-        elevation['data'][long_duration] = ncvars['elv'][long_duration];
-        elevation['data'][long_duration] -= 0.5*target_ray_duration * ncvars['elvv'][long_duration];
-
-
-    metadata['time_coverage_start'] = datetime.datetime.strftime(dtime[0],'%Y-%m-%dT%H:%M:%SZ');
-    metadata['time_coverage_end'] = datetime.datetime.strftime(dtime[-1],'%Y-%m-%dT%H:%M:%SZ');
-
-    print("now i am here")
-
-    # ------
-    # fields
-    # ------
-    # mmclx files contain the following: 
-    # where x="g" (global),"" (hydrometeors),"plank" (plankton),"rain","cl" 
-    # SNRx - USE THIS
-    # VELx - USE THIS
-    # RMSx - USE THIS
-    # LDRx - USE THIS
-
-    # LWC (liquid water content of peaks classified as rain)
-    # RR (rain rate of peaks classified as rain)
-    # Ze (equivalent radar reflectivity of all hydrometeors)
-
-    # Zg (equivalent radar relectivity of all targets (global)) - USE THIS
-    
-    # Z (similar to Ze but with Mie correction applied, and a pressure and temperature dependent value of |Kw|^2
-    # MeltHeiDet (melting layer height detected from LDR if detected, else -1)
-    # MeltHeiDb (melting layer height as deduced from external sources)
-    # MeltHei (melting layer height from both sources)
-    # TEMP (temperature profile faked form external sources)
-
-    # ISDRco (ratio between power integrated over the largest peak and the noise level - to indicate saturation) - MAYBE USE
-    # ISDRcx (cross-polar channel version of ISDRco) - MAYBE USE
-    # RadarConst (radar constant related to 5km range, Zx = RadarConst*SNRx*(range/5 km)^2), with range at the centre of each range gate) - MAYBE USE
-    # SNRCorFaCo () - MAYBE USE
-    # SNRCorFaCx () - MAYBE USE
-    
-
-    fields = {}
-
-
-    #linear_to_log_fields = {"Zg"}
-    #for key, value in fields_keymap.items():
-    #    print(key)
-    #    if key in ncvars:
-    #        field_name = value;
-    #        field_dic = filemetadata(field_name);
-    #        field_dic['_FillValue'] = get_fillvalue();
-    #        field_dic['units'] = ncvars[key].units;
-    #        if key in linear_to_log_fields:
-    #            field_dic['data'] = 10.0*np.log10(ncvars[key][:]);
-    #        else:
-    #            field_dic['data'] = ncvars[key][:];
-    #        fields[field_name] = field_dic;
-
-    if "Zg" in ncvars:
-        field_name = fields_keymap['Zg']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = 'dBZ'
-        field_dic['data'] = 10.0*np.log10(ncvars['Zg'][:]);
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "radar equivalent reflectivity factor";
-        field_dic['standard_name'] = "equivalent_reflectivity_factor";
-        field_dic['proposed_standard_name'] =  "radar_equivalent_reflectivity_factor";   
-        fields[field_name] = field_dic
-    else:
-        print("Zg does not exist")
-
-    print("Done Zg")
-
-    if "VELg" in ncvars:
-        field_name = fields_keymap['VELg']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = 'm s-1'
-        field_dic['data'] = ncvars['VELg'][:];
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "radial velocity of scatterers away from instrument";
-        field_dic['standard_name'] = "radial_velocity_of_scatterers_away_from_instrument";
-        field_dic['field_folds'] = 'true'
-        vfold = ncvars['prf'][:] * ncvars['lambda'][:] / 4.0;
-        field_dic['field_limit_lower'] = -vfold;
-        field_dic['field_limit_upper'] = vfold;
-        fields[field_name] = field_dic
-    else:
-        print("VELg does not exist")
-
-    print("Done VELg")
-
-
-    if "RMSg" in ncvars:
-        field_name = fields_keymap['RMSg']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = 'm s-1'
-        field_dic['data'] = ncvars['RMSg'][:];
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "radar doppler spectrum width";
-        field_dic['proposed_standard_name'] = "radar_doppler_spectrum_width";
-        fields[field_name] = field_dic
-    else:
-        print("RMSg does not exist")
-
-    print("Done RMSg");
-
-    if "LDRg" in ncvars:
-        field_name = fields_keymap['LDRg']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = 'dB'
-        field_dic['data'] = 10.0*np.log10(ncvars['LDRg'][:]);
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "radar linear depolarization ratio";
-        field_dic['proposed_standard_name'] = "radar_linear_depolarization_ratio";
-        fields[field_name] = field_dic
-    else:
-        print("LDRg does not exist")
-
-    print("Done LDRg");
-
-    if "SNRg" in ncvars:
-        field_name = fields_keymap['SNRg']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = 'dB'
-        field_dic['data'] = 10.0*np.log10(ncvars['SNRg'][:]);
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "radar signal to noise ratio";
-        field_dic['proposed_standard_name'] = "radar_signal_to_noise_ratio";
-        fields[field_name] = field_dic
-    else:
-        print("SNRg does not exist")
-    
-    print("Done SNRg");
-
-
-    if "RHO" in ncvars:
-        field_name = fields_keymap['RHO']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = ''
-        field_dic['data'] = ncvars['RHO'][:];
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "co- to cross-polar correlation ratio for horizontal transmitted polarization";
-        field_dic['proposed_standard_name'] = "co_to_cross_polar_correlation_ratio_h"
-        fields[field_name] = field_dic
-    else:
-        print("RHO does not exist")
-
-    print("Done RHO")
-
-    if "DPS" in ncvars:
-        field_name = fields_keymap['DPS']
-        field_dic = filemetadata(field_name)
-        field_dic['_FillValue'] = get_fillvalue();
-        field_dic['units'] = 'degrees'
-        field_dic['data'] = ncvars['DPS'][:];
-        isnan = np.isnan(field_dic['data'][:]);
-        field_dic['data'][isnan] = field_dic['_FillValue'];
-        if scan_name in  ['ppi','rhi']:
-            field_dic['data'][long_duration,:] = field_dic['_FillValue'];
-            field_dic['data'][long_duration-1,:] = field_dic['_FillValue'];
-        field_dic['long_name'] =  "cross-polar differential phase";
-        field_dic['proposed_standard_name'] = "cross_polar_differential_phase"
-        fields[field_name] = field_dic
-    else:
-        print("DPS does not exist")
-
-    print("Done DPS")
-
-    # instrument_parameters
-    instrument_parameters = {}
-    radar_parameters = {}
-
-    radar_calibration = {}
-
-    hrd_variables = {};
-
-    if 'hrd' in ncobj.ncattrs():
-        hrd_attribute_value = ncobj.getncattr('hrd')
-
-        print(hrd_attribute_value);
-
-        if type(hrd_attribute_value) == str:
-            # Parse the attribute value while ignoring lines starting with "DESCR"
-            for line in hrd_attribute_value.split('\n'):
-                if not line.startswith("DESCR") and ':' in line:
-                    key, value = line.split(':', 1)
-                    print(key, value)
-                    hrd_variables[key.strip()] = convert_to_numerical(value.strip())
-        else:
-            print("Value of 'hrd' attribute is not a string.")
-    else:
-        print("'hrd' attribute not found in the NetCDF file.")
-
-
-    print(hrd_variables)
-
-
-    if "prf" in ncvars:
-        dic = filemetadata("prt")
-        prt = 1.0/ncvars["prf"][:]
-        dic["data"] = np.ones((nrays,), dtype="float32") * prt
-        instrument_parameters["prt"] = dic
-
-    if "PULSE_WIDTH" in hrd_variables:
-        dic = filemetadata("pulse_width")
-        pulse_width = hrd_variables["PULSE_WIDTH"]
-        dic["data"] = np.ones((nrays,), dtype="float32") * pulse_width
-        instrument_parameters["pulse_width"] = dic
-
-    if "tpow" in ncvars:
-        dic = filemetadata("radar_measured_transmit_power_h")
-        txpower = 10.0*np.log10(ncvars["tpow"][:])+30;
-        dic["data"] = txpower
-        instrument_parameters["radar_measured_transmit_power_h"] = dic
+        print(f"File dimensions - nrays: {nrays}, ngates: {ngates}, nsweeps: {nsweeps}")
         
-    #if "NyquistVelocity-value" in dset.ncattrs():
-    #    dic = filemetadata("nyquist_velocity")
-    #    nyquist_velocity = float(dset.getncattr("NyquistVelocity-value"))
-    #    dic["data"] = np.ones((nrays,), dtype="float32") * nyquist_velocity
-    #    instrument_parameters["nyquist_velocity"] = dic
-
-    #if "Beamwidth" in dset.variables:
-    #    dic = filemetadata("radar_beam_width_h")
-    #    dic["data"] = dset.variables["Beamwidth"][:]
-    #    instrument_parameters["radar_beam_width_h"] = dic
-
+        # Extract location information from global attributes
+        latitude, longitude, altitude = _extract_location_info(ncobj, filemetadata)
+        
+        # Extract metadata
+        metadata = _extract_metadata(ncobj, filemetadata)
+        
+        # Extract time information
+        time = _extract_time_info(ncobj, filemetadata)
+        
+        # Extract range information
+        _range = _extract_range_info(ncobj, filemetadata)
+        
+        # Determine scan type and fixed angle
+        scan_name, sweep_mode, fixed_angle = _determine_scan_type(filename, ncobj, revised_northangle, filemetadata)
+        
+        # Extract angle information
+        azimuth, elevation, scan_rate, antenna_transition, target_scan_rate = _extract_angle_info(
+            ncobj, scan_name, time, revised_northangle, filemetadata
+        )
+        
+        # Create sweep information
+        sweep_info = _create_sweep_info(nrays, filemetadata)
+        
+        # Extract radar fields
+        fields = _extract_radar_fields(ncobj, scan_name, time, filemetadata)
+        
+        # Extract instrument parameters
+        instrument_parameters = _extract_instrument_parameters(ncobj, nrays, filemetadata)
+        
+    finally:
+        ncobj.close()
+        if gzip_flag:
+            gz.close()
     
-    ncobj.close()
-    if gzip_flag:
-        gz.close();
-
+    # Create and return Radar object
     radar = Radar(
-        time,
-        _range,
-        fields,
-        metadata,
-        scan_name,
-        latitude,
-        longitude,
-        altitude,
-        sweep_number,
-        sweep_mode,
-        fixed_angle,
-        sweep_start_ray_index,
-        sweep_end_ray_index,
-        azimuth,
-        elevation,
+        time, _range, fields, metadata, scan_name,
+        latitude, longitude, altitude,
+        sweep_info['sweep_number'], sweep_mode, fixed_angle,
+        sweep_info['sweep_start_ray_index'], sweep_info['sweep_end_ray_index'],
+        azimuth, elevation,
         target_scan_rate=target_scan_rate,
         scan_rate=scan_rate,
         antenna_transition=antenna_transition,
         instrument_parameters=instrument_parameters,
-        radar_calibration=radar_calibration
+        radar_calibration={}  # Empty for now
     )
-
-    print("last line")
+    
+    print("Successfully created Radar object")
     return radar
 
-def convert_to_numerical(value):
+def _extract_location_info(ncobj: nc4.Dataset, filemetadata: FileMetadata) -> Tuple[Dict, Dict, Dict]:
+    """
+    Extract latitude, longitude, and altitude from netCDF object.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Tuple of (latitude_dict, longitude_dict, altitude_dict)
+    """
+    latitude = filemetadata('latitude')
+    longitude = filemetadata('longitude') 
+    altitude = filemetadata('altitude')
+    
+    # Parse latitude
+    lat_str = ncobj.getncattr('Latitude')
+    z = StringIO(lat_str)
+    lat_data = np.genfromtxt(z, dtype=None, names=['lat', 'direction'])
+    
+    if lat_data['direction'] == b'S' and lat_data['lat'] > 0:
+        latitude['data'] = np.array([-lat_data['lat']], dtype='f4')
+    else:
+        latitude['data'] = np.array([lat_data['lat']], dtype='f4')
+    
+    # Parse longitude  
+    lon_str = ncobj.getncattr('Longitude')
+    z = StringIO(lon_str)
+    lon_data = np.genfromtxt(z, dtype=None, names=['lon', 'direction'])
+    
+    if lon_data['direction'] == b'W' and lon_data['lon'] > 0:
+        longitude['data'] = np.array([-lon_data['lon']], dtype='f4')
+    else:
+        longitude['data'] = np.array([lon_data['lon']], dtype='f4')
+    
+    # Parse altitude
+    alt_str = ncobj.getncattr('Altitude')
+    z = StringIO(alt_str)
+    alt_data = np.genfromtxt(z, dtype=None, names=['alt', 'units'])
+    altitude['data'] = np.array([alt_data['alt']], dtype='f4')
+    
+    return latitude, longitude, altitude
+
+def _extract_metadata(ncobj: nc4.Dataset, filemetadata: FileMetadata) -> Dict:
+    """
+    Extract global metadata from netCDF object.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Dictionary containing metadata
+    """
+    metadata = filemetadata('metadata')
+    
+    # Extract standard attributes
+    for attr in ['institution', 'title', 'used_algorithms']:
+        if attr in ncobj.ncattrs():
+            metadata[attr] = ncobj.getncattr(attr)
+    
+    metadata['instrument_name'] = 'ncas-mobile-ka-band-radar-1'
+    
+    return metadata
+
+def _extract_time_info(ncobj: nc4.Dataset, filemetadata: FileMetadata) -> Dict:
+    """
+    Extract and process time information from netCDF object.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Dictionary containing time information
+    """
+    time = filemetadata('time')
+    
+    # Convert time with microsecond precision
+    dtime = cftime.num2pydate(ncobj.variables['time'][:], 'seconds since 1970-01-01 00:00:00')
+    
+    # Add microsecond information
+    for idx, dt in np.ndenumerate(dtime):
+        dtime[idx] = dt.replace(microsecond=ncobj.variables['microsec'][idx])
+    
+    # Set time reference to start of day
+    base_time = dtime[0].replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    time['units'] = make_time_unit_str(base_time)
+    time['data'] = cftime.date2num(dtime, time['units'])
+    
+    print(f"Time data range: {time['data'][0]:.3f} to {time['data'][-1]:.3f} {time['units']}")
+    
+    return time
+
+def _extract_range_info(ncobj: nc4.Dataset, filemetadata: FileMetadata) -> Dict:
+    """
+    Extract range gate information from netCDF object.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset  
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Dictionary containing range information
+    """
+    _range = filemetadata('range')
+    _range['data'] = ncobj.variables['range'][:]
+    _range['units'] = 'metres'
+    _range['proposed_standard_name'] = "projection_range_coordinate"
+    _range['long_name'] = "distance to centre of each range gate"
+    
+    return _range
+
+def _determine_scan_type(filename: str, ncobj: nc4.Dataset, revised_northangle: float, filemetadata: FileMetadata) -> Tuple[str, Dict, Dict]:
+    """
+    Determine scan type and calculate fixed angle from filename and data.
+    
+    Args:
+        filename: Path to the data file
+        ncobj: Open netCDF4 Dataset
+        revised_northangle: North angle correction in degrees
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Tuple of (scan_name, sweep_mode_dict, fixed_angle_dict)
+    """
+    sweep_modes = {
+        'ppi': 'ppi',
+        'rhi': 'rhi', 
+        'vert': 'vertical_pointing',
+        'man': 'manual_rhi'
+    }
+    
+    sweep_mode = filemetadata("sweep_mode")
+    fixed_angle = filemetadata("fixed_angle")
+    
+    # Determine scan type from filename
+    scan_name = None
+    filename_lower = filename.lower()
+    
+    for key, value in sweep_modes.items():
+        if key in filename_lower:
+            scan_name = value
+            sweep_mode["data"] = np.array([value])
+            break
+    
+    if scan_name is None:
+        sweep_mode["data"] = np.array([None])
+        fixed_angle["data"] = np.array([None])
+        return scan_name, sweep_mode, fixed_angle
+    
+    # Calculate fixed angle based on scan type
+    nrays = len(ncobj.dimensions['time'])
+    i4fixed_angle = min(4, nrays - 1)  # Use 5th ray or last ray if fewer than 5
+    
+    ncvars = ncobj.variables
+    
+    if scan_name in ['rhi', 'manual_rhi']:
+        # For RHI, fixed angle is the azimuth
+        fixed_angle_value = np.round((ncvars['azi'][i4fixed_angle] + revised_northangle) % 360, 2)
+        fixed_angle["data"] = np.array([fixed_angle_value], dtype='f')
+    elif scan_name in ['ppi', 'vertical_pointing']:
+        # For PPI/VPT, fixed angle is the elevation
+        fixed_angle_value = np.round(ncvars['elv'][i4fixed_angle], 2)
+        fixed_angle["data"] = np.array([fixed_angle_value], dtype='f')
+    
+    print(f"Detected scan type: {scan_name}, fixed angle: {fixed_angle['data'][0]}")
+    
+    return scan_name, sweep_mode, fixed_angle
+
+def _extract_angle_info(
+    ncobj: nc4.Dataset, 
+    scan_name: str, 
+    time: Dict, 
+    revised_northangle: float,
+    filemetadata: FileMetadata
+) -> Tuple[Dict, Dict, Optional[Dict], Optional[Dict], Optional[Dict]]:
+    """
+    Extract azimuth, elevation and scan rate information.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset
+        scan_name: Type of scan (ppi, rhi, etc.)
+        time: Time information dictionary
+        revised_northangle: North angle correction in degrees
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Tuple of (azimuth, elevation, scan_rate, antenna_transition, target_scan_rate)
+    """
+    ncvars = ncobj.variables
+    
+    azimuth = filemetadata('azimuth')
+    elevation = filemetadata('elevation')
+    
+    # Basic angle assignments
+    azimuth['data'] = (ncvars['azi'][:] + revised_northangle) % 360
+    elevation['data'] = ncvars['elv'][:]
+    
+    # Calculate ray durations for scan rate correction
+    ray_duration = np.diff(time['data'])
+    
+    if scan_name in ['ppi', 'rhi']:
+        # For scanning modes, calculate scan rates and antenna transitions
+        scan_rate = filemetadata("scan_rate")
+        antenna_transition = filemetadata("antenna_transition") 
+        target_scan_rate = filemetadata("target_scan_rate")
+        
+        # Determine primary scan rate variable based on scan type
+        if scan_name == 'ppi':
+            scan_rate['data'] = ncvars['aziv'][:]
+        else:  # rhi
+            scan_rate['data'] = ncvars['elvv'][:]
+            
+        scan_rate['units'] = 'degrees_per_second'
+        scan_rate['long_name'] = 'antenna angle scan rate'
+        
+        # Identify antenna transitions (very low scan rates)
+        antenna_transition['data'] = np.where(np.abs(scan_rate['data']) < 0.01, 1, 0).astype('int8')
+        antenna_transition['long_name'] = "antenna is in transition between sweeps"
+        antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise"
+        
+        # Calculate target scan rate from non-transitioning periods
+        scanning_indices = np.where(antenna_transition['data'] == 0)[0]
+        if len(scanning_indices) > 0:
+            target_rate = np.mean(scan_rate['data'][scanning_indices])
+            target_scan_rate['data'] = np.round(target_rate, 2)
+        else:
+            target_scan_rate['data'] = np.array([4.0], dtype="f4")
+            
+        target_scan_rate['long_name'] = 'target scan rate for sweep'
+        
+        # Apply timing corrections to angles
+        _apply_timing_corrections(azimuth, elevation, ncvars, ray_duration, revised_northangle)
+        
+    else:
+        # For non-scanning modes (VPT), no scan rate information
+        scan_rate = None
+        antenna_transition = None  
+        target_scan_rate = None
+    
+    return azimuth, elevation, scan_rate, antenna_transition, target_scan_rate
+
+def _apply_timing_corrections(
+    azimuth: Dict, 
+    elevation: Dict, 
+    ncvars: Dict, 
+    ray_duration: np.ndarray,
+    revised_northangle: float
+) -> None:
+    """
+    Apply timing corrections to azimuth and elevation angles.
+    
+    This corrects for the fact that angles are recorded at the start of each ray,
+    but we want angles at the center of each ray.
+    
+    Args:
+        azimuth: Azimuth data dictionary (modified in place)
+        elevation: Elevation data dictionary (modified in place) 
+        ncvars: NetCDF variables
+        ray_duration: Array of ray durations
+        revised_northangle: North angle correction
+    """
+    # Calculate target ray duration and identify anomalies
+    target_ray_duration = np.round(np.mean(ray_duration), 3)
+    ok_duration = np.where(ray_duration / target_ray_duration < 1.5)[0]
+    
+    if len(ok_duration) > 0:
+        target_ray_duration = np.round(np.mean(ray_duration[ok_duration]), 3)
+    
+    # Prepend target duration for first ray
+    ray_duration_extended = np.insert(ray_duration, 0, target_ray_duration)
+    
+    # Find rays with anomalously long durations
+    long_duration = np.where(ray_duration_extended / target_ray_duration > 1.5)[0]
+    
+    print(f'Long-duration ray indices: {long_duration}')
+    
+    # Apply corrections for azimuth
+    azimuth['data'] -= 0.5 * ray_duration_extended * ncvars['aziv'][:]
+    azimuth['units'] = "degrees"
+    azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle"
+    azimuth['long_name'] = "sensor to target azimuth angle"
+    
+    # Special handling for long-duration rays
+    for idx in long_duration:
+        if idx < len(azimuth['data']):
+            azimuth['data'][idx] = (ncvars['azi'][idx] + revised_northangle) % 360
+            azimuth['data'][idx] -= 0.5 * target_ray_duration * ncvars['aziv'][idx]
+    
+    # Apply corrections for elevation
+    elevation['data'] -= 0.5 * ray_duration_extended * ncvars['elvv'][:]
+    elevation['units'] = "degrees"
+    elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle" 
+    elevation['long_name'] = "sensor to target elevation angle"
+    
+    # Special handling for long-duration rays
+    for idx in long_duration:
+        if idx < len(elevation['data']):
+            elevation['data'][idx] = ncvars['elv'][idx]
+            elevation['data'][idx] -= 0.5 * target_ray_duration * ncvars['elvv'][idx]
+
+def _create_sweep_info(nrays: int, filemetadata: FileMetadata) -> Dict:
+    """
+    Create sweep indexing information.
+    
+    Args:
+        nrays: Number of rays in the sweep
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Dictionary containing sweep indexing information
+    """
+    sweep_info = {}
+    
+    sweep_info['sweep_start_ray_index'] = filemetadata("sweep_start_ray_index")
+    sweep_info['sweep_end_ray_index'] = filemetadata("sweep_end_ray_index")
+    sweep_info['sweep_number'] = filemetadata("sweep_number")
+    
+    sweep_info['sweep_start_ray_index']["data"] = np.array([0], dtype="int32")
+    sweep_info['sweep_end_ray_index']["data"] = np.array([nrays - 1], dtype="int32") 
+    sweep_info['sweep_number']["data"] = np.array([0], dtype="int32")
+    
+    return sweep_info
+
+def _extract_radar_fields(ncobj: nc4.Dataset, scan_name: str, time: Dict, filemetadata: FileMetadata) -> Dict:
+    """
+    Extract radar fields (DBZ, VEL, WIDTH, etc.) from netCDF object.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset
+        scan_name: Type of scan
+        time: Time information for identifying bad rays
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Dictionary of radar fields
+    """
+    ncvars = ncobj.variables
+    fields = {}
+    
+    # Field mappings from mmclx to CF-Radial names
+    fields_keymap = {
+        "Zg": "DBZ",      # Equivalent reflectivity factor
+        "VELg": "VEL",    # Radial velocity  
+        "RMSg": "WIDTH",  # Spectrum width
+        "LDRg": "LDR",    # Linear depolarization ratio
+        "SNRg": "SNR",    # Signal-to-noise ratio
+        "RHO": "RHOHX",   # Correlation coefficient
+        "DPS": "PHIHX",   # Differential phase
+    }
+    
+    # Identify problematic rays for scanning modes
+    long_duration_rays = []
+    if scan_name in ['ppi', 'rhi']:
+        ray_duration = np.diff(time['data'])
+        target_duration = np.mean(ray_duration)
+        long_duration_rays = np.where(ray_duration / target_duration > 1.5)[0]
+    
+    # Process each available field
+    for mmclx_name, cfradial_name in fields_keymap.items():
+        if mmclx_name in ncvars:
+            print(f"Processing field: {mmclx_name} -> {cfradial_name}")
+            
+            field_dict = filemetadata(cfradial_name)
+            field_dict['_FillValue'] = get_fillvalue()
+            
+            # Handle different field types
+            if mmclx_name in ["Zg", "LDRg", "SNRg"]:
+                # Convert linear to log scale
+                field_dict['data'] = 10.0 * np.log10(ncvars[mmclx_name][:])
+                field_dict['units'] = 'dBZ' if mmclx_name == "Zg" else 'dB'
+            else:
+                # Keep in original units
+                field_dict['data'] = ncvars[mmclx_name][:]
+
+                if mmclx_name in ["VELg", "RMSg"]:
+                    field_dict['units'] = 'm s-1'
+                elif mmclx_name == "RHO":
+                    field_dict['units'] = ''
+                elif mmclx_name == "DPS":
+                    field_dict['units'] = 'degrees'
+            
+            # Handle missing/invalid values
+            invalid_mask = np.isnan(field_dict['data'])
+            field_dict['data'][invalid_mask] = field_dict['_FillValue']
+            
+            # Mask problematic rays in scanning modes  
+            if scan_name in ['ppi', 'rhi'] and len(long_duration_rays) > 0:
+                field_dict['data'][long_duration_rays, :] = field_dict['_FillValue']
+                field_dict['data'][long_duration_rays - 1, :] = field_dict['_FillValue']
+            
+            # Add field-specific metadata
+            _add_field_metadata(field_dict, cfradial_name, ncvars)
+            
+            fields[cfradial_name] = field_dict
+            
+        else:
+            print(f"Field {mmclx_name} not found in file")
+    
+    return fields
+
+def _add_field_metadata(field_dict: Dict, cfradial_name: str, ncvars: Dict) -> None:
+    """
+    Add field-specific metadata and attributes.
+    
+    Args:
+        field_dict: Field dictionary to modify
+        cfradial_name: CF-Radial field name
+        ncvars: NetCDF variables for extracting additional info
+    """
+    metadata_map = {
+        "DBZ": {
+            "long_name": "radar equivalent reflectivity factor",
+            "standard_name": "equivalent_reflectivity_factor",
+            "proposed_standard_name": "radar_equivalent_reflectivity_factor"
+        },
+        "VEL": {
+            "long_name": "radial velocity of scatterers away from instrument", 
+            "standard_name": "radial_velocity_of_scatterers_away_from_instrument",
+            "field_folds": "true"
+        },
+        "WIDTH": {
+            "long_name": "radar doppler spectrum width",
+            "proposed_standard_name": "radar_doppler_spectrum_width"
+        },
+        "LDR": {
+            "long_name": "radar linear depolarization ratio",
+            "proposed_standard_name": "radar_linear_depolarization_ratio"  
+        },
+        "SNR": {
+            "long_name": "radar signal to noise ratio",
+            "proposed_standard_name": "radar_signal_to_noise_ratio"
+        },
+        "RHOHX": {
+            "long_name": "co- to cross-polar correlation ratio for horizontal transmitted polarization",
+            "proposed_standard_name": "co_to_cross_polar_correlation_ratio_h"
+        },
+        "PHIHX": {
+            "long_name": "cross-polar differential phase",
+            "proposed_standard_name": "cross_polar_differential_phase"
+        }
+    }
+    
+    if cfradial_name in metadata_map:
+        field_dict.update(metadata_map[cfradial_name])
+    
+    # Add velocity folding information
+    if cfradial_name == "VEL" and 'prf' in ncvars and 'lambda' in ncvars:
+        vfold = ncvars['prf'][:] * ncvars['lambda'][:] / 4.0
+        field_dict['field_limit_lower'] = -vfold
+        field_dict['field_limit_upper'] = vfold
+
+def _extract_instrument_parameters(ncobj: nc4.Dataset, nrays: int, filemetadata: FileMetadata) -> Dict:
+    """
+    Extract instrument parameters from netCDF object.
+    
+    Args:
+        ncobj: Open netCDF4 Dataset
+        nrays: Number of rays
+        filemetadata: PyART FileMetadata object
+        
+    Returns:
+        Dictionary of instrument parameters
+    """
+    ncvars = ncobj.variables
+    instrument_parameters = {}
+    
+    # Pulse repetition time
+    if "prf" in ncvars:
+        prt_dict = filemetadata("prt")
+        prt = 1.0 / ncvars["prf"][:]
+        prt_dict["data"] = np.ones((nrays,), dtype="float32") * prt
+        instrument_parameters["prt"] = prt_dict
+    
+    # Parse hardware parameters from 'hrd' attribute
+    hrd_variables = {}
+    if 'hrd' in ncobj.ncattrs():
+        hrd_attribute_value = ncobj.getncattr('hrd')
+        hrd_variables = _parse_hrd_attribute(hrd_attribute_value)
+    
+    # Pulse width
+    if "PULSE_WIDTH" in hrd_variables:
+        pw_dict = filemetadata("pulse_width")
+        pulse_width = hrd_variables["PULSE_WIDTH"]
+        pw_dict["data"] = np.ones((nrays,), dtype="float32") * pulse_width
+        instrument_parameters["pulse_width"] = pw_dict
+    
+    # Transmit power
+    if "tpow" in ncvars:
+        tp_dict = filemetadata("radar_measured_transmit_power_h")
+        txpower = 10.0 * np.log10(ncvars["tpow"][:]) + 30  # Convert to dBm
+        tp_dict["data"] = txpower
+        instrument_parameters["radar_measured_transmit_power_h"] = tp_dict
+    
+    return instrument_parameters
+
+def _parse_hrd_attribute(hrd_attribute_value: str) -> Dict:
+    """
+    Parse the 'hrd' attribute string into a dictionary of hardware parameters.
+    
+    Args:
+        hrd_attribute_value: String containing hardware parameters
+        
+    Returns:
+        Dictionary of parsed hardware parameters
+    """
+    hrd_variables = {}
+    
+    if isinstance(hrd_attribute_value, str):
+        for line in hrd_attribute_value.split('\n'):
+            if not line.startswith("DESCR") and ':' in line:
+                try:
+                    key, value = line.split(':', 1)
+                    hrd_variables[key.strip()] = convert_to_numerical(value.strip())
+                except ValueError:
+                    continue  # Skip malformed lines
+    
+    return hrd_variables
+
+def convert_to_numerical(value: str) -> Union[float, int, str]:
+    """
+    Convert a string value to numerical type if possible.
+    
+    Args:
+        value: String value to convert
+        
+    Returns:
+        Converted value (float, int, or original string)
+    """
     try:
-        # Try converting the value to float
         return float(value)
     except ValueError:
         try:
-            # If conversion to float fails, try converting to int
             return int(value)
         except ValueError:
             return value
 
-
 # ===================
-# CONVERSION ROUTINES
+# CONVERSION ROUTINES  
 # ===================
 
-def convert_kepler_mmclx2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
-
-    """This routine converts mmclx data from the NCAS Mobile Ka-band Radar (Kepler) to Level 1 (cfradial) data, compliant with the 
-    NCAS Radar Data Standard v1.0.0.
-
-    Metadata are added using information in two YAML files the yaml_project_file, and yaml_instrument_file.
-
-    :param infile: Full path of NetCDF Level 0b mmclx data file, e.g. `<path-to-file>/20220907_071502.ppi.mmclx`
-    :type infile: str
-
-    :param outpath: Path where NetCDF Level 1 output file will be written
-    :type outfile: str
-
-    :param yaml_project_file: Full path of YAML file containing project-specific metadata
-    :type yaml_project_file: str
-
-    :param yaml_instrument_file: Full path of YAML file containing instrument-specific metadata
-    :type yaml_instrument_file: str
-
-    :param tracking_tag: AMOF tracking tag for the project
-    "type tracking_tag: str
-    
-    :param data_version: Version of data product in the format `n.m.p`, where n (major version), m (minor revision) and p (patch) are integers.
-    :type data_version: str
+def convert_kepler_mmclx2l1(
+    infile: str,
+    outpath: str, 
+    yaml_project_file: str,
+    yaml_instrument_file: str,
+    tracking_tag: str,
+    data_version: str
+) -> None:
     """
-
-    instrument_tagname = "ncas-radar-mobile-ka-band-1"
-
-    # ---------------------------------------
-    # Read metadata from YAML instrument file
-    # ---------------------------------------  
+    Convert mmclx data from NCAS Mobile Ka-band Radar to Level 1 cfradial format.
+    
+    This function converts a single mmclx file to CF-Radial format compliant with
+    the NCAS Radar Data Standard v1.0.0, adding appropriate metadata from YAML files.
+    
+    Args:
+        infile: Full path to input mmclx file
+        outpath: Directory where output CF-Radial file will be written  
+        yaml_project_file: Path to YAML file with project metadata
+        yaml_instrument_file: Path to YAML file with instrument metadata
+        tracking_tag: AMOF tracking tag for the project
+        data_version: Data version string (format: "n.m.p")
+        
+    Raises:
+        FileNotFoundError: If input file or YAML files don't exist
+        ValueError: If tracking tag not found in project file
+        
+    Example:
+        >>> convert_kepler_mmclx2l1(
+        ...     'data.mmclx', 
+        ...     '/output/path',
+        ...     'project.yml',
+        ...     'instruments.yml', 
+        ...     'AMOF_20220101000000',
+        ...     '1.0.0'
+        ... )
+    """
+    instrument_tagname = "ncas-mobile-ka-band-radar-1"
+    
+    # Load instrument metadata
     with open(yaml_instrument_file, "r") as stream:
-        try:
-            instruments = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-
+        instruments = yaml.safe_load(stream)
+    
+    instrument = None
     for elem in instruments:
         if instrument_tagname in elem:
-            instrument = elem[instrument_tagname];
-
-    # -------------------------------------
-    # Read metadata from YAML projects file
-    # -------------------------------------  
+            instrument = elem[instrument_tagname]
+            break
+    
+    if instrument is None:
+        raise ValueError(f"Instrument {instrument_tagname} not found in {yaml_instrument_file}")
+    
+    # Load project metadata
     with open(yaml_project_file, "r") as stream:
-        try:
-            projects = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-
+        projects = yaml.safe_load(stream)
+    
+    project = None
     for p in projects:
         if tracking_tag in p:
-            project = p[tracking_tag];
-
-    radar_name = instrument["instrument_name"].lower();
-
-    print(radar_name);
-
+            project = p[tracking_tag]
+            break
+    
+    if project is None:
+        raise ValueError(f"Tracking tag {tracking_tag} not found in {yaml_project_file}")
+    
+    # Read radar data
+    radar_dataset = read_mira35_mmclx(infile)
+    scan_name = radar_dataset.scan_name
+    
+    # Generate output filename
+    radar_name = instrument["instrument_name"].lower()
+    
+    # Find location from project metadata
     for n in project["ncas_instruments"]:
         if radar_name in n:
-            project_instrument = n[radar_name];
-
-    print(project_instrument);
-
-    location = project_instrument['platform']['location'].lower();
+            project_instrument = n[radar_name]
+            break
     
-    RadarDataset = read_mira35_mmclx(infile);
-
-    scan_name = RadarDataset.scan_name
-
-    file_timestamp = datetime.datetime.strptime(RadarDataset["time_coverage_start"][:],'%Y-%m-%dT%H:%M:%SZ');
-
+    location = project_instrument['platform']['location'].lower()
+    
+    file_timestamp = datetime.datetime.strptime(
+        radar_dataset.metadata["time_coverage_start"], 
+        '%Y-%m-%dT%H:%M:%SZ'
+    )
     dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
+    
+    outfile = os.path.join(
+        outpath, 
+        f'{radar_name}_{location}_{dtstr}_{scan_name.replace("_", "-", 1)}_l1_v{data_version}.nc'
+    )
+    
+    # Write CF-Radial file
+    pyart.io.write_cfradial(outfile, radar_dataset, format='NETCDF4', time_reference=True)
+    
+    # Add NCAS metadata
+    cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+    
+    # Update history
+    update_history_attribute(outfile, "Convert mmclx to CF-Radial with NCAS metadata")
+    
+    print(f"Successfully created {outfile}")
 
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_name.replace('_','-',1),data_version));
+def update_history_attribute(filename: str, history_entry: str) -> None:
+    """
+    Update the history attribute of a NetCDF file.
+    
+    Args:
+        filename: Path to NetCDF file
+        history_entry: History entry to add
+    """
+    try:
+        import netCDF4 as nc4
+        import datetime
+        
+        with nc4.Dataset(filename, 'a') as ds:
+            # Get current history if it exists
+            current_history = ""
+            if hasattr(ds, 'history'):
+                current_history = ds.getncattr('history')
+            
+            # Create new history entry with timestamp and user info
+            timestamp = datetime.datetime.utcnow().strftime('%a %b %d %H:%M:%S %Y')
+            username = os.environ.get('USER', 'unknown')
+            hostname = os.environ.get('HOSTNAME', 'unknown')
+            
+            # Replace degree symbols with "deg" in the history entry
+            safe_history_entry = history_entry.replace('°', 'deg')
+            
+            new_entry = f"{timestamp} - user:{username} machine:{hostname} {safe_history_entry}"
+            
+            # Combine with existing history
+            if current_history:
+                updated_history = f"{new_entry}\n{current_history}"
+            else:
+                updated_history = new_entry
+            
+            # Set the updated history
+            ds.setncattr('history', updated_history)
+            
+        print(f"Updated history attribute in {filename}")
+        
+    except Exception as e:
+        print(f"Warning: Could not update history attribute: {e}")
 
-    # ---------------------------------
-    # Use PyART to create CfRadial file
-    # ---------------------------------
-    pyart.io.write_cfradial(outfile, RadarDataset, format='NETCDF4', time_reference=True)
-
-    cfradial_add_ncas_metadata(outfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version)
-
-
-    # -----------------------
-    # Update history metadata
-    # -----------------------
-    DS = nc4.Dataset(outfile,'r+');
-
-    user = getpass.getuser()
-
-    updttime = datetime.datetime.utcnow()
-    updttimestr = updttime.ctime()
-
-    history = updttimestr + (" - user:" + user
-    + " machine: " + socket.gethostname()
-    + " program: kepler_utils.convert_kepler_mmclx2l1"
-    + " version:" + str(module_version));
-
-    DS.history = history + "\n" + DS.history;
-
-    DS.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
-
-    DS.close();
-
-    return
-
-def cfradial_get_bbox(cfradfile):
+def cfradial_get_bbox(cfradfile: str) -> str:
+    """
+    Calculate bounding box from CF-Radial file.
+    
+    Args:
+        cfradfile: Path to CF-Radial file
+        
+    Returns:
+        String describing the bounding box
+    """
     print(cfradfile)
-    Radar = pyart.io.read_cfradial(cfradfile);
-    latmin = np.min(Radar.gate_latitude['data']);
-    lonmin = np.min(Radar.gate_longitude['data']);
-    latmax = np.max(Radar.gate_latitude['data']);
-    lonmax = np.max(Radar.gate_longitude['data']); 
-    print(latmin,latmax,lonmin,lonmax)
+    radar = pyart.io.read_cfradial(cfradfile)
+    latmin = np.min(radar.gate_latitude['data'])
+    lonmin = np.min(radar.gate_longitude['data'])
+    latmax = np.max(radar.gate_latitude['data'])
+    lonmax = np.max(radar.gate_longitude['data'])
+    print(latmin, latmax, lonmin, lonmax)
     boundingbox = f"Bounding box: {latmin:.2f}N {lonmin:.2f}E, {latmax:.2f}N {lonmax:.2f}E"
     return boundingbox
 
-
-def cfradial_add_ncas_metadata_v0(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
-    # -------------------------------------------------------
-    # Read cfradial file to add NCAS metadata
-    # -------------------------------------------------------
-    print("in ncas metadata")
-    DS = nc4.Dataset(cfradfile,'r+');
-
-    DS.product_version = f"v{data_version}";
-    DS.processing_level = "1" ;
-
-    DS.licence = project_instrument["data_licence"];
-    DS.acknowledgement = project_instrument["acknowledgement"];
-
-    DS.platform = project_instrument["platform"]["location"];
-    DS.platform_type = project_instrument["platform"]["type"];
-    DS.location_keywords = project_instrument["platform"]["location_keywords"];
-
-    DS.deployment_mode = project_instrument["platform"]["deployment_mode"];
-
-    DS.title = project_instrument["title"];
-
-    DS.creator_name = project_instrument["data_creator"]["name"];
-    DS.creator_email = project_instrument["data_creator"]["email"];
-    DS.creator_url = project_instrument["data_creator"]["pid"];
-    DS.institution = project_instrument["data_creator"]["institution"];
-    DS.instrument_name = instrument["instrument_name"];
-    DS.instrument_software = project_instrument["instrument_software"]["name"];
-    DS.instrument_software_version = project_instrument["instrument_software"]["version"];
-    DS.instrument_manufacturer = instrument['instrument_manufacturer'];
-    DS.instrument_model = instrument['instrument_model'];
-    DS.instrument_serial_number = instrument['instrument_serial_number'];
-    DS.instrument_pid = instrument['instrument_pid']
-
-    DS.references = instrument['references'];
-    #DS.source = "NCAS Mobile Ka-band Radar (Kepler)";
-    #DS.comment = "";
-    DS.project = project["project_name"];
-    DS.project_principal_investigator = project["principal_investigator"]["name"];
-    DS.project_principal_investigator_email = project["principal_investigator"]["email"];
-    DS.project_principal_investigator_url = project["principal_investigator"]["pid"];
-
-    DS.processing_software_url = "";
-    DS.processing_software_version = "";
-
-    #DS.time_coverage_start = datetime.datetime.strftime(dt_start,'%Y-%m-%dT%H:%M:%SZ');
-    #DS.time_coverage_end = datetime.datetime.strftime(dt_end,'%Y-%m-%dT%H:%M:%SZ');
-
-    print('getting bbox')
-    print(cfradfile)
-    str = cfradial_get_bbox(cfradfile)
-    print(str)
-    DS.geospatial_bounds = str;
-
-
-    #DS.geospatial_bounds = "51.1450N -1.4384E";
-
-    # -------------------------------------------------------
-    # Now clean up some variable attributes
-    # -------------------------------------------------------
-
-
-    # ----------------
-    # Scalar variables
-    # ----------------
-
-    #varin = DSin['latitude'];
-    #varout = DSout.createVariable('latitude',varin.datatype);
-    #varout.standard_name = 'latitude';
-    #varout.long_name = 'latitude of the antenna';
-    #varout.units = 'degree_north';
-    #varout[:]=51.1450;
-
-    #varin = DSin['longitude'];
-    #varout = DSout.createVariable('longitude',varin.datatype);
-    #varout.standard_name = 'longitude';
-    #varout.long_name = 'longitude of the antenna';
-    #varout.units = 'degree_east';
-    #varout[:]=-1.4384;
-
-    #varin = DSin['height'];
-    #varout = DSout.createVariable('altitude',varin.datatype);
-    #varout.standard_name = 'altitude';
-    #varout.long_name = 'altitude of the elevation axis above the geoid (WGS84)';
-    #varout.units = 'm';
-    #varout[:]=146.7;
-
-    #varout = DSout.createVariable('altitude_agl',varin.datatype);
-    #varout.standard_name = 'altitude';
-    #varout.long_name = 'altitude of the elevation axis above ground';
-    #varout.units = 'm';
-    #varout[:]=16.0;
-
-    #varin = DSin['frequency'];
-    #varout = DSout.createVariable('frequency',varin.datatype);
-    #varout.standard_name = 'radiation_frequency';
-    #varout.long_name = 'frequency of transmitted radiation';
-    #varout.units = 'GHz';
-    #varout[:]=varin[:];
-
-    #varin = DSin['prf'];
-    #varout = DSout.createVariable('prf',varin.datatype);
-    #varout.long_name = 'pulse repetition frequency';
-    #varout.units = 'Hz';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthH'];
-    #varout = DSout.createVariable('beamwidthH',varin.datatype);
-    #varout.long_name = 'horizontal angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthV'];
-    #varout = DSout.createVariable('beamwidthV',varin.datatype);
-    #varout.long_name = 'vertical angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['antenna_diameter'];
-    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
-    #varout.long_name = 'antenna diameter';
-    #varout.units = 'm';
-    #varout[:]=varin[:];
-
-    #varin = DSin['pulse_period'];
-    #varout = DSout.createVariable('pulse_width',varin.datatype);
-    #varout.long_name = 'pulse width';
-    #varout.units = 'us';
-    #varout[:]=varin[:];
-
-    #varin = DSin['transmit_power'];
-    #varout = DSout.createVariable('transmit_power',varin.datatype);
-    #varout.long_name = 'peak transmitted power';
-    #varout.units = 'W';
-    #varout[:]=varin[:];
-
-
-    # ---------------
-    # Field variables
-    # ---------------
-    # These are:
-    # SNR, VEL, RMS, LDR, NPK, SNRg, VELg, NPKg, RHO, DPS, RHOwav, DPSwav, 
-    # HSDco, HSDcx, Ze, Zg, ISDRco, ISDRcx
-    # The ones to use are:
-    # SNR, VEL, RMS, LDR, NPK, RHO, DPS, HSDco, HSDcx, Ze, ISDRco, ISDRcx
-
-    DS.close();
-
-    return
-
- 
-
-
-def cfradial_add_instrument_parameters(mmclxfile,cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
-    # -------------------------------------------------------
-    # Read cfradial file to add instrument parameters
-    # -------------------------------------------------------
-    DS = nc4.Dataset(cfradfile,'r+');
-
-    print(cfradfile)
-
-    if mmclxfile.endswith('.mmclx.gz'):
-        gz = gzip.open(mmclxfile)
-        DSin = nc4.Dataset('dummy', mode='r', memory=gz.read())
-    else:
-        DSin = nc4.Dataset(mmclxfile,'r');
-
-    print('Creating frequency dimension')
-    frequency = DS.createDimension("frequency", 1);
-
-    varin = DSin['lambda'];
-    lightspeed = 299792458
-    tx_freq = lightspeed/varin[:];
-    print(tx_freq)
-    varout = DS.createVariable('frequency',varin.datatype,("frequency"));
-    varout.standard_name = 'radiation_frequency';
-    varout.long_name = 'frequency of transmitted radiation';
-    varout.units = 's-1';
-    varout[:]=tx_freq;
-    print('Creating meta_group attribute')
-    varout.meta_group = "instrument_parameters";
-
-    varout = DS['radar_measured_transmit_power_h'];
-    varout.long_name = "radar_measured_transmit_power_h";
-    varout.units = 'dBm'
-    varout.meta_group = "radar_parameters";
-
-
-    # ----------------
-    # Scalar variables
-    # ----------------
-
-    #varin = DSin['prf'];
-    #varout = DSout.createVariable('prf',varin.datatype);
-    #varout.long_name = 'pulse repetition frequency';
-    #varout.units = 'Hz';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthH'];
-    #varout = DSout.createVariable('beamwidthH',varin.datatype);
-    #varout.long_name = 'horizontal angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthV'];
-    #varout = DSout.createVariable('beamwidthV',varin.datatype);
-    #varout.long_name = 'vertical angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['antenna_diameter'];
-    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
-    #varout.long_name = 'antenna diameter';
-    #varout.units = 'm';
-    #varout[:]=varin[:];
-
-    #varin = DSin['pulse_period'];
-    #varout = DSout.createVariable('pulse_width',varin.datatype);
-    #varout.long_name = 'pulse width';
-    #varout.units = 'us';
-    #varout[:]=varin[:];
-
-    #varin = DSin['transmit_power'];
-    #varout = DSout.createVariable('transmit_power',varin.datatype);
-    #varout.long_name = 'peak transmitted power';
-    #varout.units = 'W';
-    #varout[:]=varin[:];
-
-
-    DSin.close();
-    DS.close();
-
-    return
-
-
-def cfradial_add_geometry_correction(cfradfile,revised_northangle):
-    # -------------------------------------------------------
-    # Read cfradial file to add instrument parameters
-    # -------------------------------------------------------
-    DS = nc4.Dataset(cfradfile,'r+');
-
-    print(cfradfile)
-    print(f'Revised northangle = {revised_northangle}')
-
-    print('creating azimuth_correction')
-    varout = DS.createVariable('azimuth_correction','float32');
-    print('created')
-    varout.long_name = "azimuth correction applied";
-    varout.units = 'degrees'
-    varout.meta_group = "geometry_correction";
-    varout.comment = "Azimuth correction applied.  North angle relative to instrument home azimuth."
-    varout[:] = revised_northangle;
-
-
-    # ----------------
-    # Scalar variables
-    # ----------------
-
-    #varin = DSin['prf'];
-    #varout = DSout.createVariable('prf',varin.datatype);
-    #varout.long_name = 'pulse repetition frequency';
-    #varout.units = 'Hz';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthH'];
-    #varout = DSout.createVariable('beamwidthH',varin.datatype);
-    #varout.long_name = 'horizontal angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthV'];
-    #varout = DSout.createVariable('beamwidthV',varin.datatype);
-    #varout.long_name = 'vertical angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['antenna_diameter'];
-    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
-    #varout.long_name = 'antenna diameter';
-    #varout.units = 'm';
-    #varout[:]=varin[:];
-
-    #varin = DSin['pulse_period'];
-    #varout = DSout.createVariable('pulse_width',varin.datatype);
-    #varout.long_name = 'pulse width';
-    #varout.units = 'us';
-    #varout[:]=varin[:];
-
-    #varin = DSin['transmit_power'];
-    #varout = DSout.createVariable('transmit_power',varin.datatype);
-    #varout.long_name = 'peak transmitted power';
-    #varout.units = 'W';
-    #varout[:]=varin[:];
-
-    DS.close();
-
-    return
-
-def convert_kepler_cfradial2l1(infile,outpath,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
-
-    """This routine converts multi-sweep cfradial data from the NCAS Mobile Ka-band Radar (Kepler) to 
-    Level 1 (cfradial) data, compliant with the NCAS Radar Data Standard v1.0.0.
-
-    Metadata are added using information in two YAML files the yaml_project_file, and yaml_instrument_file.
-
-    :param infile: Full path of NetCDF Level 1a cfradial data file, e.g. `<path-to-file>/20220907_071502_hsrhi.nc`
-    :type infile: str
-
-    :param outpath: Path where NetCDF Level 1 output file will be written
-    :type outfile: str
-
-    :param yaml_project_file: Full path of YAML file containing project-specific metadata
-    :type yaml_project_file: str
-
-    :param yaml_instrument_file: Full path of YAML file containing instrument-specific metadata
-    :type yaml_instrument_file: str
-
-    :param tracking_tag: AMOF tracking tag for the project
-    "type tracking_tag: str
-    
-    :param data_version: Version of data product in the format `n.m.p`, where n (major version), m (minor revision) and p (patch) are integers.
-    :type data_version: str
+def cfradial_add_instrument_parameters(
+    mmclxfile: str, 
+    cfradfile: str, 
+    yaml_project_file: str, 
+    yaml_instrument_file: str, 
+    tracking_tag: str, 
+    data_version: str
+) -> None:
     """
-
-    instrument_tagname = "ncas-radar-mobile-ka-band-1"
-
-    # ---------------------------------------
-    # Read metadata from YAML instrument file
-    # ---------------------------------------  
-    with open(yaml_instrument_file, "r") as stream:
-        try:
-            instruments = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-
-    for elem in instruments:
-        if instrument_tagname in elem:
-            instrument = elem[instrument_tagname];
-
-    # -------------------------------------
-    # Read metadata from YAML projects file
-    # -------------------------------------  
-    with open(yaml_project_file, "r") as stream:
-        try:
-            projects = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-
-    for p in projects:
-        if tracking_tag in p:
-            project = p[tracking_tag];
-
-    radar_name = instrument["instrument_name"].lower();
-
-    print(radar_name);
-
-    for n in project["ncas_instruments"]:
-        if radar_name in n:
-            project_instrument = n[radar_name];
-
-    print(project_instrument);
-
-    location = project_instrument['platform']['location'].lower();
+    Add instrument parameters to CF-Radial file from original mmclx file.
     
-    RadarDataset = nc4.Dataset(infile);
-
-    scan_name = RadarDataset.scan_name.lower();
-
-    time_coverage_start = nc4.chartostring(RadarDataset['time_coverage_start']['data'][0])[()];
-
-    file_timestamp = datetime.datetime.strptime(time_coverage_start,'%Y-%m-%dT%H:%M:%SZ');
-
-    dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
-
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_name.replace('_','-',1),data_version));
-
-    if os.path.isfile(outfile):
-        print("The file already exists")
-    else:
-        # Rename the file
-        os.rename(infile,outfile);
-    
-    cfradial_add_ncas_metadata(outfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version)
-
-    # -----------------------
-    # Update history metadata
-    # -----------------------
-    updatestr = "Add NCAS metadata"
-    update_history_attribute(outfile,updatestr)
-
-
-    return
-
-def cfradial_add_ncas_metadata(cfradfile,yaml_project_file,yaml_instrument_file,tracking_tag,data_version):
-    
-    instrument_tagname = "ncas-radar-mobile-ka-band-1"
-
-    # ---------------------------------------
-    # Read metadata from YAML instrument file
-    # ---------------------------------------  
-    with open(yaml_instrument_file, "r") as stream:
-        try:
-            instruments = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-
-    for elem in instruments:
-        if instrument_tagname in elem:
-            instrument = elem[instrument_tagname];
-
-    # -------------------------------------
-    # Read metadata from YAML projects file
-    # -------------------------------------  
-    with open(yaml_project_file, "r") as stream:
-        try:
-            projects = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-
-    for p in projects:
-        if tracking_tag in p:
-            project = p[tracking_tag];
-
-    radar_name = instrument["instrument_name"].lower();
-
-    print(radar_name);
-
-    for n in project["ncas_instruments"]:
-        if radar_name in n:
-            project_instrument = n[radar_name];
-
-    print(project_instrument);
-
-    location = project_instrument['platform']['location'].lower();
-    
-    RadarDataset = nc4.Dataset(cfradfile);
-
-    scan_name = RadarDataset.scan_name;
-
-    print(scan_name);
-    print('HERE')
-
-    str_start = RadarDataset.variables['time_coverage_start'][:].tobytes().decode('utf-8')
-
-    time_coverage_start = str_start[0:20];
-
-    print('and HERE')
-
-    str_end = RadarDataset.variables['time_coverage_end'][:].tobytes().decode('utf-8').strip()
-    time_coverage_end = str_end[0:20];
-
-    print('and now HERE')
-    print(time_coverage_start)
-    print(type(time_coverage_start))   
-    print(len(time_coverage_start))   
-    file_timestamp = datetime.datetime.strptime(time_coverage_start,'%Y-%m-%dT%H:%M:%SZ');
-
-    print('and then HERE')
-
-    dtstr = file_timestamp.strftime('%Y%m%d-%H%M%S')
-
-    
-    import pathlib
-    outpath = pathlib.Path(cfradfile).parent.resolve();
-
-    outfile = os.path.join(outpath,'{}_{}_{}_{}_l1_v{}.nc'.format(radar_name,location,dtstr,scan_name.replace('_','-',1),data_version));
-
-    if os.path.isfile(outfile):
-        print("The file already exists")
-    else:
-        # Rename the file
-        os.rename(cfradfile,outfile);
-    
-    RadarDataset.close();
-    
-    # -------------------------------------------------------
-    # Read cfradial file to add NCAS metadata
-    # -------------------------------------------------------
-    DS = nc4.Dataset(outfile,'r+');
-
-    DS.Conventions = "NCAS-Radar-1.0 CfRadial-1.4 instrument_parameters radar_parameters geometry_correction"
-
-    if 'version' in DS.ncattrs():
-        DS.delncattr('version');
-
-    DS.product_version = f"v{data_version}";
-    DS.processing_level = "1" ;
-
-    DS.licence = project_instrument["data_licence"];
-    DS.acknowledgement = project_instrument["acknowledgement"];
-
-    DS.platform = project_instrument["platform"]["location"];
-    DS.platform_type = project_instrument["platform"]["type"];
-    DS.location_keywords = project_instrument["platform"]["location_keywords"];
-    if (project_instrument["platform"]["type"]=="stationary_platform"):
-        DS.platform_is_mobile = "false";
-    else:
-        DS.platform_is_mobile = "true";
-
-
-    DS.deployment_mode = project_instrument["platform"]["deployment_mode"];
-
-    DS.title = project_instrument["title"];
-    DS.source = project_instrument["source"];
-
-    DS.creator_name = project_instrument["data_creator"]["name"];
-    DS.creator_email = project_instrument["data_creator"]["email"];
-    DS.creator_url = project_instrument["data_creator"]["pid"];
-    DS.institution = project_instrument["data_creator"]["institution"];
-    DS.instrument_name = instrument["instrument_name"];
-    DS.instrument_software = project_instrument["instrument_software"]["name"];
-    DS.instrument_software_version = project_instrument["instrument_software"]["version"];
-    DS.instrument_manufacturer = instrument['instrument_manufacturer'];
-    DS.instrument_model = instrument['instrument_model'];
-    DS.instrument_serial_number = instrument['instrument_serial_number'];
-    DS.instrument_pid = instrument['instrument_pid']
-
-    DS.references = instrument['references'];
-    #DS.source = "NCAS Mobile Ka-band Radar (Kepler)";
-    #DS.comment = "";
-    DS.project = project["project_name"];
-    DS.project_principal_investigator = project["principal_investigator"]["name"];
-    DS.project_principal_investigator_email = project["principal_investigator"]["email"];
-    DS.project_principal_investigator_url = project["principal_investigator"]["pid"];
-
-    DS.processing_software_url = "";
-    DS.processing_software_version = "";
-
-    DS.time_coverage_start = time_coverage_start;
-    DS.time_coverage_end = time_coverage_end;
-
-    print('getting bbox')
-    print(cfradfile)
-    str = cfradial_get_bbox(outfile)
-    print(str)
-    DS.geospatial_bounds = str;
-
-
-    if "vpt" in DS.scan_name or "VPT" in DS.scan_name or "vertical_pointing" in DS.scan_name:
-        DS.featureType = 'timeSeriesProfile';
-
-    # -------------------------------------------------------
-    # Now clean up some variable attributes
-    # -------------------------------------------------------
-    DS['time'].comment = "";
-    try:
-        DS['range'].delncattr('standard_name');
-    except: 
-        pass
-    
-    DS['range'].comment = 'Range to centre of each bin';
-    DS['range'].meters_to_center_of_first_gate = DS['range'][0];
-    try:
-        DS['azimuth'].delncattr('standard_name');
-    except:
-        pass
-    try:
-        DS['elevation'].delncattr('standard_name');
-    except:
-        pass
-    DS['DBZ'].standard_name = 'equivalent_reflectivity_factor';
-    try:
-        DS['sweep_number'].delncattr('standard_name');
-    except:
-        pass
-    try:
-        DS['sweep_mode'].delncattr('standard_name');
-    except:
-        pass
-    try:
-        DS['fixed_angle'].delncattr('standard_name');
-    except:
-        pass
-    DS['latitude'].long_name = 'latitude';
-    DS['latitude'].standard_name = 'latitude';
-    DS['longitude'].long_name = 'longitude';
-    DS['longitude'].standard_name = 'longitude'; 
-    DS['altitude'].standard_name = 'altitude';
-    DS['altitude'].comment = 'Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model' 
-    DS['altitude'].long_name = 'altitude';
-    DS['altitude'].units = 'metres';
-    try:
-        DS['altitude'].delncattr('positive'); 
-    except:
-        pass
-    DS['volume_number'].long_name = 'data volume index number';
-    DS['volume_number'].units = "" ;
-    #DS['volume_number']._FillValue = -9999 ;
-
-
-    # ----------------
-    # Scalar variables
-    # ----------------
-
-    #varin = DSin['latitude'];
-    #varout = DSout.createVariable('latitude',varin.datatype);
-    #varout.standard_name = 'latitude';
-    #varout.long_name = 'latitude of the antenna';
-    #varout.units = 'degree_north';
-    #varout[:]=51.1450;
-
-    #varin = DSin['longitude'];
-    #varout = DSout.createVariable('longitude',varin.datatype);
-    #varout.standard_name = 'longitude';
-    #varout.long_name = 'longitude of the antenna';
-    #varout.units = 'degree_east';
-    #varout[:]=-1.4384;
-
-    #varin = DSin['height'];
-    #varout = DSout.createVariable('altitude',varin.datatype);
-    #varout.standard_name = 'altitude';
-    #varout.long_name = 'altitude of the elevation axis above the geoid (WGS84)';
-    #varout.units = 'm';
-    #varout[:]=146.7;
-
-    #varout = DSout.createVariable('altitude_agl',varin.datatype);
-    #varout.standard_name = 'altitude';
-    #varout.long_name = 'altitude of the elevation axis above ground';
-    #varout.units = 'm';
-    #varout[:]=16.0;
-
-    #varin = DSin['frequency'];
-    #varout = DSout.createVariable('frequency',varin.datatype);
-    #varout.standard_name = 'radiation_frequency';
-    #varout.long_name = 'frequency of transmitted radiation';
-    #varout.units = 'GHz';
-    #varout[:]=varin[:];
-
-    #varin = DSin['prf'];
-    #varout = DSout.createVariable('prf',varin.datatype);
-    #varout.long_name = 'pulse repetition frequency';
-    #varout.units = 'Hz';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthH'];
-    #varout = DSout.createVariable('beamwidthH',varin.datatype);
-    #varout.long_name = 'horizontal angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['beamwidthV'];
-    #varout = DSout.createVariable('beamwidthV',varin.datatype);
-    #varout.long_name = 'vertical angular beamwidth';
-    #varout.units = 'degree';
-    #varout[:]=varin[:];
-
-    #varin = DSin['antenna_diameter'];
-    #varout = DSout.createVariable('antenna_diameter',varin.datatype);
-    #varout.long_name = 'antenna diameter';
-    #varout.units = 'm';
-    #varout[:]=varin[:];
-
-    #varin = DSin['pulse_period'];
-    #varout = DSout.createVariable('pulse_width',varin.datatype);
-    #varout.long_name = 'pulse width';
-    #varout.units = 'us';
-    #varout[:]=varin[:];
-
-    #varin = DSin['transmit_power'];
-    #varout = DSout.createVariable('transmit_power',varin.datatype);
-    #varout.long_name = 'peak transmitted power';
-    #varout.units = 'W';
-    #varout[:]=varin[:];
-
-
-    # ---------------
-    # Field variables
-    # ---------------
-    # These are:
-    # SNR, VEL, RMS, LDR, NPK, SNRg, VELg, NPKg, RHO, DPS, RHOwav, DPSwav, 
-    # HSDco, HSDcx, Ze, Zg, ISDRco, ISDRcx
-    # The ones to use are:
-    # SNR, VEL, RMS, LDR, NPK, RHO, DPS, HSDco, HSDcx, Ze, ISDRco, ISDRcx
-
-    DS.close();
-
-    # -----------------------
-    # Update history metadata
-    # -----------------------
-    updatestr = "Add NCAS metadata"
-    update_history_attribute(outfile,updatestr)
-
-    return outfile
-
-def anglicise_cfradial(cfradfile):
-
-    # -------------------------------------------------------
-    # Read cfradial file and change language localisation
-    # -------------------------------------------------------
-
-    DS = nc4.Dataset(cfradfile,'r+');
-
-    variable = nc_file.variables['my_variable']
-    variable.setncattr('attribute_name', 'new_attribute_value')
-
-    DS.close();
-
-    return
-
-
-def amend_unitless(cfradfile):
-    DS = nc4.Dataset(cfradfile,'r+');
-
-    # Loop through each variable in the NetCDF file
-    for var_name in DS.variables:
-        var = DS.variables[var_name]
-        if hasattr(var, 'units') and var.units == 'unitless':
-            var.units = ""
-        if hasattr(var, 'units') and var.units == 'count':
-            var.units = ""
-
-    DS.close()
-
-def lowercase_long_names(cfradfile):
-    DS = nc4.Dataset(cfradfile,'r+');
-
-    # Loop through each variable in the NetCDF file
-    for var_name in DS.variables:
-        var = DS.variables[var_name]
-        if hasattr(var, 'long_name'):
-            var.long_name = var.long_name.lower();
-            if "utc" in var.long_name:
-                var.long_name = var.long_name.replace("utc", "UTC")
-
-
-    DS.close()
-
-def time_long_name(cfradfile):
-    DS = nc4.Dataset(cfradfile,'r+');
-    time_var = DS.variables['time'];
-    if 'time_reference' in DS.variables:
-        time_var.long_name = "time in seconds since time_reference"
-
-    DS.close()
-
-def process_kepler(datestr,inpath,outpath,yaml_project_file,yaml_instrument_file,tracking_tag):
-
-    pattern = '*{}*.mmclx'.format(datestr);
-
-    print(datestr);
-    print(inpath);
-    datepath = os.path.join(inpath,datestr);
-
-    mmclxfiles = [];
-    mmclxdirs = [];
-
-    vertfiles = [];
-
-    for root,dirs,files in os.walk(datepath):
-        mmclxfiles += [os.path.join(root,f) for f in fnmatch.filter(files, pattern)];
-        mmclxdirs += dirs;
+    Args:
+        mmclxfile: Path to original mmclx file
+        cfradfile: Path to CF-Radial file to modify
+        yaml_project_file: Path to project YAML file
+        yaml_instrument_file: Path to instrument YAML file
+        tracking_tag: AMOF tracking tag
+        data_version: Data version string
+    """
+    with nc4.Dataset(cfradfile, 'r+') as ds:
+        print(cfradfile)
         
+        if mmclxfile.endswith('.mmclx.gz'):
+            with gzip.open(mmclxfile) as gz:
+                dsin = nc4.Dataset('dummy', mode='r', memory=gz.read())
+        else:
+            dsin = nc4.Dataset(mmclxfile, 'r')
+        
+        try:
+            print('Creating frequency dimension')
+            if 'frequency' not in ds.dimensions:
+                frequency = ds.createDimension("frequency", 1)
+            
+            if 'lambda' in dsin.variables:
+                varin = dsin['lambda']
+                lightspeed = 299792458
+                tx_freq = lightspeed / varin[:]
+                print(tx_freq)
+                
+                if 'frequency' not in ds.variables:
+                    varout = ds.createVariable('frequency', varin.datatype, ("frequency",))
+                    varout.standard_name = 'radiation_frequency'
+                    varout.long_name = 'frequency of transmitted radiation'
+                    varout.units = 's-1'
+                    varout[:] = tx_freq
+                    print('Creating meta_group attribute')
+                    varout.meta_group = "instrument_parameters"
+            
+            if 'radar_measured_transmit_power_h' in ds.variables:
+                varout = ds['radar_measured_transmit_power_h']
+                varout.long_name = "radar_measured_transmit_power_h"
+                varout.units = 'dBm'
+                varout.meta_group = "radar_parameters"
+                
+        finally:
+            dsin.close()
 
-    data_version = "1.0.0";
+def cfradial_add_geometry_correction(cfradfile: str, revised_northangle: float) -> None:
+    """
+    Add geometry correction information to CF-Radial file.
+    
+    Args:
+        cfradfile: Path to CF-Radial file to modify
+        revised_northangle: North angle correction applied
+    """
+    with nc4.Dataset(cfradfile, 'r+') as ds:
+        print(cfradfile)
+        print(f'Revised northangle = {revised_northangle}')
+        
+        print('creating azimuth_correction')
+        if 'azimuth_correction' not in ds.variables:
+            varout = ds.createVariable('azimuth_correction', 'float32')
+            print('created')
+            varout.long_name = "azimuth correction applied"
+            varout.units = 'degrees'
+            varout.meta_group = "geometry_correction"
+            varout.comment = "Azimuth correction applied. North angle relative to instrument home azimuth."
+            varout[:] = revised_northangle
 
-    l1path = os.path.join(outpath,'L1',datestr);
+def amend_unitless(cfradfile: str) -> None:
+    """
+    Replace 'unitless' and 'count' units with empty strings.
+    
+    Args:
+        cfradfile: Path to CF-Radial file to modify
+    """
+    with nc4.Dataset(cfradfile, 'r+') as ds:
+        # Loop through each variable in the NetCDF file
+        for var_name in ds.variables:
+            var = ds.variables[var_name]
+            if hasattr(var, 'units') and var.units == 'unitless':
+                var.units = ""
+            if hasattr(var, 'units') and var.units == 'count':
+                var.units = ""
 
-    os.makedirs(l1path,exist_ok=True);
+def lowercase_long_names(cfradfile: str) -> None:
+    """
+    Convert long_name attributes to lowercase (except UTC).
+    
+    Args:
+        cfradfile: Path to CF-Radial file to modify
+    """
+    with nc4.Dataset(cfradfile, 'r+') as ds:
+        # Loop through each variable in the NetCDF file
+        for var_name in ds.variables:
+            var = ds.variables[var_name]
+            if hasattr(var, 'long_name'):
+                var.long_name = var.long_name.lower()
+                if "utc" in var.long_name:
+                    var.long_name = var.long_name.replace("utc", "UTC")
 
-    for dir in mmclxdirs:
-        print("I am Here!");
-        os.makedirs(os.path.join(l1path,dir),exist_ok=True);
+def time_long_name(cfradfile: str) -> None:
+    """
+    Update time variable long_name if time_reference exists.
+    
+    Args:
+        cfradfile: Path to CF-Radial file to modify
+    """
+    with nc4.Dataset(cfradfile, 'r+') as ds:
+        time_var = ds.variables['time']
+        if 'time_reference' in ds.variables:
+            time_var.long_name = "time in seconds since time_reference"
 
-    for f in mmclxfiles:
-        convert_kepler_mmclx2l1(f,l1path,yaml_project_file,yaml_instrument_file,tracking_tag);
-
-    return
-
-def find_mmclxfiles(start_time, end_time, sweep_type,inpath,gzip_flag=False):
+def find_mmclxfiles(
+    start_time: str, 
+    end_time: str, 
+    sweep_type: str, 
+    inpath: str, 
+    gzip_flag: bool = False
+) -> List[str]:
+    """
+    Find mmclx files within a time range and sweep type.
+    
+    Args:
+        start_time: Start time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        end_time: End time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        sweep_type: Type of sweep ('rhi', 'ppi', 'vert', 'vad')
+        inpath: Directory path to search
+        gzip_flag: Whether files are gzip compressed
+        
+    Returns:
+        List of matching file paths
+    """
+    # Handle both time formats
+    def parse_time_string(time_str):
+        """Parse time string in either format"""
+        try:
+            # Try ISO format first
+            return datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+        except ValueError:
+            try:
+                # Try space-separated format
+                return datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                raise ValueError(f"Time string '{time_str}' does not match expected formats: "
+                               "'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'")
+    
     # Convert the input times to datetime objects
-    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
-    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
-
-    # Define a list to store the found files
+    start_datetime = parse_time_string(start_time)
+    end_datetime = parse_time_string(end_time)
+    
+    print(f"Searching for {sweep_type.upper()} files from {start_time} to {end_time}")
+    
+    # Get the date string from start time to look in the right subdirectory
+    date_str = start_datetime.strftime('%Y%m%d')
+    search_path = Path(inpath) / date_str
+    
+    print(f"Looking in date directory: {search_path}")
+    
+    if not search_path.exists():
+        print(f"Date directory does not exist: {search_path}")
+        return []
+    
+    # Define search patterns based on sweep type
+    if gzip_flag:
+        patterns = {
+            'rhi': "*rhi*.mmclx.gz",
+            'ppi': "*ppi*.mmclx.gz", 
+            'vert': "*vert*.mmclx.gz",
+            'vad': "*ppi*.mmclx.gz"  # VAD files are typically PPI scans
+        }
+    else:
+        patterns = {
+            'rhi': "*rhi*.mmclx",
+            'ppi': "*ppi*.mmclx",
+            'vert': "*vert*.mmclx", 
+            'vad': "*ppi*.mmclx"  # VAD files are typically PPI scans
+        }
+    
+    pattern = patterns.get(sweep_type.lower(), f"*{sweep_type}*.mmclx{'gz' if gzip_flag else ''}")
+    
+    # Find candidate files
+    candidate_files = list(search_path.glob(pattern))
+    print(f"Found {len(candidate_files)} candidate {sweep_type.upper()} files")
+    
+    # Filter files by time range
     matching_files = []
-
-    # Iterate through files in a specific directory
-    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
-        for file in files:
-            # Check if the file matches the criteria
-            # Example: check if the file name contains the sweep_type and falls within the time range
+    
+    for file_path in candidate_files:
+        try:
             if gzip_flag:
-                if sweep_type in file and file.endswith('.mmclx.gz'):
-                    fullfile = os.path.join(root,file)
-                    with gzip.open(fullfile) as gz:
-                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
+                with gzip.open(file_path, 'rb') as gz:
+                    with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                        if 'time' in nc.dimensions and len(nc.dimensions['time']) > 0:
+                            file_time = _safe_parse_time(nc, 0)
+                            if file_time is None:
+                                print(f"Could not parse time from {file_path.name}, skipping")
+                                continue
+                                
                             if start_datetime <= file_time <= end_datetime:
-                                matching_files.append(os.path.join(root, file))
+                                matching_files.append(str(file_path))
+                                print(f"Added {sweep_type.upper()} file: {file_path.name} (time: {file_time})")
             else:
-                if sweep_type in file and file.endswith('.mmclx'):
-                    nc_file = nc4.Dataset(os.path.join(root, file))
-                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
-                    nc_file.close()      
-                    if start_datetime <= file_time <= end_datetime:
-                        matching_files.append(os.path.join(root, file))
-        print(sorted(matching_files));
-
+                with nc4.Dataset(file_path, 'r') as nc:
+                    if 'time' in nc.dimensions and len(nc.dimensions['time']) > 0:
+                        file_time = _safe_parse_time(nc, 0)
+                        if file_time is None:
+                            print(f"Could not parse time from {file_path.name}, skipping")
+                            continue
+                            
+                        if start_datetime <= file_time <= end_datetime:
+                            matching_files.append(str(file_path))
+                            print(f"Added {sweep_type.upper()} file: {file_path.name} (time: {file_time})")
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            continue
+    
+    print(f"Found {len(matching_files)} matching {sweep_type.upper()} files")
     return sorted(matching_files)
 
-def convert_angle(angle,offset):
-    print(angle,offset)
-    if angle >= 360+round(offset):    
+def find_mmclx_rhi_files(
+    start_time: str,
+    end_time: str,
+    azim_min: float,
+    azim_max: float,
+    inpath: str,
+    gzip_flag: bool = False,
+    azimuth_offset: float = -6.85,
+    revised_northangle: float = 302.15
+) -> List[str]:
+    """
+    Find RHI mmclx files within time and azimuth ranges.
+    
+    Args:
+        start_time: Start time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        end_time: End time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        azim_min: Minimum azimuth angle
+        azim_max: Maximum azimuth angle
+        inpath: Directory path to search
+        gzip_flag: Whether files are gzip compressed
+        azimuth_offset: Azimuth offset for searching
+        revised_northangle: North angle correction
+        
+    Returns:
+        List of matching RHI file paths
+    """
+    # Handle both time formats
+    def parse_time_string(time_str):
+        """Parse time string in either format"""
+        try:
+            # Try ISO format first
+            return datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+        except ValueError:
+            try:
+                # Try space-separated format
+                return datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                raise ValueError(f"Time string '{time_str}' does not match expected formats: "
+                               "'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'")
+    
+    # Convert the input times to datetime objects
+    start_datetime = parse_time_string(start_time)
+    end_datetime = parse_time_string(end_time)
+    
+    print(f"Searching for RHI files from {start_time} to {end_time}")
+    print(f"Azimuth range: {azim_min}° to {azim_max}°")
+    
+    # Get the date string from start time to look in the right subdirectory
+    date_str = start_datetime.strftime('%Y%m%d')
+    search_path = Path(inpath) / date_str
+    
+    print(f"Looking in date directory: {search_path}")
+    
+    if not search_path.exists():
+        print(f"Date directory does not exist: {search_path}")
+        return []
+    
+    # Define a list to store the found files
+    matching_files = []
+    
+    az_search_offset = -8.0  # Before July
+    
+    # Look for RHI files
+    if gzip_flag:
+        rhi_pattern = "*rhi*.mmclx.gz"
+    else:
+        rhi_pattern = "*rhi*.mmclx"
+    
+    candidate_files = list(search_path.glob(rhi_pattern))
+    print(f"Found {len(candidate_files)} candidate RHI files")
+    
+    # Check each file's timestamp and azimuth
+    for file_path in candidate_files:
+        try:
+            if gzip_flag:
+                with gzip.open(file_path, 'rb') as gz:
+                    with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                        nrays = len(nc.dimensions.get('time', []))
+                        if nrays > 0:
+                            # Use a safe index - don't assume index 3 exists
+                            azim_index = min(3, nrays - 1)  # Use index 3 or last available
+                            
+                            # Use safe time parsing with microseconds
+                            file_time = _safe_parse_time(nc, 0)
+                            if file_time is None:
+                                print(f"Could not parse time from {file_path.name}, skipping")
+                                continue
+                                
+                            azim = (nc['azi'][azim_index] + revised_northangle) % 360
+                            
+                            if start_datetime <= file_time <= end_datetime:
+                                if azim_min <= convert_angle(azim, az_search_offset) < azim_max:
+                                    print(f'{file_path.name}: {file_time} {azim_min} {convert_angle(azim, az_search_offset)} {azim_max}')
+                                    matching_files.append(str(file_path))
+            else:
+                with nc4.Dataset(file_path, 'r') as nc:
+                    nrays = len(nc.dimensions.get('time', []))
+                    if nrays > 0:
+                        # Use a safe index - don't assume index 3 exists
+                        azim_index = min(3, nrays - 1)  # Use index 3 or last available
+                        
+                        # Use safe time parsing with microseconds
+                        file_time = _safe_parse_time(nc, 0)
+                        if file_time is None:
+                            print(f"Could not parse time from {file_path.name}, skipping")
+                            continue
+                            
+                        azim = (nc['azi'][azim_index] + revised_northangle) % 360
+                        
+                        if start_datetime <= file_time <= end_datetime:
+                            if azim_min <= convert_angle(azim, az_search_offset) < azim_max:
+                                print(f'{file_path.name}: {file_time} {azim_min} {convert_angle(azim, az_search_offset)} {azim_max}')
+                                matching_files.append(str(file_path))
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            continue
+                    
+    print(f"Found {len(matching_files)} matching RHI files")
+    return sorted(matching_files)
+
+def convert_angle(angle: float, offset: float) -> float:
+    """
+    Convert angle with offset, handling 360-degree wraparound.
+    
+    Args:
+        angle: Input angle in degrees
+        offset: Offset to apply
+        
+    Returns:
+        Converted angle
+    """
+    print(angle, offset)
+    if angle >= 360 + round(offset):
         angle -= 360
     return angle
+
+def find_mmclx_ppi_files(
+    start_time: str,
+    end_time: str,
+    elev_min: float,
+    elev_max: float,
+    inpath: str,
+    gzip_flag: bool = False,
+    azimuth_offset: float = 0.0,
+    revised_northangle: float = 55.7
+) -> List[str]:
+    """
+    Find PPI mmclx files within time and elevation ranges.
     
-def find_mmclx_rhi_files(start_time, end_time,azim_min,azim_max,inpath,gzip_flag=False,azimuth_offset=-6.85,revised_northangle=302.15):
-    # Convert the input times to datetime objects
-    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S') 
-    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
-    print(start_datetime);
-    print(end_datetime);
-    hrstr = start_datetime.strftime("%H");
-    # Define a list to store the found files
-    matching_files = []
-
-    #az_search_offset = -38.0; # July ? onwards
-    az_search_offset = -8.0; # Before ? July
-
-
-    # Iterate through files in a specific directory
-    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
-        for file in files:
-            # Check if the file matches the criteria
-            # Example: check if the file name contains the sweep_type and falls within the time range
-            if gzip_flag:
-                #if "rhi" in file and hrstr in file and file.endswith('.mmclx.gz'):
-                if "rhi" in file and file.endswith('.mmclx.gz'):
-                    fullfile = os.path.join(root,file)
-                    with gzip.open(fullfile) as gz:
-                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                            if len(nc.dimensions['time'])>0:
-                                file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
-                                #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
-                                azim = (nc['azi'][5]+revised_northangle) % 360;
-                                #print(f'{file} ST:{start_datetime} {file_time} FI:{end_datetime}')
-                                if start_datetime <= file_time <= end_datetime:
-                                    #if azim_min <= convert_angle(azim,azimuth_offset) < azim_max:
-                                    if azim_min <= convert_angle(azim,az_search_offset) < azim_max:
-                                        print(f'{file}: {file_time} {azim_min} {convert_angle(azim,az_search_offset)} {azim_max}');
-                                        matching_files.append(os.path.join(root, file))
-            else:
-                #if "rhi" in file and hrstr in file and file.endswith('.mmclx'):
-                if "rhi" in file and file.endswith('.mmclx'):
-                    nc = nc4.Dataset(os.path.join(root, file))
-                    if len(nc.dimensions['time'])>0:
-                        file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
-                        #azim = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) % 360;
-                        azim = (nc['azi'][5]+revised_northangle) % 360;
-
-                        if start_datetime <= file_time <= end_datetime:
-                            if azim_min <= convert_angle(azim,az_search_offset) < azim_max:
-                                print(f'{file}: {file_time} {azim_min} {convert_angle(azim,az_search_offset)} {azim_max}');
-                                #print(f'{file_time} {convert_angle(azim)}');
-                                matching_files.append(os.path.join(root, file))
-                    nc.close()         
-    return sorted(matching_files)
+    Args:
+        start_time: Start time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        end_time: End time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        elev_min: Minimum elevation angle
+        elev_max: Maximum elevation angle
+        inpath: Directory path to search
+        gzip_flag: Whether files are gzip compressed
+        azimuth_offset: Azimuth offset for searching
+        revised_northangle: North angle correction
+        
+    Returns:
+        List of matching PPI file paths
+    """
+    # Handle both time formats
+    def parse_time_string(time_str):
+        """Parse time string in either format"""
+        try:
+            # Try ISO format first
+            return datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+        except ValueError:
+            try:
+                # Try space-separated format
+                return datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                raise ValueError(f"Time string '{time_str}' does not match expected formats")
     
-
-def find_mmclx_ppi_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag=False):
     # Convert the input times to datetime objects
-    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
-    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
-    hrstr = start_datetime.strftime("%H");
-
+    start_datetime = parse_time_string(start_time)
+    end_datetime = parse_time_string(end_time)
+    
+    print(f"Searching for PPI files from {start_time} to {end_time}")
+    print(f"Elevation range: {elev_min}° to {elev_max}°")
+    
+    # Get the date string from start time to look in the right subdirectory
+    date_str = start_datetime.strftime('%Y%m%d')
+    search_path = Path(inpath) / date_str
+    
+    print(f"Looking in date directory: {search_path}")
+    
+    if not search_path.exists():
+        print(f"Date directory does not exist: {search_path}")
+        return []
+    
     # Define a list to store the found files
     matching_files = []
-
-    # Iterate through files in a specific directory
-    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
-        for file in files:
+    
+    # Look for PPI files
+    if gzip_flag:
+        ppi_pattern = "*ppi*.mmclx.gz"
+    else:
+        ppi_pattern = "*ppi*.mmclx"
+    
+    candidate_files = list(search_path.glob(ppi_pattern))
+    print(f"Found {len(candidate_files)} candidate PPI files")
+    
+    # Check each file's timestamp and elevation
+    for file_path in candidate_files:
+        try:
             if gzip_flag:
-                #if "ppi" in file and hrstr in file and file.endswith('.mmclx.gz'):
-                if "ppi" in file and file.endswith('.mmclx.gz'):
-                    fullfile = os.path.join(root,file)
-                    with gzip.open(fullfile) as gz:
-                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
-                            elev = nc['elv'][0];
-                            if start_datetime <= file_time <= end_datetime:
-                                print(f'{file_time} {elev_min} {elev} {elev_max}');
-                                if elev_min <= elev <= elev_max:
-                                    print('Match')
-                                    matching_files.append(fullfile);
+                with gzip.open(file_path, 'rb') as gz:
+                    with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                        nrays = len(nc.dimensions.get('time', []))
+                        if nrays > 0:
+                            # Use safe time parsing
+                            file_time = _safe_parse_time(nc, 0)
+                            if file_time is None:
+                                print(f"Could not parse time from {file_path.name}, skipping")
+                                continue
+                                
+                            # Check elevation angle
+                            if 'elv' in nc.variables:
+                                elev = nc['elv'][0]  # First elevation angle
+                                
+                                if (start_datetime <= file_time <= end_datetime and 
+                                    elev_min <= elev <= elev_max):
+                                    matching_files.append(str(file_path))
+                                    print(f"Added PPI file: {file_path.name} (elev: {elev:.1f}°)")
             else:
-                #if "ppi" in file and hrstr in file and file.endswith('.mmclx'):
-                if "ppi" in file and file.endswith('.mmclx'):
-                    fullfile = os.path.join(root, file);
-                    nc = nc4.Dataset(fullfile)
-                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
-                    elev = nc['elv'][0];
-                    if start_datetime <= file_time <= end_datetime:
-                        print(f'{file_time} {elev_min} {elev} {elev_max}');
-                        if elev_min <= elev <= elev_max:
-                            matching_files.append(fullfile);
-                    nc.close()   
-            print(sorted(matching_files));
+                with nc4.Dataset(file_path, 'r') as nc:
+                    nrays = len(nc.dimensions.get('time', []))
+                    if nrays > 0:
+                        # Use safe time parsing
+                        file_time = _safe_parse_time(nc, 0)
+                        if file_time is None:
+                            print(f"Could not parse time from {file_path.name}, skipping")
+                            continue
+                            
+                        # Check elevation angle
+                        if 'elv' in nc.variables:
+                            elev = nc['elv'][0]  # First elevation angle
+                            
+                            if (start_datetime <= file_time <= end_datetime and 
+                                elev_min <= elev <= elev_max):
+                                matching_files.append(str(file_path))
+                                print(f"Added PPI file: {file_path.name} (elev: {elev:.1f}°)")
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            continue
+    
+    print(f"Found {len(matching_files)} matching PPI files")
     return sorted(matching_files)
 
-def find_mmclx_vad_files(start_time, end_time,elev_min,elev_max,inpath,gzip_flag=False):
-    # Convert the input times to datetime objects
-    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
-    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+def cfradial_add_ncas_metadata(
+    cfradial_file: str,
+    yaml_project_file: str, 
+    yaml_instrument_file: str,
+    tracking_tag: str,
+    data_version: str
+) -> None:
+    """
+    Add NCAS metadata to a CF-Radial file.
+    
+    Args:
+        cfradial_file: Path to CF-Radial file to modify
+        yaml_project_file: Path to project YAML file
+        yaml_instrument_file: Path to instrument YAML file  
+        tracking_tag: AMOF tracking tag
+        data_version: Data version string
+        
+    Raises:
+        FileNotFoundError: If YAML files don't exist
+        ValueError: If YAML files are invalid or missing required content
+    """
+    print(f"Adding NCAS metadata to {cfradial_file}")
+    print(f"Using project file: {yaml_project_file}")
+    print(f"Using instrument file: {yaml_instrument_file}")
+    print(f"Tracking tag: {tracking_tag}")
+    print(f"Data version: {data_version}")
+    
+    # Validate that YAML files exist BEFORE attempting any processing
+    if not os.path.exists(yaml_project_file):
+        raise FileNotFoundError(f"Project YAML file not found: {yaml_project_file}")
+    if not os.path.exists(yaml_instrument_file):
+        raise FileNotFoundError(f"Instrument YAML file not found: {yaml_instrument_file}")
+    
+    try:
+        # Try to use the official NCAS metadata library
+        from ncas_amof_netcdf_template import util
+        
+        util.add_ncas_metadata_to_netcdf_file(
+            cfradial_file, 
+            yaml_project_file, 
+            yaml_instrument_file, 
+            tracking_tag,
+            data_version
+        )
+        
+        print(f"Successfully added NCAS metadata using official library")
+        return
+        
+    except ImportError as e:
+        print(f"NCAS metadata library not available: {e}")
+        print("Falling back to manual metadata addition")
+    except Exception as e:
+        print(f"Error using NCAS metadata library: {e}")
+        print("Falling back to manual metadata addition")
+    
+    # Fallback: Add NCAS metadata manually (but still require YAML files)
+    try:
+        _add_ncas_metadata_manually(cfradial_file, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+    except Exception as e:
+        raise RuntimeError(f"Error adding NCAS metadata to {cfradial_file}: {e}")
 
-    # Define a list to store the found files
-    matching_files = []
-
-    # Iterate through files in a specific directory
-    for root, dirs, files in os.walk(inpath):  # Replace 'path_to_directory' with the actual directory path
-        for file in files:
-            if gzip_flag:
-                if "ppi" in file and file.endswith('.mmclx.gz'):
-                    fullfile = os.path.join(root,file)
-                    with gzip.open(fullfile) as gz:
-                        with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                            file_time = cftime.num2pydate(nc['time'][0],'seconds since 1970-01-01 00:00:00')
-                            elev = nc['elv'][0];
-                            if start_datetime <= file_time <= end_datetime:
-                                print(file_time);
-                                if elev_min <= elev <= elev_max:
-                                    matching_files.append(os.path.join(root, file))
+def _add_ncas_metadata_manually(
+    cfradial_file: str,
+    yaml_project_file: str,
+    yaml_instrument_file: str,
+    tracking_tag: str,
+    data_version: str
+) -> None:
+    """
+    Manually add NCAS metadata to a CF-Radial file by reading YAML files and updating attributes.
+    
+    Raises:
+        FileNotFoundError: If YAML files don't exist
+        ValueError: If YAML files are invalid or missing required content
+        RuntimeError: If NetCDF file cannot be modified
+    """
+    import netCDF4 as nc4
+    import yaml
+    from datetime import datetime
+    
+    # Load YAML metadata files - FAIL if they don't exist or are invalid
+    try:
+        with open(yaml_project_file, 'r') as f:
+            project_metadata = yaml.safe_load(f)
+        print(f"Loaded project metadata from {yaml_project_file}")
+        
+        if project_metadata is None:
+            raise ValueError(f"Project YAML file is empty or invalid: {yaml_project_file}")
+            
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Project YAML file not found: {yaml_project_file}")
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML syntax in project file {yaml_project_file}: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error loading project YAML file {yaml_project_file}: {e}")
+    
+    try:
+        with open(yaml_instrument_file, 'r') as f:
+            instrument_metadata = yaml.safe_load(f)
+        print(f"Loaded instrument metadata from {yaml_instrument_file}")
+        
+        if instrument_metadata is None:
+            raise ValueError(f"Instrument YAML file is empty or invalid: {yaml_instrument_file}")
+            
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Instrument YAML file not found: {yaml_instrument_file}")
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML syntax in instrument file {yaml_instrument_file}: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error loading instrument YAML file {yaml_instrument_file}: {e}")
+    
+    # Debug: Print the structure of loaded YAML files
+    print(f"Project metadata type: {type(project_metadata)}")
+    print(f"Instrument metadata type: {type(instrument_metadata)}")
+    
+    if isinstance(project_metadata, list):
+        print(f"Project metadata is a list with {len(project_metadata)} items")
+        if project_metadata:
+            print(f"First item keys: {list(project_metadata[0].keys()) if isinstance(project_metadata[0], dict) else 'Not a dict'}")
+    elif isinstance(project_metadata, dict):
+        print(f"Project metadata keys: {list(project_metadata.keys())}")
+    
+    if isinstance(instrument_metadata, list):
+        print(f"Instrument metadata is a list with {len(instrument_metadata)} items")
+        if instrument_metadata:
+            print(f"First item keys: {list(instrument_metadata[0].keys()) if isinstance(instrument_metadata[0], dict) else 'Not a dict'}")
+    elif isinstance(instrument_metadata, dict):
+        print(f"Instrument metadata keys: {list(instrument_metadata.keys())}")
+    
+    # Handle different YAML file structures flexibly
+    project_info = None
+    
+    # Handle project metadata (could be list or dict)
+    if isinstance(project_metadata, list):
+        # Search through list for project info
+        for item in project_metadata:
+            if isinstance(item, dict):
+                # Look for tracking tag
+                if tracking_tag in item:
+                    tag_data = item[tracking_tag]
+                    if isinstance(tag_data, dict):
+                        if 'project' in tag_data:
+                            project_info = tag_data['project']
+                        else:
+                            project_info = tag_data
+                    break
+                # Look for direct project info
+                elif 'project' in item:
+                    project_info = item['project']
+                    break
+                # Look for project-like content
+                elif 'title' in item or 'principal_investigator' in item:
+                    project_info = item
+                    break
+    elif isinstance(project_metadata, dict):
+        # Original dict handling logic
+        if 'project' in project_metadata:
+            project_info = project_metadata['project']
+        elif tracking_tag in project_metadata:
+            tag_data = project_metadata[tracking_tag]
+            if isinstance(tag_data, dict) and 'project' in tag_data:
+                project_info = tag_data['project']
             else:
-                if "ppi" in file and file.endswith('.mmclx'):
-                    nc = nc4.Dataset(os.path.join(root, file))
-                    file_time = cftime.num2pydate(nc_file['time'][0],'seconds since 1970-01-01 00:00:00')
-                    elev = nc['elv'][0];
-                    if start_datetime <= file_time <= end_datetime:
-                        print(file_time);
-                        if elev_min <= elev <= elev_max:
-                            matching_files.append(os.path.join(root, file))
-                    nc.close()         
-    return sorted(matching_files)
+                project_info = tag_data
+        else:
+            for key, value in project_metadata.items():
+                if isinstance(value, dict) and ('title' in value or 'principal_investigator' in value):
+                    project_info = value
+                    print(f"Found project info under key: {key}")
+                    break
+    
+    # Handle instrument metadata (could be list or dict)
+    instrument_info = None
+    
+    if isinstance(instrument_metadata, list):
+        # Search through list for instrument info
+        for item in instrument_metadata:
+            if isinstance(item, dict):
+                # Look for direct instrument match
+                if item.get('name') == 'ncas-mobile-ka-band-radar-1':
+                    instrument_info = item
+                    break
+                # Look for nested instrument structure
+                elif 'ncas-mobile-ka-band-radar-1' in item:
+                    instrument_info = item['ncas-mobile-ka-band-radar-1']
+                    break
+                # Look for instruments list
+                elif 'instruments' in item:
+                    instruments_list = item['instruments']
+                    if isinstance(instruments_list, list):
+                        for instrument in instruments_list:
+                            if isinstance(instrument, dict) and instrument.get('name') == 'ncas-mobile-ka-band-radar-1':
+                                instrument_info = instrument
+                                break
+                    if instrument_info:
+                        break
+    elif isinstance(instrument_metadata, dict):
+        # Original dict handling logic
+        if 'instruments' in instrument_metadata:
+            instruments_list = instrument_metadata['instruments']
+            if isinstance(instruments_list, list):
+                for instrument in instruments_list:
+                    if isinstance(instrument, dict) and instrument.get('name') == 'ncas-mobile-ka-band-radar-1':
+                        instrument_info = instrument
+                        break
+        else:
+            for key, value in instrument_metadata.items():
+                if isinstance(value, dict):
+                    if value.get('name') == 'ncas-mobile-ka-band-radar-1':
+                        instrument_info = value
+                        break
+                    elif 'ncas-mobile-ka-band-radar-1' in str(key).lower():
+                        instrument_info = value
+                        break
+    
+    # Also look for instrument info in the project YAML file under ncas_instruments
+    project_instrument_info = None
+    
+    # Check if project_info has ncas_instruments
+    if project_info and isinstance(project_info, dict) and 'ncas_instruments' in project_info:
+        instruments_list = project_info['ncas_instruments']
+        if isinstance(instruments_list, list):
+            for instrument in instruments_list:
+                if isinstance(instrument, dict):
+                    # Handle dict with instrument name as key
+                    for inst_name, inst_data in instrument.items():
+                        # Check for exact match or partial match (case insensitive)
+                        if inst_name == 'ncas-mobile-ka-band-radar-1' or 'ncas-mobile-ka-band-radar-1' in inst_name.lower():
+                            project_instrument_info = inst_data
+                            print(f"Found instrument info under key: {inst_name}")
+                            break
+                if project_instrument_info:
+                    break
+    
+    print(f"Found project info: {project_info is not None}")
+    print(f"Found instrument info: {instrument_info is not None}")
+    print(f"Found project instrument info: {project_instrument_info is not None}")
+    
+    if project_info:
+        print(f"Project info keys: {list(project_info.keys())}")
+    if instrument_info:
+        print(f"Instrument info keys: {list(instrument_info.keys())}")
+    if project_instrument_info:
+        print(f"Project instrument info keys: {list(project_instrument_info.keys())}")
+    
+    # Open NetCDF file and update attributes
+    try:
+        with nc4.Dataset(cfradial_file, 'a') as ds:
+            # Remove PyART's default "version" attribute
+            if hasattr(ds, 'version'):
+                ds.delncattr('version')
+                print("Removed PyART 'version' attribute")
+            
+            # Add time coverage attributes FIRST
+            if 'time' in ds.variables:
+                time_var = ds.variables['time']
+                if hasattr(time_var, 'units') and len(time_var) > 0:
+                    try:
+                        start_time = cftime.num2pydate(time_var[0], time_var.units)
+                        end_time = cftime.num2pydate(time_var[-1], time_var.units)
+                        
+                        ds.setncattr('time_coverage_start', start_time.strftime('%Y-%m-%dT%H:%M:%SZ'))
+                        ds.setncattr('time_coverage_end', end_time.strftime('%Y-%m-%dT%H:%M:%SZ'))
+                        
+                        print(f"Added time coverage: {start_time.strftime('%Y-%m-%dT%H:%M:%SZ')} to {end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+                        
+                    except Exception as e:
+                        print(f"Warning: Could not add time coverage: {e}")
+            
+            # Update Conventions
+            ds.setncattr('Conventions', 'NCAS-Radar-1.0 CfRadial-1.4 instrument_parameters radar_parameters geometry_correction')
+            
+            # Update core attributes
+            ds.setncattr('title', 'Moment data from NCAS Mobile Ka-band Radar (Kepler)')
+            ds.setncattr('institution', 'National Centre for Atmospheric Science (NCAS) and Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)')
+            ds.setncattr('source', 'NCAS Mobile Ka-band Radar unit 1')
+            ds.setncattr('references', 'www.metek.de')
+            ds.setncattr('product_version', f'v{data_version}')
+            ds.setncattr('processing_level', '1')
+            ds.setncattr('licence', 'This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).')
+            
+            # Add creator information
+            ds.setncattr('creator_name', 'Chris Walden')
+            ds.setncattr('creator_email', 'chris.walden@ncas.ac.uk')
+            ds.setncattr('creator_url', 'https://orcid.org/0000-0002-5718-466X')
+            
+            # Add instrument metadata from YAML if available
+            if instrument_info:
+                print("Adding instrument metadata from YAML")
+                if 'manufacturer' in instrument_info:
+                    ds.setncattr('instrument_manufacturer', instrument_info['manufacturer'])
+                if 'model' in instrument_info:
+                    ds.setncattr('instrument_model', instrument_info['model'])
+                if 'serial_number' in instrument_info:
+                    ds.setncattr('instrument_serial_number', instrument_info['serial_number'])
+                if 'pid' in instrument_info:
+                    ds.setncattr('instrument_pid', instrument_info['pid'])
+            else:
+                print("Using default instrument metadata")
+                # Default instrument metadata
+                ds.setncattr('instrument_manufacturer', 'Meteorologische Messtechnik (Metek) GmbH')
+                ds.setncattr('instrument_model', 'MIRA-35S')
+                ds.setncattr('instrument_serial_number', 'BX3C')
+                ds.setncattr('instrument_pid', 'https://hdl.handle.net/21.12132/3.b7a8298b7a54405f')
+            
+            # Add project metadata from YAML if available
+            if project_info:
+                print("Adding project metadata from YAML")
+                if 'title' in project_info:
+                    ds.setncattr('project', project_info['title'])
+                
+                if 'principal_investigator' in project_info:
+                    pi = project_info['principal_investigator']
+                    if isinstance(pi, dict):
+                        if 'name' in pi:
+                            ds.setncattr('project_principal_investigator', pi['name'])
+                        if 'email' in pi:
+                            ds.setncattr('project_principal_investigator_email', pi['email'])
+                        if 'orcid' in pi:
+                            ds.setncattr('project_principal_investigator_url', pi['orcid'])
+                
+                # Try to get acknowledgement from project_instrument_info first (from project YAML)
+                acknowledgement_set = False
+                if project_instrument_info:
+                    if 'acknowledgement' in project_instrument_info:
+                        ds.setncattr('acknowledgement', project_instrument_info['acknowledgement'])
+                        acknowledgement_set = True
+                        print("Set acknowledgement from project YAML instrument info")
+                    elif 'acknowledgment' in project_instrument_info:  # Alternative spelling
+                        ds.setncattr('acknowledgement', project_instrument_info['acknowledgment'])
+                        acknowledgement_set = True
+                        print("Set acknowledgement from project YAML instrument info (alternative spelling)")
+                
+                # Fall back to project_info if not found in instrument info
+                if not acknowledgement_set:
+                    if 'acknowledgement' in project_info:
+                        ds.setncattr('acknowledgement', project_info['acknowledgement'])
+                        print("Set acknowledgement from project info")
+                    elif 'acknowledgment' in project_info:  # Alternative spelling
+                        ds.setncattr('acknowledgement', project_info['acknowledgment'])
+                        print("Set acknowledgement from project info (alternative spelling)")
+            else:
+                print("Using default project metadata for COBALT")
+                # Default project metadata for COBALT
+                ds.setncattr('project', 'Contrail Observations and Lifecycle Tracking (COBALT)')
+                ds.setncattr('project_principal_investigator', 'Edward Gryspeerdt')
+                ds.setncattr('project_principal_investigator_email', 'e.gryspeerdt@imperial.ac.uk')
+                ds.setncattr('project_principal_investigator_url', 'https://orcid.org/0000-0002-3815-4756')
+                ds.setncattr('acknowledgement', 'This dataset was developed as part of the activity "Contrail Observations and Lifecycle Tracking (COBALT)", funded by\nNatural Environment Research Council (NERC) Grant NE/Z503794/1.\nIt uses instrumentation provided by the Atmospheric Measurement and Observation Facility (AMOF), part of NERC National Capability.\nUsers should acknowledge the National Centre for Atmospheric Science (NCAS) as the data provider.')
+            
+            # Platform information
+            ds.setncattr('platform', 'CAO')
+            ds.setncattr('platform_type', 'stationary_platform')
+            ds.setncattr('location_keywords', 'Chilbolton, Hampshire, England')
+            ds.setncattr('platform_is_mobile', 'false')
+            ds.setncattr('deployment_mode', 'land')
+            
+            # Processing information
+            ds.setncattr('processing_software_url', 'https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.0.0')
+            ds.setncattr('processing_software_version', 'v1.0.0')
+            
+            # Add instrument software info if available
+            ds.setncattr('instrument_software', 'rx_client')
+            ds.setncattr('instrument_software_version', '/home/vin/WORK/MBR3_XCRL_B3XC/ews/rx_client/Debug/rx_client 20161014-1951')
+            
+            # Add geospatial bounds - CALCULATE DYNAMICALLY
+            try:
+                geospatial_bounds = cfradial_get_bbox(cfradial_file)
+                ds.setncattr('geospatial_bounds', geospatial_bounds)
+                print(f"Added dynamic geospatial bounds: {geospatial_bounds}")
+            except Exception as e:
+                print(f"Warning: Could not calculate geospatial bounds: {e}")
+                # Fallback to Chilbolton area
+                ds.setncattr('geospatial_bounds', 'Bounding box: 51.15N -1.44E, 51.49N -1.37E')
+    
+            # Update timestamp
+            current_time = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+            ds.setncattr('last_revised_date', current_time)
+            ds.setncattr('date_created', current_time)
+            
+            # Update variable attributes for NCAS compliance
+            _update_variable_attributes_for_ncas(ds)
+        
+    except Exception as e:
+        raise RuntimeError(f"Error modifying NetCDF file {cfradial_file}: {e}")
+    
+    print(f"Successfully added manual NCAS metadata to {cfradial_file}")
+
+def _update_variable_attributes_for_ncas(ds):
+    """Update variable attributes to be NCAS compliant."""
+    
+    # Update time variable
+    if 'time' in ds.variables:
+        time_var = ds.variables['time']
+        time_var.setncattr('comment', '')
+        time_var.setncattr('long_name', 'time in seconds since time_reference')
+    
+    # Update range variable  
+    if 'range' in ds.variables:
+        range_var = ds.variables['range']
+        range_var.setncattr('comment', 'Range to centre of each bin')
+        if hasattr(range_var, 'meters_to_center_of_first_gate'):
+            # Keep existing value
+            pass
+        else:
+            range_var.setncattr('meters_to_center_of_first_gate', range_var[0])
+    
+    # Update azimuth variable
+    if 'azimuth' in ds.variables:
+        azim_var = ds.variables['azimuth']
+        azim_var.setncattr('comment', 'Azimuth of antenna relative to true north')
+    
+    # Update elevation variable
+    if 'elevation' in ds.variables:
+        elev_var = ds.variables['elevation']
+        elev_var.setncattr('comment', 'Elevation of antenna relative to the horizontal plane')
+    
+    # Update altitude variable
+    if 'altitude' in ds.variables:
+        alt_var = ds.variables['altitude']
+        alt_var.setncattr('comment', 'Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model')
+        alt_var.setncattr('units', 'metres')
+    
+    # Update sweep_mode variable
+    if 'sweep_mode' in ds.variables:
+        sweep_var = ds.variables['sweep_mode']
+        sweep_var.setncattr('comment', 'Options are: "sector", "coplane", "rhi", "vertical_pointing", "idle", "azimuth_surveillance", "elevation_surveillance", "sunscan", "pointing", "manual_ppi", "manual_rhi"')
+        sweep_var.setncattr('units', '')
+    
+    # Update antenna_transition variable
+    if 'antenna_transition' in ds.variables:
+        ant_var = ds.variables['antenna_transition']
+        ant_var.setncattr('comment', '1 if antenna is in transition, 0 otherwise')
+        ant_var.setncattr('units', '')
+    
+    # Add frequency variable if missing
+    if 'frequency' not in ds.variables and 'frequency' not in ds.dimensions:
+        # Add frequency dimension and variable
+        ds.createDimension('frequency', 1)
+        freq_var = ds.createVariable('frequency', 'f4', ('frequency',))
+        freq_var.setncattr('standard_name', 'radiation_frequency')
+        freq_var.setncattr('long_name', 'frequency of transmitted radiation')
+        freq_var.setncattr('units', 's-1')
+        freq_var.setncattr('meta_group', 'instrument_parameters')
+        freq_var[:] = [35.5e9]  # 35.5 GHz for Ka-band
+    
+    # Add azimuth_correction variable if missing
+    if 'azimuth_correction' not in ds.variables:
+        azim_corr_var = ds.createVariable('azimuth_correction', 'f4')
+        azim_corr_var.setncattr('long_name', 'azimuth correction applied')
+        azim_corr_var.setncattr('units', 'degrees')
+        azim_corr_var.setncattr('meta_group', 'geometry_correction')
+        azim_corr_var.setncattr('comment', 'Azimuth correction applied. North angle relative to instrument home azimuth.')
+        azim_corr_var[:] = 55.9  # Default value for COBALT
 
 def multi_mmclx2cfrad(
-    mmclxfiles,
-    output_dir,
-    scan_name="HSRHI",
-    gzip_flag=False,
-    azimuth_offset=0.0,
-    #revised_northangle=-56.85,
-    revised_northangle=55.7,
-    tracking_tag="AMOF_20220922221548",
-    campaign="woest",
-    data_version="1.0.0",
-):
+   
+    mmclxfiles: List[str],
+    outdir: str,
+    scan_name: str = 'RHI',
+    gzip_flag: bool = True,
+    azimuth_offset: float = 0.0,
+    tracking_tag: str = '',
+    campaign: str = '',
+    revised_northangle: float = 55.9,
+    data_version: str = "1.0.0",
+    single_sweep: bool = False,
+    yaml_project_file: str = None,
+    yaml_instrument_file: str = None
+) -> Optional[Radar]:
     """
-    Aggregates single-sweep mmclx data to a cfradial1 data.
-    output_dir(str): Enter the path for output data,
-    scan_name(str): "HSRHI"
-    """
-    #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-    #from kepler_utils import read_mira35_mmclx
+    Convert multiple mmclx files to CF-Radial file(s).
     
-    from pathlib import Path
-    homepath = Path.home()
-
-    yaml_project_file = os.path.join(homepath,'amof_campaigns','{}_project.yml'.format(campaign))
-    yaml_instrument_file = os.path.join(homepath,'amof_instruments','amof_instruments.yml')
-
-    out_dir = output_dir
-    files = sorted(mmclxfiles)
-    print(files)
-    print("Number of files: ", len(files))
-    print(f"gzip_flag={gzip_flag}");
-
-    print('Start to read mmclx')
-
-    RadarDS = read_mira35_mmclx(files[0],gzip_flag=gzip_flag,revised_northangle=revised_northangle);
-
-    print('Done reading mmclx')
-    # Read time and microsec directly from mmclx file
-    if gzip_flag:
-        with gzip.open(files[0]) as gz:
-            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                dtsec = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
-                usec = nc['microsec'][:];           
-    else:
-        nc = nc4.Dataset(files[0])
-        dtsec = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
-        usec = nc['microsec'][:]; 
-        nc.close();
-
-    dt_ref = dtsec[0].replace(hour=0,minute=0,second=0,microsecond=0);
-    time_reference = dt_ref.strftime('%Y-%m-%dT%H:%M:%SZ');
-    time_units = f'seconds since {time_reference}'; 
-
-    tsec = cftime.date2num(dtsec,time_units);
-    print(time_units);
-    
-    print(RadarDS.latitude['data']);
-    print("Merging all scans into one Volume")
-    for i in range(1, len(files)):
-
-        newRadarDS = read_mira35_mmclx(files[i],gzip_flag=gzip_flag)
-
-        if gzip_flag:
-            with gzip.open(files[i]) as gz:
-                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-                    dtsec_new = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
-                    usec_new = nc['microsec'][:];           
-        else:
-            nc = nc4.Dataset(files[i])
-            dtsec_new = cftime.num2pydate(nc['time'][:],'seconds since 1970-01-01 00:00:00')
-            usec_new = nc['microsec'][:]; 
-            nc.close();
-
-        if 'RHI' in scan_name or 'rhi' in scan_name:
-            if np.max(newRadarDS.elevation['data'])-np.min(newRadarDS.elevation['data'])!=0:
-                print(f'sweep = {i}');
-                RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
-                tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
-                usec = np.append(usec,usec_new);
-
-                RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
-                RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
-        elif 'PPI' in scan_name or 'ppi' in scan_name or 'VAD' in scan_name or 'vad' in scan_name:
-            if np.max(newRadarDS.azimuth['data'])-np.min(newRadarDS.azimuth['data'])!=0:
-                print(f'sweep = {i}');
-                RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
-                tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
-                usec = np.append(usec,usec_new);
-
-                RadarDS.scan_rate['data'] = np.append(RadarDS.scan_rate['data'],newRadarDS.scan_rate['data']);
-                RadarDS.antenna_transition['data'] = np.append(RadarDS.antenna_transition['data'],newRadarDS.antenna_transition['data']);
-        elif 'VPT' in scan_name or 'vpt' in scan_name or 'VERT' in scan_name or 'vert' in scan_name:        
-            RadarDS = pyart.util.join_radar(RadarDS,newRadarDS);
-            tsec = np.append(tsec,cftime.date2num(dtsec_new,time_units));
-            usec = np.append(usec,usec_new);
-
-            #RadarDS.scan_rate['data'] = None;
-            #RadarDS.antenna_transition['data'] = None;
+    Args:
+        mmclxfiles: List of mmclx file paths
+        outdir: Output directory
+        scan_name: Type of scan ('RHI', 'PPI', 'VPT')
+        gzip_flag: Whether files are gzip compressed
+        azimuth_offset: Azimuth offset correction
+        tracking_tag: AMOF tracking tag
+        campaign: Campaign name
+        revised_northangle: North angle correction
+        data_version: Data version string
+        single_sweep: If True, create separate files for each sweep
+        yaml_project_file: Path to project YAML file (required)
+        yaml_instrument_file: Path to instrument YAML file (required)
         
- 
+    Returns:
+        Combined radar object or None if processing fails
         
-    RadarDS.time['units'] = time_units;
-    RadarDS.time['data'][:] = tsec+usec*1e-6;
-
-
-
-    #RadarDS.azimuth['data'] += azimuth_offset;
-
-
-    #if 'RHI' in scan_name or 'rhi' in scan_name:
-    #    RadarDS.fixed_angle['data'] += azimuth_offset;
-    
-    fname = os.path.basename(files[0]).split(".")[0]
-
-    out_file = f"{fname}_{scan_name.lower()}.nc"
-
-    print(out_file);
-    out_path = os.path.join(out_dir, out_file)
-    print(out_path);
-    pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
-
-    DS = nc4.Dataset(out_path,'r+');
-    DS.scan_name = scan_name.lower();
-
-    DS.close();
-
-    amend_unitless(out_path)
-    lowercase_long_names(out_path)
-    time_long_name(out_path)
-
-    # Update history
-    update_string = 'Merge single sweep files into cfradial file'
-    update_history_attribute(out_path,update_string)
-
-    print(mmclxfiles[0]);
-    cfradial_add_instrument_parameters(mmclxfiles[0],out_path,yaml_project_file,yaml_instrument_file,tracking_tag, data_version)
-
-    cfradial_add_geometry_correction(out_path,revised_northangle);
-
-
-    print(out_path);
-    print('Going to add NCAS metadata')
-    outfile = cfradial_add_ncas_metadata(out_path,yaml_project_file,yaml_instrument_file,tracking_tag,data_version);
-
- 
-    return outfile
-
-def ppistack_mmclx2cfrad(
-    mmclxfiles,
-    output_dir,
-    scan_name="BLPPI",
-):
+    Raises:
+        ValueError: If required YAML file paths are not provided
+        FileNotFoundError: If YAML files don't exist
     """
-    Aggregates single-sweep PPI data to a cfradial1 data.
-    input_dir(str): Enter path of single sweep data directory,
-    output_dir(str): Enter the path for output data,
-    scan_name(str): "BLPPI"
-    """
-    #pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
-    in_dir = input_dir
-    out_dir = output_dir
-    files = sorted(mmclxfiles, key=natural_sort_key)
-    print("Number of files: ", len(files))
- 
-    RadarDS = read_mira35_mmclx(files[0]);
+    if not mmclxfiles:
+        print("No input files provided")
+        return None
     
-    print("Merging all scans into one Volume")
-    for i in range(1, len(files)):
-
-        newRadarDS = read_mira35_mmclx(files[i])
-        RadarDS = pyart.util.join(RadarDS,newRadarDS)
-
-        fname = os.path.basename(files[0]).split(".nc")[0]
-
-        out_file = f"cfrad_{fname}.nc"
-        out_path = os.path.join(out_dir, out_file)
-        pyart.io.write_cfradial(out_path, RadarDS, format="NETCDF4")
-
-def split_monotonic_sequence(sequence):
-    subsequences = [];
-    increasing_subsequence = []
-    for i in range(len(sequence)):
-        if i == 0:
-            increasing_subsequence.append(sequence[i])
+    # Validate required YAML file paths
+    if yaml_project_file is None:
+        raise ValueError("yaml_project_file must be provided - cannot use default paths")
+    if yaml_instrument_file is None:
+        raise ValueError("yaml_instrument_file must be provided - cannot use default paths")
+    
+    # Check that YAML files exist
+    if not os.path.exists(yaml_project_file):
+        raise FileNotFoundError(f"Project YAML file not found: {yaml_project_file}")
+    if not os.path.exists(yaml_instrument_file):
+        raise FileNotFoundError(f"Instrument YAML file not found: {yaml_instrument_file}")
+    
+    print(f"Processing {len(mmclxfiles)} files for {scan_name}")
+    print(f"Single sweep mode: {single_sweep}")
+    print(f"Data version: {data_version}")
+    print(f"Using YAML files:")
+    print(f"  Project: {yaml_project_file}")
+    print(f"  Instrument: {yaml_instrument_file}")
+    
+    # Read all radar files
+    radars = []
+    for mmclx_file in mmclxfiles:
+        try:
+            radar = read_mira35_mmclx(
+                mmclx_file, gzip_flag=gzip_flag, 
+                revised_northangle=revised_northangle
+            )
+            radars.append(radar)
+        except Exception as e:
+            print(f"Error reading {mmclx_file}: {e}")
             continue
-        if np.round(10*sequence[i],decimals=1) > np.round(10*sequence[i-1],decimals=1):
-            increasing_subsequence.append(sequence[i])
-        else:
-            if increasing_subsequence:
-                subsequences.append(increasing_subsequence);
-                increasing_subsequence = [sequence[i]]
-
-    if increasing_subsequence:
-        subsequences.append(increasing_subsequence);
-    endindices = np.cumsum([len(s) for s in subsequences])-1;
-    startindices =  [1+endindices[i] - len(subsequences[i]) for i in range(len(endindices))];
-    return list(zip(startindices,endindices))
-
-def read_woest_cmd_file(file_path):
-    all_data = []
-
-    with open(file_path, "r") as file:
-        for line in file:
-            line = line.rstrip().replace(': ', ':')
-            pairs = line.split()
-            line_data = {}
-
-            for pair in pairs:
-                key, value = pair.split(':')
-                line_data[key.strip()] = value.strip()
-
-            all_data.append(line_data)
-
-    return all_data
-
-def process_kepler_woest_iop_step1(datestr,indir,outdir,yaml_project_file,yaml_instrument_file,azimuth_offset=-6.85,gzip_flag=True,revised_northangle=-56.85,data_version="1.0.0"):
-
-    ioppath = os.path.join(indir,'iop');
-
-    cmd_path = "/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data/campaign/woest/woest-command/";
-    cmd_file = os.path.join(cmd_path,f'combined_logs_{datestr}.txt');
-    cmd_dicts = read_woest_cmd_file(cmd_file);
-
-    for d in cmd_dicts:
-        print(d);
-        storm_az = float(d["azimuth"]);
-        storm_range = float(d["range"]);
-        woest_cmd = d["command"];
-
-        print(storm_az,storm_range,woest_cmd);
-
-    from itertools import groupby
-
-    # Sort the data by the 'region' key
-    #cmd_dicts.sort(key=lambda x: x['region'])
-    cmd_dicts.sort(key=lambda x: x['Timestamp'])
-
-    # Group the data by the 'region' key
-    grouped_data = {key: list(group) for key, group in groupby(cmd_dicts, key=lambda x: x['region'])}
-
-    # Print the grouped data
-    for region, values in grouped_data.items():
-        print(f"Region: {region}")
-        for value in values:
-            print(f"  {value}")
-
-    all_regions = [];
-    for region, values in grouped_data.items():
-        region_data = {};
-        time_start = grouped_data[region][0]["Timestamp"];
-        time_end = grouped_data[region][-1]["Timestamp"];
-        print(region,time_start,time_end);
-        region_data["region"] = region;
-        region_data["time_start"] = time_start;
-        region_data["time_end"] = time_end;
-        all_regions.append(region_data);
-
-
-    print(all_regions);
-    time_start = cmd_dicts[0]["Timestamp"];
-    time_end = cmd_dicts[-1]["Timestamp"];
-
-    print(time_start);
-    print(time_end);    
-
-    # Specify the directory containing the gzipped NetCDF files
-    #directory = f'/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-radar-mobile-ka-band-1/data/campaign/woest/mom/{datestr}/iop'
-
-    # Get all files in the specified directory
-    gzipped_files = [os.path.join(ioppath, file) for file in os.listdir(ioppath) if file.endswith('mmclx.gz')]
-
-    files_by_region = {region: [] for region,value in grouped_data.items()}
-    #rhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -10, 169, hsrhipath,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-
-    for gzipped_file in gzipped_files:
-        with gzip.open(gzipped_file, 'rb') as f:
-            with nc4.Dataset('dummy',mode='r',memory=f.read()) as DS:
-                time_var = DS.variables['time'];  
-
-                region_id = None;
-                for region in all_regions:
-                    region_start = datetime.datetime.strptime(region['time_start'], '%y%m%d-%H%M%S')
-                    region_end = datetime.datetime.strptime(region['time_end'], '%y%m%d-%H%M%S')
-
-                    time_values = time_var[:]
-                    time_units = time_var.units
-             
-                    dtime = cftime.num2pydate(time_values,'seconds since 1970-01-01 00:00:00');
+    
+    if not radars:
+        print("No valid radar files could be read")
+        return None
+    
+    # Determine location from campaign
+    location_map = {
+        'woest': 'lyneham',
+        'ccrest': 'cao', 
+        'cobalt': 'cao',
+        'kasbex': 'cao'
+    }
+    location = location_map.get(campaign.lower(), 'unknown')
+    scan_name_lower = scan_name.lower().replace('_', '-')
+    
+   
+    
+    if single_sweep:
+        # Create separate file for each sweep
+        created_files = []
+        
+        for i, radar in enumerate(radars):
+            try:
+                # Get the actual start time from the radar data
+                first_time = cftime.num2pydate(radar.time['data'][0], radar.time['units'])
+                dtstr = first_time.strftime('%Y%m%d-%H%M%S')
                 
-                    if region_start <= dtime[0] <= region_end and region_start <= dtime[-1] <= region_end:
-                        print(region_start,region_end)
-                        print(dtime[0],dtime[-1]);
-                        region_id = region["region"]
-                        print(region_id)
-
-                    if region_id:
-                        files_by_region[region_id].append(gzipped_file)
-                        #break
-
-    files_by_region = {region: files for region, files in files_by_region.items() if files}
-
-    for region, file_list in files_by_region.items():
-        file_set = set(file_list);
-        iop_files = list(file_set)
-        print(f"Region {region}: {file_list}")
-
-        RadarDS_IOP = multi_mmclx2cfrad(iop_files,outdir,scan_name='SRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,data_version=data_version);
-
-        DS = nc4.Dataset(RadarDS_IOP,'r+');
-        DS.comment = f"WOEST IOP tracking storm region {region}";
-        DS.close();
-
-def process_kepler_woest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_instrument_file,azimuth_offset=-6.85,gzip_flag=True,revised_northangle=-56.85,data_version="1.0.0"):
-#def process_kepler_woest_day_step1(datestr,indir,outdir,azimuth_offset,gzip_flag=True,revised_northangle=303.15):
-    # Define the start and end times for the loop
-
-
-    start_date = datetime.datetime.strptime(datestr, '%Y%m%d'); # + datetime.timedelta(hours=1);
-    end_date = start_date  + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
-
-    hsrhipath = os.path.join(indir,'hsrhi');
-    blppipath = os.path.join(indir,'blppi');
-    vadpath = os.path.join(indir,'vad');
-    vptpath = os.path.join(indir,'vpt');
-    ioppath = os.path.join(indir,'iop');
-    ppipath = os.path.join(indir,'ppi');
-
-    # Correct azimuth offset based on use of revised northangle
-    
-
-    # Iterate through each half hour for HSRHI and BLPPI files
-    current_date = start_date
-    while current_date <= end_date:
-        print(current_date);
-        next_halfhour = current_date + datetime.timedelta(minutes=30);
+                # Simple filename with correct data version
+                outfile = os.path.join(
+                    outdir,
+                    f'ncas-mobile-ka-band-radar-1_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
+                )
+                
+                print(f"Creating output file: {outfile}")
+                
+                # If multiple files would have the same name, add a sequence number
+                if os.path.exists(outfile):
+                    base_name = outfile.replace('.nc', '')
+                    counter = 1
+                    while os.path.exists(f'{base_name}_{counter:02d}.nc'):
+                        counter += 1
+                    outfile = f'{base_name}_{counter:02d}.nc'
+                    print(f"File exists, using: {outfile}")
+                
+                # Write CF-Radial file
+                pyart.io.write_cfradial(outfile, radar, format='NETCDF4', time_reference=True)
+                
+                # Add time coverage attributes
+                cfradial_add_time_coverage(outfile)
+                
+                # Add NCAS metadata
+                cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+                
+                # Update history with correct information - USE "deg" INSTEAD OF DEGREE SYMBOL
+                if scan_name == 'RHI':
+                    angle_info = f"azimuth={radar.fixed_angle['data'][0]:.1f}deg"
+                elif scan_name == 'PPI':
+                    angle_info = f"elevation={radar.fixed_angle['data'][0]:.1f}deg"
+                else:
+                    angle_info = ""
+                
+                history_msg = f"{campaign.upper()}: Single-sweep {scan_name} conversion"
+                if angle_info:
+                    history_msg += f", {angle_info}"
+                if revised_northangle:
+                    history_msg += f", revised_northangle={revised_northangle}deg"
+                
+                update_history_attribute(outfile, history_msg)
+                
+                print(f"Created single-sweep file: {outfile}")
+                created_files.append(outfile)
+                
+            except Exception as e:
+                print(f"Error processing sweep {i}: {e}")
+                continue
         
-        try:
-            print("searching for hsrhi1 files")
-            hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -10, 169, hsrhipath,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-            #hsrhi1_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), -40, 139, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-
-            print(hsrhi1_files);
-            list_length = len(hsrhi1_files);
-            for i in range(0, list_length, 6):
-                subset = hsrhi1_files[i:i+6]
-                RadarDS_HSRHI1 = multi_mmclx2cfrad(subset,outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,data_version=data_version);
-
-            remaining_files = hsrhi1_files[i+6:]                
-            RadarDS_HSRHI1 = multi_mmclx2cfrad(remaining_files,outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,data_version=data_version);
-
-            #azims = [];
-            #if (len(hsrhi1_files)>0):
-                #hsrhi1_files.sort();
-            #    if gzip_flag:
-            #        for f in hsrhi1_files:
-            #            print(f);
-            #            with gzip.open(f) as gz:
-            #                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-            #                    nc.set_auto_mask(False);
-                                #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
-            #                    az = (nc['azi'][0]+revised_northangle) %360;
-            #                    azims.append(az);
-            #    else:
-            #        for f in hsrhi1_files:
-            #            nc = nc4.Dataset(f);
-            #            nc.set_auto_mask(False);
-                        #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
-            #            az = (nc['azi'][0]+revised_northangle) %360;
-            #            azims.append(az);
-            #            nc.close();
-            #    print(azims);
-            #    idx = split_monotonic_sequence(azims);
-            #    print(idx);
-            #    for l in idx:
-                    #if len(hsrhi1_files)==1:
-                    #    RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-            #        if l[0]==l[1]:
-            #            RadarDS_HSRHI1 = multi_mmclx2cfrad([hsrhi1_files[l[0]]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
-            #        elif l[1]==len(hsrhi1_files)-1:
-            #            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
-            #        else:
-            #            RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset);
-
-               # if (len(hsrhi1_files)>6):
-               #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[:6],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-               #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files[6:],outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-               # else:
-               #     RadarDS_HSRHI1 = multi_mmclx2cfrad(hsrhi1_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-        except:
-            print("Problem");
-            pass
-
-        try:        
-            print("searching for hsrhi2 files")
-            hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 170, 349, hsrhipath,gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-            #hsrhi2_files = find_mmclx_rhi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 140, 319, indir,gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-
-            print(hsrhi2_files);
-            list_length = len(hsrhi2_files);
-            for i in range(0, list_length, 6):
-                subset = hsrhi2_files[i:i+6]
-                RadarDS_HSRHI2 = multi_mmclx2cfrad(subset,outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,data_version=data_version);
-
-            remaining_files = hsrhi2_files[i+6:]                
-            RadarDS_HSRHI2 = multi_mmclx2cfrad(remaining_files,outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,data_version=data_version);
-
-            #azims = [];
-            #if (len(hsrhi2_files)>0):
-            #    hsrhi2_files.sort();
-            #    if gzip_flag:
-            #        for f in hsrhi2_files:
-            #            with gzip.open(f) as gz:
-            #                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-            #                    nc.set_auto_mask(False);
-                                #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
-            #                    az = (nc['azi'][0]+revised_northangle) %360;
-            #                    azims.append(az);
-            #    else:
-            #        for f in hsrhi2_files:
-            #            nc = nc4.Dataset(f);
-            #            nc.set_auto_mask(False);
-                        #az = (nc['azi'][0]+nc['northangle'][0]+azimuth_offset) %360;
-            #            az = (nc['azi'][0]+revised_northangle) %360;
-            #            azims.append(az);
-            #            nc.close();
-            #    print(azims);
-            #    idx = split_monotonic_sequence(azims);
-            #    print(idx);
-            #    for l in idx:
-                    #if len(hsrhi2_files)==1:
-                    #    RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files,outdir,scan_name='HSRHI',gzip_flag=True,azimuth_offset=azimuth_offset);
-            #        if l[0]==l[1]:
-            #            RadarDS_HSRHI2 = multi_mmclx2cfrad([hsrhi2_files[l[0]]],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
-            #        elif l[1]==len(hsrhi2_files)-1:
-            #            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
-            #        else:
-            #            RadarDS_HSRHI2 = multi_mmclx2cfrad(hsrhi2_files[l[0]:l[1]+1],outdir,scan_name='HSRHI',gzip_flag=gzip_flag,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
-        except:
-            print('Problem');
-            pass
+        print(f"Created {len(created_files)} single-sweep files")
+        return radars[0] if radars else None
+    
+    else:
+        # Original multi-sweep processing
+        if len(radars) == 1:
+            combined_radar = radars[0]
+        else:
+            try:
+                # Combine multiple radar objects
+                combined_radar = _combine_radars(radars, scan_name)
+            except Exception as e:
+                print(f"Error combining sweeps: {e}")
+                return None
         
+        # Generate output filename for multi-sweep file
+        first_time = cftime.num2pydate(combined_radar.time['data'][0], combined_radar.time['units'])
+        dtstr = first_time.strftime('%Y%m%d-%H%M%S')
+        
+        outfile = os.path.join(
+            outdir,
+            f'ncas-mobile-ka-band-radar-1_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
+        )
+        
+        print(f"Creating multi-sweep output file: {outfile}")
+        
+        # Write CF-Radial file
+        pyart.io.write_cfradial(outfile, combined_radar, format='NETCDF4', time_reference=True)
+        
+        # Add time coverage attributes
+        cfradial_add_time_coverage(outfile)
+        
+        # Add NCAS metadata
+        cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+        
+        # Update history - USE "deg" INSTEAD OF DEGREE SYMBOL
+        history_msg = f"{campaign.upper()}: Multi-sweep {scan_name} conversion"
+        if revised_northangle:
+            history_msg += f", revised_northangle={revised_northangle}deg"
+        history_msg += f", {len(radars)} sweeps"
+        
+        update_history_attribute(outfile, history_msg)
+        
+        print(f"Created multi-sweep file: {outfile}")
+        return combined_radar
+
+def cfradial_add_time_coverage(cfradial_file: str) -> None:
+    """
+    Add time_coverage_start and time_coverage_end attributes to CF-Radial file.
+    
+    These attributes are required for NCAS compliance and help with data discovery.
+    They are calculated from the actual time data in the file.
+    
+    Args:
+        cfradial_file: Path to CF-Radial file to modify
+    """
+    try:
+        with nc4.Dataset(cfradial_file, 'a') as ds:
+            # Check if time variable exists
+            if 'time' not in ds.variables:
+                print(f"Warning: No time variable found in {cfradial_file}")
+                return
+            
+            time_var = ds.variables['time']
+            
+            # Get time units for conversion
+            if hasattr(time_var, 'units'):
+                time_units = time_var.units
+            else:
+                print(f"Warning: No time units found in {cfradial_file}")
+                return
+            
+            # Convert first and last time values to datetime
+            try:
+                start_time = cftime.num2pydate(time_var[0], time_units)
+                end_time = cftime.num2pydate(time_var[-1], time_units)
+                
+                # Format as ISO 8601 strings
+                time_coverage_start = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                time_coverage_end = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                
+                # Set the attributes
+                ds.setncattr('time_coverage_start', time_coverage_start)
+                ds.setncattr('time_coverage_end', time_coverage_end)
+                
+                print(f"Added time coverage: {time_coverage_start} to {time_coverage_end}")
+                
+            except Exception as e:
+                print(f"Error converting time values: {e}")
+                return
+                
+    except Exception as e:
+        print(f"Error adding time coverage to {cfradial_file}: {e}")
+
+def _safe_parse_time(nc_dataset, time_index=0):
+    """
+    Safely parse time from netCDF dataset, handling microseconds and various time unit formats.
+    
+    Args:
+        nc_dataset: Open netCDF4 Dataset
+        time_index: Index of time value to parse (default: 0)
+
+        
+    Returns:
+        datetime object or None if parsing fails
+    """
+    try:
+        # First try the standard approach with microseconds (as in your old code)
+        if 'time' in nc_dataset.variables and 'microsec' in nc_dataset.variables:
+            time_var = nc_dataset.variables['time']
+            microsec_var = nc_dataset.variables['microsec']
+            
+            # Parse the base time
+            dtime = cftime.num2pydate(time_var[time_index], 'seconds since 1970-01-01 00:00:00')
+            
+            # Add microseconds
+            dtime = dtime.replace(microsecond=int(microsec_var[time_index]))
+            
+            return dtime
+            
+    except (ValueError, OSError, IndexError) as e:
+        print(f"Microsecond time parsing failed: {e}")
+        
+    try:
+        # Fallback: Try standard time parsing without microseconds
+        if 'time' in nc_dataset.variables:
+            time_var = nc_dataset.variables['time']
+            if hasattr(time_var, 'units'):
+                # Clean up common problematic units
+                units = time_var.units
+                units = units.replace('seconds since 1970-1-1 0:0:0', 'seconds since 1970-01-01 00:00:00')
+                units = units.replace('seconds since 1970-01-01 0:00:00', 'seconds since 1970-01-01 00:00:00')
+                return cftime.num2pydate(time_var[time_index], units)
+            else:
+                return cftime.num2pydate(time_var[time_index], 'seconds since 1970-01-01 00:00:00')
+    except (ValueError, OSError, IndexError) as e:
+        print(f"Standard time parsing failed: {e}")
+        
+    try:
+        # Method 3: Use raw time value and assume epoch
+        if 'time' in nc_dataset.variables:
+            time_val = nc_dataset.variables['time'][time_index]
+            return datetime.datetime.utcfromtimestamp(time_val)
+    except:
+        pass
+    
+    # Method 4: Return a default time based on current processing
+    print("Warning: Could not parse time from file, using current time")
+    return datetime.datetime.utcnow()
+
+def _combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
+    """
+    Combine multiple radar objects into a single radar object.
+    
+    Args:
+        radar_list: List of PyART Radar objects to combine
+        scan_name: Type of scan being combined
+        
+    Returns:
+        Combined PyART Radar object
+    """
+    # Use scan-specific combination strategies
+    scan_name_lower = scan_name.lower()
+    
+    if scan_name_lower == 'ppi':
+        return _combine_ppi_sweeps(radar_list)
+    elif scan_name_lower in ['vpt', 'vertical_pointing']:
+        return _combine_vpt_sweeps(radar_list)
+    elif scan_name_lower in ['rhi', 'manual_rhi']:
+        return _combine_rhi_sweeps(radar_list)
+    else:
+        # Default to manual combination
+        print(f"Using manual combination for scan type: {scan_name}")
+        return _manual_combine_radars(radar_list, scan_name)
+
+def _manual_combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
+    """
+    Manually combine radar objects by concatenating arrays.
+    
+    Args:
+        radar_list: List of PyART Radar objects to combine
+        scan_name: Type of scan being combined
+        
+    Returns:
+        Combined PyART Radar object
+    """
+    base_radar = radar_list[0]
+    
+    # Calculate total dimensions
+    total_nrays = sum(r.nrays for r in radar_list)
+    nsweeps = len(radar_list)
+    
+    print(f"Combining {nsweeps} sweeps with {total_nrays} total rays")
+    
+    # Create new time array
+    time_data = []
+    for radar in radar_list:
+        time_data.extend(radar.time['data'])
+    
+    combined_time = base_radar.time.copy()
+    combined_time['data'] = np.array(time_data)
+    
+    # Create new angle arrays
+    azimuth_data = []
+    elevation_data = []
+    for radar in radar_list:
+        azimuth_data.extend(radar.azimuth['data'])
+        elevation_data.extend(radar.elevation['data'])
+    
+    combined_azimuth = base_radar.azimuth.copy()
+    combined_azimuth['data'] = np.array(azimuth_data)
+    
+    combined_elevation = base_radar.elevation.copy()
+    combined_elevation['data'] = np.array(elevation_data)
+    
+    # Combine fields
+    combined_fields = {}
+    for field_name in base_radar.fields:
+        field_data = []
+        for radar in radar_list:
+            if field_name in radar.fields:
+                field_data.append(radar.fields[field_name]['data'])
+        
+        if field_data:
+            combined_field = base_radar.fields[field_name].copy()
+            combined_field['data'] = np.concatenate(field_data, axis=0)
+            combined_fields[field_name] = combined_field
+    
+    # Create sweep indexing
+    sweep_start_ray_index = {'data': np.zeros(nsweeps, dtype='int32')}
+    sweep_end_ray_index = {'data': np.zeros(nsweeps, dtype='int32')}
+    sweep_number = {'data': np.arange(nsweeps, dtype='int32')}
+    fixed_angle = {'data': np.zeros(nsweeps, dtype='float32')}
+    sweep_mode = {'data': np.array([scan_name.lower()] * nsweeps)}
+    
+    current_ray = 0
+    for i, radar in enumerate(radar_list):
+        sweep_start_ray_index['data'][i] = current_ray
+        sweep_end_ray_index['data'][i] = current_ray + radar.nrays - 1
+        fixed_angle['data'][i] = radar.fixed_angle['data'][0]
+        current_ray += radar.nrays
+    
+    # Create combined radar object
+    combined_radar = Radar(
+        combined_time, base_radar.range, combined_fields,
+        base_radar.metadata, scan_name.lower(),
+        base_radar.latitude, base_radar.longitude, base_radar.altitude,
+        sweep_number, sweep_mode, fixed_angle,
+        sweep_start_ray_index, sweep_end_ray_index,
+        combined_azimuth, combined_elevation,
+        instrument_parameters=base_radar.instrument_parameters
+    )
+    
+    return combined_radar
+
+def split_monotonic_sequence(azimuth_data: np.ndarray, tolerance: float = 5.0) -> List[Tuple[int, int]]:
+    """
+    Split azimuth data into monotonic sequences for PPI processing.
+    
+    This function identifies breaks in monotonic azimuth sequences that indicate
+    separate PPI sweeps, handling 360-degree wraparound.
+    
+    Args:
+        azimuth_data: Array of azimuth angles in degrees
+        tolerance: Maximum allowed jump in degrees before considering a new sequence
+        
+    Returns:
+        List of tuples (start_index, end_index) for each monotonic sequence
+        
+    Example:
+        >>> azimuth = np.array([0, 10, 20, 30, 350, 0, 10, 20])
+        >>> sequences = split_monotonic_sequence(azimuth, tolerance=30.0)
+        >>> print(sequences)
+        [(0, 3), (4, 7)]
+    """
+    if len(azimuth_data) < 2:
+        return [(0, len(azimuth_data) - 1)]
+    
+    sequences = []
+    start_idx = 0
+    
+    for i in range(1, len(azimuth_data)):
+        # Calculate azimuth difference, handling 360-degree wraparound
+        diff = azimuth_data[i] - azimuth_data[i-1]
+        
+        # Handle wraparound cases
+        if diff > 180:
+            diff -= 360
+        elif diff < -180:
+            diff += 360
+        
+        # Check if this represents a break in the monotonic sequence
+        if abs(diff) > tolerance:
+            # End the current sequence
+            sequences.append((start_idx, i - 1))
+            start_idx = i
+    
+    # Add the final sequence
+    sequences.append((start_idx, len(azimuth_data) - 1))
+    
+    print(f"Found {len(sequences)} monotonic sequences in azimuth data")
+    for i, (start, end) in enumerate(sequences):
+        print(f"  Sequence {i+1}: indices {start}-{end} "
+              f"(az: {azimuth_data[start]:.1f}° to {azimuth_data[end]:.1f}°)")
+    
+    return sequences
+
+def _combine_ppi_sweeps(radar_list: List[Radar]) -> Radar:
+    """
+    Combine PPI radar sweeps, handling monotonic azimuth sequences.
+    
+    Args:
+        radar_list: List of PyART Radar objects to combine
+        
+    Returns:
+        Combined PyART Radar object with proper sweep indexing
+    """
+    if len(radar_list) == 1:
+        return radar_list[0]
+    
+    base_radar = radar_list[0]
+    
+    # Collect all azimuth data to identify sweep boundaries
+    all_azimuths = []
+    all_times = []
+    all_elevations = []
+    ray_counts = []
+    
+    for radar in radar_list:
+        all_azimuths.extend(radar.azimuth['data'])
+        all_elevations.extend(radar.elevation['data'])
+        all_times.extend(radar.time['data'])
+        ray_counts.append(radar.nrays)
+    
+    all_azimuths = np.array(all_azimuths)
+    all_elevations = np.array(all_elevations)
+    all_times = np.array(all_times)
+    
+    # Identify monotonic azimuth sequences (individual sweeps)
+    sequences = split_monotonic_sequence(all_azimuths, tolerance=10.0)
+    
+    nsweeps = len(sequences)
+    total_nrays = len(all_azimuths)
+    
+    print(f"Combining {len(radar_list)} files into {nsweeps} PPI sweeps with {total_nrays} total rays")
+    
+    # Create combined time, azimuth, elevation arrays
+    combined_time = base_radar.time.copy()
+    combined_time['data'] = all_times
+    
+    combined_azimuth = base_radar.azimuth.copy() 
+    combined_azimuth['data'] = all_azimuths
+    
+    combined_elevation = base_radar.elevation.copy()
+    combined_elevation['data'] = all_elevations
+    
+    # Combine fields from all radars
+    combined_fields = {}
+    for field_name in base_radar.fields:
+        field_data = []
+        for radar in radar_list:
+            if field_name in radar.fields:
+                field_data.append(radar.fields[field_name]['data'])
+        
+        if field_data:
+            combined_field = base_radar.fields[field_name].copy()
+            combined_field['data'] = np.concatenate(field_data, axis=0)
+            combined_fields[field_name] = combined_field
+    
+    # Create sweep indexing based on monotonic sequences
+    sweep_start_ray_index = {'data': np.array([seq[0] for seq in sequences], dtype='int32')}
+    sweep_end_ray_index = {'data': np.array([seq[1] for seq in sequences], dtype='int32')}
+    sweep_number = {'data': np.arange(nsweeps, dtype='int32')}
+    
+    # Calculate fixed angle for each sweep (median elevation)
+    fixed_angles = []
+    for start_idx, end_idx in sequences:
+        sweep_elevations = all_elevations[start_idx:end_idx+1]
+        fixed_angles.append(np.median(sweep_elevations))
+    
+    fixed_angle = {'data': np.array(fixed_angles, dtype='float32')}
+    sweep_mode = {'data': np.array(['ppi'] * nsweeps)}
+    
+    # Create combined radar object
+    combined_radar = Radar(
+        combined_time, base_radar.range, combined_fields,
+        base_radar.metadata, 'ppi',
+        base_radar.latitude, base_radar.longitude, base_radar.altitude,
+        sweep_number, sweep_mode, fixed_angle,
+        sweep_start_ray_index, sweep_end_ray_index,
+        combined_azimuth, combined_elevation,
+        instrument_parameters=base_radar.instrument_parameters
+    )
+    
+    return combined_radar
+
+def _combine_rhi_sweeps(radar_list: List[Radar]) -> Radar:
+    """
+    Combine RHI radar sweeps.
+    
+    Args:
+        radar_list: List of PyART Radar objects to combine
+        
+    Returns:
+        Combined PyART Radar object
+    """
+    # For RHI, use the general radar combination since each file is typically one sweep
+    return _manual_combine_radars(radar_list, 'rhi')
+
+def _combine_vpt_sweeps(radar_list: List[Radar]) -> Radar:
+    """
+    Combine VPT (Vertical Pointing) radar sweeps.
+    
+    VPT scans are typically continuous vertical pointing measurements
+    that should be combined chronologically into a multi-sweep time series.
+    
+    Args:
+        radar_list: List of PyART Radar objects to combine
+        
+    Returns:
+        Combined PyART Radar object with chronological sweep organization
+    """
+    if len(radar_list) == 1:
+        return radar_list[0]
+    
+    # Sort radars by time to ensure chronological order
+    radar_list = sorted(radar_list, key=lambda r: r.time['data'][0])
+    
+    print(f"Combining {len(radar_list)} VPT sweeps chronologically")
+    
+    # Use manual combination for VPT since each file is typically one sweep
+    return _manual_combine_radars(radar_list, 'vertical_pointing')
+
+def find_mmclx_vad_files(
+    start_time: str,
+    end_time: str,
+    elev_min: float,
+    elev_max: float,
+    inpath: str,
+    gzip_flag: bool = False
+) -> List[str]:
+    """
+    Find VAD (Volume Antenna Diagram) mmclx files within time and elevation ranges.
+    
+    Args:
+        start_time: Start time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        end_time: End time as 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ'
+        elev_min: Minimum elevation angle
+        elev_max: Maximum elevation angle
+        inpath: Directory path to search
+        gzip_flag: Whether files are gzip compressed
+        
+    Returns:
+        List of matching VAD file paths
+    """
+    # Handle both time formats
+    def parse_time_string(time_str):
+        """Parse time string in either format"""
         try:
-            print("searching for blppi files")
-            blppi_files = find_mmclx_ppi_files(current_date.strftime('%Y-%m-%d %H:%M:%S'), next_halfhour.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, blppipath,gzip_flag=gzip_flag)
-            print('FOUND BLPPI FILES')
-            print(blppi_files);
-            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle,data_version=data_version);
-
-            #elevs=[];
-            #if (len(blppi_files)>0):
-            #    blppi_files.sort();
-            #    if gzip_flag:
-            #        for f in blppi_files:
-            #            with gzip.open(f) as gz:
-            #                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
-            #                    nc.set_auto_mask(False);
-            #                    el = nc['elv'][0];
-            #                    elevs.append(el);
-            #    else:
-            #        for f in blppi_files:
-            #            nc = nc4.Dataset(f,'r');
-            #            nc.set_auto_mask(False);
-            #            el = nc['elv'][0];
-            #            elevs.append(el);
-            #            nc.close();
-
-            #    print(elevs);
-            #    idx = split_monotonic_sequence(elevs);
-            #    print(idx);
-            #    for l in idx:
-                    #if len(blppi_files)==1:
-                    #    RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files,outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset);
-            #        if l[0]==l[1]:
-            #            RadarDS_BLPPI = multi_mmclx2cfrad([blppi_files[l[0]]],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
-            #        elif l[1]==len(blppi_files)-1:   
-            #            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
-            #        else:
-            #            RadarDS_BLPPI = multi_mmclx2cfrad(blppi_files[l[0]:l[1]+1],outdir,scan_name='BLPPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle);
-        except:
-            print('Problem with BLPPI processing')
-            pass
-
-        current_date = next_halfhour
-
-
-    # Individual PPI files for whole day
-    try:
-        ppi_files = find_mmclx_ppi_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'), 0, 80, ppipath,gzip_flag=gzip_flag)
-        print(ppi_files);
-        if (len(ppi_files)>0):
-            ppi_files.sort();
-            for f in ppi_files:
-                RadarDS_PPI = multi_mmclx2cfrad([f],outdir,scan_name='PPI',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle,data_version=data_version);
-    except:
-        pass
+            # Try ISO format first
+            return datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+        except ValueError:
+            try:
+                # Try space-separated format
+                return datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                raise ValueError(f"Time string '{time_str}' does not match expected formats")
     
-    # Vertically pointing files for whole day
-    try:
-        vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', vptpath,gzip_flag=True);
-        print(vpt_files);
-        if (len(vpt_files)>0):
-            vpt_files.sort();
-            RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle,data_version=data_version);
-    except:
-        pass
-    # VAD files for whole day
-    vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
-    vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
-    try:
-        vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, vadpath,gzip_flag=True);
-        if (len(vad_files)>0):
-            vad_files.sort();
-            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset,revised_northangle=revised_northangle,data_version=data_version);
-    except:
-        pass
-
-
-
-def process_kepler_ccrest_day_step1(datestr,indir,outdir,yaml_project_file,yaml_instrument_file,azimuth_offset=0.0,gzip_flag=True,revised_northangle=55.7,data_version="1.0.0"):
-
-    # Define the start and end times for the loop
-    start_date = datetime.datetime.strptime(datestr, '%Y%m%d');
-    end_date = start_date + datetime.timedelta(days=1); # - datetime.timedelta(minutes=30);
-
-    # Correct azimuth offset based on use of revised northangle
-    azimuth_offset = 0.0;
-
-    rhi_files_270 = find_mmclx_rhi_files(start_date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), 260, 280, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-    rhi_files_246 = find_mmclx_rhi_files(start_date.strftime('%Y-%m-%d %H:%M:%S'), end_date.strftime('%Y-%m-%d %H:%M:%S'), 236, 256, indir,gzip_flag=True, azimuth_offset=azimuth_offset,revised_northangle=revised_northangle)
-
+    # Convert the input times to datetime objects
+    start_datetime = parse_time_string(start_time)
+    end_datetime = parse_time_string(end_time)
     
-    print(rhi_files_270);
-    print(rhi_files_246);
-    print(len(rhi_files_270));
-    print(len(rhi_files_246));
-
-    if (len(rhi_files_270)>0):
-        if gzip_flag:
-            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI-CCREST1',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=revised_northangle,data_version=data_version);
-        else:
-            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_270,outdir,scan_name='RHI-CCREST1',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=revised_northangle,data_version=data_version);
-
-
-    if (len(rhi_files_246)>0):
-        if gzip_flag:
-            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI-CCREST2',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=revised_northangle,data_version=data_version);
-        else:
-            RadarDS_RHI = multi_mmclx2cfrad(rhi_files_246,outdir,scan_name='RHI-CCREST2',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=revised_northangle,data_version=data_version);
-
+    print(f"Searching for VAD files from {start_time} to {end_time}")
+    print(f"Elevation range: {elev_min}° to {elev_max}°")
     
-    # Vertically pointing files for whole day
-    try:
-        vpt_files = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=True);
-        print(vpt_files)
-        #vpt_files_unzipped = find_mmclxfiles(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),'vert', indir,gzip_flag=False);
-        if (len(vpt_files)>0):
-            RadarDS_VPT = multi_mmclx2cfrad(vpt_files,outdir,scan_name='VPT',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=revised_northangle,data_version=data_version);
-        #elif (len(vpt_files_unzipped)>0):
-        #    RadarDS_VPT = multi_mmclx2cfrad(vpt_files_unzipped,outdir,scan_name='VPT',gzip_flag=False,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=55.7);
-    except:
-        print("VPT problem")
-        pass
-    # VAD files for whole day
-    vad_dt_start = datetime.datetime.strptime(datestr,"%Y%m%d");
-    vad_dt_end = vad_dt_start+datetime.timedelta(days=1);
-    try:
-        vad_files = find_mmclx_vad_files(start_date.strftime('%Y-%m-%d %H:%M:%S'),end_date.strftime('%Y-%m-%d %H:%M:%S'),80,90, indir,gzip_flag=True);
-        if (len(vad_files)>0):
-            RadarDS_VAD = multi_mmclx2cfrad(vad_files,outdir,scan_name='VAD',gzip_flag=True,azimuth_offset=azimuth_offset,tracking_tag='AMOF_20230201132601',campaign='ccrest-m',revised_northangle=revised_northangle,data_version=data_version);
-    except:
-        pass
-
+    # Get the date string from start time to look in the right subdirectory
+    date_str = start_datetime.strftime('%Y%m%d')
+    search_path = Path(inpath) / date_str
     
-def update_history_attribute(ncfile,update):
-
-    dataset = nc4.Dataset(ncfile,'r+');
-
-    user = getpass.getuser();
-
-    updttime = datetime.datetime.utcnow();
-    updttimestr = updttime.ctime();
-
-    history = updttimestr + (" - user:" + user
-    + " machine: " + socket.gethostname()
-    + " " + update);
-
-    dataset.history = history + "\n" + dataset.history;
-
-    dataset.last_revised_date = datetime.datetime.strftime(updttime,'%Y-%m-%dT%H:%M:%SZ')
-
-    dataset.close();
+    print(f"Looking in date directory: {search_path}")
+    
+    if not search_path.exists():
+        print(f"Date directory does not exist: {search_path}")
+        return []
+    
+    # Initialize matching files list
+    matching_files = []
+    
+    # Look for VAD files (usually PPI scans at high elevation)
+    if gzip_flag:
+        vad_pattern = "*ppi*.mmclx.gz"  # VAD files are typically PPI scans
+    else:
+        vad_pattern = "*ppi*.mmclx"
+    
+    candidate_files = list(search_path.glob(vad_pattern))
+    print(f"Found {len(candidate_files)} candidate VAD files")
+    
+    # Check each file's timestamp and elevation
+    for file_path in candidate_files:
+        try:
+            if gzip_flag:
+                with gzip.open(file_path, 'rb') as gz:
+                    with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                        if 'time' in nc.dimensions and len(nc.dimensions['time']) > 0:
+                            file_time = _safe_parse_time(nc, 0)
+                            if file_time is None:
+                                continue
+                                
+                            # Check elevation angle
+                            if 'elv' in nc.variables:
+                                elev = nc['elv'][0]  # First elevation angle
+                                
+                                if (start_datetime <= file_time <= end_datetime and 
+                                    elev_min <= elev <= elev_max):
+                                    matching_files.append(str(file_path))
+                                    print(f"Added VAD file: {file_path.name} (elev: {elev:.1f}°)")
+            else:
+                with nc4.Dataset(file_path, 'r') as nc:
+                    if 'time' in nc.dimensions and len(nc.dimensions['time']) > 0:
+                        file_time = _safe_parse_time(nc, 0)
+                        if file_time is None:
+                            continue
+                            
+                        # Check elevation angle
+                        if 'elv' in nc.variables:
+                            elev = nc['elv'][0]  # First elevation angle
+                            
+                            if (start_datetime <= file_time <= end_datetime and 
+                                elev_min <= elev <= elev_max):
+                                matching_files.append(str(file_path))
+                                print(f"Added VAD file: {file_path.name} (elev: {elev:.1f}°)")
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            continue
+    
+    print(f"Found {len(matching_files)} matching VAD files")
+    return sorted(matching_files)
 
 
 
