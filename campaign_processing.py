@@ -161,7 +161,9 @@ def process_kepler_ccrest_day_step1(
     azimuth_offset: float = 0.0,
     revised_northangle: float = 55.7,
     gzip_flag: bool = False,
-    data_version: str = "1.0.0"
+    data_version: str = "1.0.0",
+    tracking_tag: str = 'AMOF_20230401000000',
+    **kwargs
 ) -> None:
     """
     Process CCREST campaign data for a single day - Step 1.
@@ -180,17 +182,16 @@ def process_kepler_ccrest_day_step1(
         data_version: Data version string
     """
     print(f"Processing CCREST day: {datestr}")
-    
+    print(f"Tracking tag: {tracking_tag}")
+
     # Create output directory
     outdir = os.path.join(outpath, datestr)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    
+
     # Time range for the day
     start_time = f"{datestr[:4]}-{datestr[4:6]}-{datestr[6:8]} 00:00:00"
     end_time = f"{datestr[:4]}-{datestr[4:6]}-{datestr[6:8]} 23:59:59"
-    
-    tracking_tag = 'AMOF_20230401000000'  # CCREST tracking tag
     
     # Process RHI files
     print("Processing RHI files...")
