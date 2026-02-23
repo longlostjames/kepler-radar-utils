@@ -45,7 +45,9 @@ def process_kepler_woest_day_step1(
     azimuth_offset: float = -6.85, 
     revised_northangle: float = 302.15, 
     gzip_flag: bool = False, 
-    data_version: str = "1.0.0"
+    data_version: str = "1.0.0",
+    tracking_tag: str = 'AMOF_20220301000000',
+    **kwargs
 ) -> None:
     """
     Process WOEST campaign data for a single day - Step 1.
@@ -107,7 +109,7 @@ def process_kepler_woest_day_step1(
             try:
                 _process_single_woest_file(
                     rhi_file, outdir, yaml_project_file, yaml_instrument_file,
-                    revised_northangle, gzip_flag, data_version
+                    revised_northangle, gzip_flag, data_version, tracking_tag
                 )
             except Exception as e:
                 print(f"Error processing {rhi_file}: {e}")
@@ -119,7 +121,8 @@ def _process_single_woest_file(
     yaml_instrument_file: str,
     revised_northangle: float,
     gzip_flag: bool,
-    data_version: str
+    data_version: str,
+    tracking_tag: str = 'AMOF_20220301000000'
 ) -> None:
     """
     Process a single WOEST file.
@@ -144,7 +147,6 @@ def _process_single_woest_file(
     pyart.io.write_cfradial(outfile, radar_ds, format='NETCDF4', time_reference=True)
     
     # Add NCAS metadata
-    tracking_tag = 'AMOF_20220301000000'  # WOEST tracking tag
     cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
     
     # Update history
