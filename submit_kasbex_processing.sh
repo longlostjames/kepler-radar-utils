@@ -29,7 +29,7 @@ SKIP_MISSING_FLAG="--skip-missing"  # Skip dates with no data
 # ============================================================================
 
 # Load conda environment
-source $HOME/anaconda3/etc/profile.d/conda.sh
+source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
 # Calculate the target date based on array task ID

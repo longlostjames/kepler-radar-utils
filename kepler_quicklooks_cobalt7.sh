@@ -9,7 +9,7 @@
 #SBATCH --account=ncas_radar
 #SBATCH --qos=standard
 
-source $HOME/anaconda3/etc/profile.d/conda.sh
+source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
 time /home/users/cjwalden/git/kepler-radar-utils-cobalt/make_cobalt_quicklooks.py -d 2025040${SLURM_ARRAY_TASK_ID}

@@ -3,7 +3,7 @@
 # Enhanced wrapper script that includes file cleanup
 
 # Path to your conda installation
-CONDA_BASE="$HOME/anaconda3"
+CONDA_BASE="$HOME/miniforge3"
 SCRIPT_DIR="$HOME/git/kepler-radar-utils-cobalt"
 
 # Get today's date or use the provided date

@@ -7,7 +7,7 @@
 #SBATCH --array=17
 #SBATCH --mem=128G
 
-source $HOME/anaconda3/etc/profile.d/conda.sh
+source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
 time /home/users/cjwalden/git/kepler-radar-utils-cobalt/make_cobalt_quicklooks.py -d 202412${SLURM_ARRAY_TASK_ID}

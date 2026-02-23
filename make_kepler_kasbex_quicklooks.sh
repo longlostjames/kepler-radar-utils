@@ -28,7 +28,7 @@ OUTPUT_PATH=""  # Override default output path if needed
 # ============================================================================
 
 # Load conda environment
-source $HOME/anaconda3/etc/profile.d/conda.sh
+source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
 # Calculate the target date based on array task ID
