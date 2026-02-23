@@ -38,9 +38,9 @@ def setup_cobalt_paths(use_latest=False):
     
     paths = {
         'inpath': base_inpath,
-        'outpath': '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/cobalt/L1c',
+        'outpath': '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/cobalt/L1_v1.0.2',
         'yaml_project_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/cobalt/yaml/cobalt_project.yml',
-        'yaml_instrument_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/cobalt/yaml/amof_instruments.yml',
+        'yaml_instrument_file': str(script_dir / 'instrument_metadata.yml'),
         'use_latest': use_latest
     }
     
@@ -169,7 +169,7 @@ def main():
     
     parser.add_argument(
         '--data-version', 
-        default='1.0.1',
+        default='1.0.2',
         help='Data version string'
     )
     
