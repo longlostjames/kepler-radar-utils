@@ -9,7 +9,7 @@
 #SBATCH --qos=standard
 
 # Activate conda environment
-source $HOME/anaconda3/etc/profile.d/conda.sh
+source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
 # Set up script path
@@ -17,8 +17,8 @@ SCRIPT_DIR="/home/users/cjwalden/git/kepler-radar-utils-cobalt"
 PYTHON_SCRIPT="$SCRIPT_DIR/proc_kepler_cobalt_campaign_batch.py"
 
 # Set date range (can be overridden via environment variables)
-START_DATE=${START_DATE:-20250501}
-END_DATE=${END_DATE:-20250531}
+START_DATE=${START_DATE:-20241210}
+END_DATE=${END_DATE:-20251201}
 
 # Calculate the date for this array task
 DATESTR=$(python -c "
@@ -43,6 +43,6 @@ echo "SLURM Job ID: ${SLURM_JOB_ID}"
 echo "Array Task ID: ${SLURM_ARRAY_TASK_ID}"
 
 # Process the date
-time python $PYTHON_SCRIPT -d ${DATESTR} --skip-missing --single-sweep --gzip --data-version 1.0.1
+time python $PYTHON_SCRIPT -d ${DATESTR} --skip-missing --single-sweep --gzip --data-version 1.0.2
 
 echo "Completed processing for ${DATESTR}"

@@ -1,8 +1,8 @@
 #!/bin/bash
 # submit_cobalt_range.sh - Helper script to submit date range processing
 
-START_DATE=${1:-20250501}
-END_DATE=${2:-20250531}
+START_DATE=${1:-20241210}
+END_DATE=${2:-20251201}
 
 # Calculate number of days
 DAYS=$(python -c "

@@ -335,7 +335,7 @@ def main():
             process_campaign_day(
                 campaign='cobalt',
                 datestr=datestr,
-                inpath=date_input_path,  # Use the date-specific input path
+                inpath=paths['inpath'],  # Pass base path; find_mmclxfiles appends the date internally
                 outpath=paths['outpath'],
                 yaml_project_file=str(paths['yaml_project_file']),
                 yaml_instrument_file=str(paths['yaml_instrument_file']),
