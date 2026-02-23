@@ -39,8 +39,8 @@ def setup_kasbex_paths(use_latest=False):
     paths = {
         'inpath': base_inpath,
         'outpath': '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/kasbex/L1c',
-        'yaml_project_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/kasbex/yaml/kasbex_project.yml',
-        'yaml_instrument_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/kasbex/yaml/amof_instruments.yml',
+        'yaml_project_file': str(script_dir / 'campaigns' / 'kasbex_project.yml'),
+        'yaml_instrument_file': str(script_dir / 'instrument_metadata.yml'),
         'use_latest': use_latest
     }
     
