@@ -6,6 +6,8 @@ Batch process COBALT campaign data over a date range using campaign_processing m
 
 Usage:
     python proc_kepler_cobalt_campaign_batch.py --start-date YYYYMMDD --end-date YYYYMMDD
+    python proc_kepler_cobalt_campaign_batch.py -d YYYYMMDD
+    python proc_kepler_cobalt_campaign_batch.py -d YYYYMMDD --latest
 
 Author: Chris Walden, UK Research & Innovation and
         National Centre for Atmospheric Science
@@ -23,15 +25,23 @@ sys.path.insert(0, str(script_dir))
 
 from campaign_processing import process_campaign_day, get_campaign_info
 
-def setup_paths():
+def setup_cobalt_paths(use_latest=False):
     """Set up file and directory paths for COBALT campaign."""
     home_path = Path.home()
     
+    # Base COBALT campaign paths
+    base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/cobalt/mom'
+    
+    # Modify input path if using latest subdirectory
+    if use_latest:
+        print("Using 'latest' subdirectory for input data")
+    
     paths = {
-        'inpath': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/20241210_cobalt/mom',
+        'inpath': base_inpath,
         'outpath': '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/cobalt/L1c',
-        'yaml_project_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/20241210_cobalt/yaml/cobalt_project.yml',
-        'yaml_instrument_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/20241210_cobalt/yaml/amof_instruments.yml'
+        'yaml_project_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/cobalt/yaml/cobalt_project.yml',
+        'yaml_instrument_file': '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/cobalt/yaml/amof_instruments.yml',
+        'use_latest': use_latest
     }
     
     # Ensure output directory exists
@@ -68,20 +78,24 @@ def generate_date_list(start_date_str, end_date_str):
     
     return date_list
 
-def check_input_data(inpath, datestr):
+def check_input_data(inpath, datestr, use_latest=False):
     """
     Check if input data exists for the specified date.
     
     Args:
         inpath: Input directory path
         datestr: Date string in YYYYMMDD format
+        use_latest: If True, look in datestr/latest subdirectory
         
     Returns:
         bool: True if data exists, False otherwise
     """
-    date_path = Path(inpath) / datestr
-    
-    print(f"Looking for data in: {date_path}")
+    if use_latest:
+        date_path = Path(inpath) / datestr / 'latest'
+        print(f"Looking for data in LATEST subdirectory: {date_path}")
+    else:
+        date_path = Path(inpath) / datestr
+        print(f"Looking for data in: {date_path}")
     
     if not date_path.exists():
         print(f"Date directory does not exist: {date_path}")
@@ -100,6 +114,23 @@ def check_input_data(inpath, datestr):
     
     return len(mmclx_files) > 0
 
+def get_input_path(base_inpath, datestr, use_latest=False):
+    """
+    Get the appropriate input path for the given date.
+    
+    Args:
+        base_inpath: Base input directory path
+        datestr: Date string in YYYYMMDD format
+        use_latest: If True, use datestr/latest subdirectory
+        
+    Returns:
+        str: Full input path for the date
+    """
+    if use_latest:
+        return os.path.join(base_inpath, datestr, 'latest')
+    else:
+        return os.path.join(base_inpath, datestr)
+
 def main():
     """Main batch processing function."""
     parser = argparse.ArgumentParser(
@@ -109,14 +140,25 @@ def main():
     
     parser.add_argument(
         '--start-date', 
-        required=False,  # Change this from True to False
+        required=False,
         help='Start date in YYYYMMDD format'
     )
     
     parser.add_argument(
         '--end-date', 
-        required=False,  # Change this from True to False
+        required=False,
         help='End date in YYYYMMDD format'
+    )
+    
+    parser.add_argument(
+        '-d', '--date',
+        help='Process a single date in YYYYMMDD format (alternative to --start-date/--end-date)'
+    )
+    
+    parser.add_argument(
+        '--latest', 
+        action='store_true',
+        help='Process files from the "latest" subdirectory within each date directory'
     )
     
     parser.add_argument(
@@ -148,11 +190,6 @@ def main():
         action='store_true',
         help='Skip dates with no input data instead of stopping'
     )
-    
-    parser.add_argument(
-        '-d', '--date',
-        help='Process a single date in YYYYMMDD format (alternative to --start-date/--end-date)'
-    )
 
     parser.add_argument(
         '--single-sweep', 
@@ -161,21 +198,48 @@ def main():
     )
 
     parser.add_argument(
+        '--north-angle',
+        type=float,
+        default=0.0,
+        help='North angle correction for COBALT deployment (default: 0.0 degrees)'
+    )
+
+    parser.add_argument(
         '--no-vpt', 
         action='store_true',
         help='Disable vertical profiling for the processing'
     )
 
+    parser.add_argument(
+        '--max-age',
+        type=int,
+        default=6,
+        help='Maximum age of input files in hours (default: 6 hours)'
+    )
+
     args = parser.parse_args()
-    
+
+    print(f"Arguments: {args}")
     # Set up paths
     try:
-        paths = setup_paths()
-        print(f"Input path: {paths['inpath']}")
+        paths = setup_cobalt_paths(use_latest=args.latest)
+        print(f"COBALT Campaign Processing")
+        if args.latest:
+            print(f"Mode: Processing from 'latest' subdirectories")
+        print(f"Base input path: {paths['inpath']}")
         print(f"Output path: {paths['outpath']}")
+        print(f"Project YAML: {paths['yaml_project_file']}")
+        print(f"Instrument YAML: {paths['yaml_instrument_file']}")
     except Exception as e:
         print(f"Error setting up paths: {e}")
         sys.exit(1)
+    
+    # Validate that required files exist
+    for key, path in paths.items():
+        if key.endswith('_file'):  # YAML files
+            if not Path(path).exists():
+                print(f"Warning: {key} not found at {path}")
+                print("You may need to create this YAML file or update the path")
     
     # Generate date list
     try:
@@ -197,15 +261,31 @@ def main():
         sys.exit(1)
     
     # Get campaign configuration
-    campaign_info = get_campaign_info('cobalt')
-    print(f"Campaign info: {campaign_info}")
+    try:
+        campaign_info = get_campaign_info('cobalt')
+        print(f"Campaign info: {campaign_info}")
+    except Exception as e:
+        print(f"Warning: Could not get campaign info for COBALT: {e}")
+        # Use default values
+        campaign_info = {
+            'tracking_tag': 'AMOF_COBALT',
+            'location': 'cao',
+            'revised_northangle': args.north_angle
+        }
     
     if args.dry_run:
-        print("DRY RUN: Would process the following dates:")
+        print("\nDRY RUN: Would process the following dates:")
         for datestr in date_list:
-            has_data = check_input_data(paths['inpath'], datestr)
+            has_data = check_input_data(paths['inpath'], datestr, use_latest=args.latest)
             status = "HAS DATA" if has_data else "NO DATA"
-            print(f"  {datestr} - {status}")
+            input_path = get_input_path(paths['inpath'], datestr, use_latest=args.latest)
+            print(f"  {datestr} - {status} (from: {input_path})")
+        print(f"\nConfiguration:")
+        print(f"  Data version: {args.data_version}")
+        print(f"  Single sweep mode: {args.single_sweep}")
+        print(f"  North angle correction: {args.north_angle}°")
+        print(f"  Gzip input: {args.gzip}")
+        print(f"  Use latest subdirectory: {args.latest}")
         sys.exit(0)
     
     # Process each date
@@ -217,11 +297,13 @@ def main():
     
     for i, datestr in enumerate(date_list, 1):
         print(f"\n{'='*60}")
-        print(f"Processing date {i}/{len(date_list)}: {datestr}")
+        print(f"Processing COBALT date {i}/{len(date_list)}: {datestr}")
+        if args.latest:
+            print(f"Using 'latest' subdirectory for {datestr}")
         print(f"{'='*60}")
         
         # Check for input data
-        if not check_input_data(paths['inpath'], datestr):
+        if not check_input_data(paths['inpath'], datestr, use_latest=args.latest):
             print(f"No input data found for {datestr}")
             if args.skip_missing:
                 print("Skipping (--skip-missing enabled)")
@@ -245,28 +327,35 @@ def main():
             print(f"Starting COBALT processing for {datestr}...")
             start_time = datetime.datetime.now()
             
+            # Get the appropriate input path for this date
+            date_input_path = get_input_path(paths['inpath'], datestr, use_latest=args.latest)
+            print(f"Processing from: {date_input_path}")
+            
+            # Process using the campaign processing module
             process_campaign_day(
                 campaign='cobalt',
                 datestr=datestr,
-                inpath=paths['inpath'],
+                inpath=date_input_path,  # Use the date-specific input path
                 outpath=paths['outpath'],
                 yaml_project_file=str(paths['yaml_project_file']),
                 yaml_instrument_file=str(paths['yaml_instrument_file']),
                 gzip_flag=args.gzip,
                 data_version=args.data_version,
-                single_sweep=args.single_sweep,  # Add comma here
-                no_vpt=args.no_vpt  # Pass the new parameter
+                single_sweep=args.single_sweep,
+                revised_northangle=args.north_angle,
+                no_vpt=args.no_vpt,
+                max_age=args.max_age
             )
             
             end_time = datetime.datetime.now()
             duration = end_time - start_time
             
-            print(f"Successfully completed COBALT processing for {datestr}")
+            print(f"✓ Successfully completed COBALT processing for {datestr}")
             print(f"Processing time: {duration}")
             total_processed += 1
             
         except Exception as e:
-            print(f"Error during processing of {datestr}: {e}")
+            print(f"✗ Error during processing of {datestr}: {e}")
             import traceback
             traceback.print_exc()
             total_errors += 1
@@ -280,19 +369,28 @@ def main():
     total_duration = overall_end_time - overall_start_time
     
     print(f"\n{'='*60}")
-    print("BATCH PROCESSING SUMMARY")
+    print("COBALT BATCH PROCESSING SUMMARY")
     print(f"{'='*60}")
-    print(f"Date range: {args.start_date} to {args.end_date}")
-    print(f"Total dates in range: {len(date_list)}")
+    if args.date:
+        print(f"Single date: {args.date}")
+    else:
+        print(f"Date range: {args.start_date} to {args.end_date}")
+    print(f"Total dates processed: {len(date_list)}")
     print(f"Successfully processed: {total_processed}")
     print(f"Skipped: {total_skipped}")
     print(f"Errors: {total_errors}")
+    print(f"Latest subdirectory mode: {args.latest}")
     print(f"Total processing time: {total_duration}")
+    print(f"Average per date: {total_duration / len(date_list) if date_list else 'N/A'}")
+    print(f"Output directory: {paths['outpath']}")
     print(f"{'='*60}")
     
     # Exit with error code if there were any errors
     if total_errors > 0:
+        print(f"⚠️  {total_errors} dates had processing errors")
         sys.exit(1)
+    else:
+        print("✓ All processing completed successfully!")
 
 if __name__ == "__main__":
     main()
