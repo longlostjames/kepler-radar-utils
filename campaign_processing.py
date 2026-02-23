@@ -874,6 +874,10 @@ def get_campaign_info(campaign: str) -> Dict[str, Any]:
             'revised_northangle': 55.7,
             'tracking_tag': 'AMOF_20230401000000'
         },
+        'ccrest-m': {
+            'revised_northangle': 55.7,
+            'tracking_tag': 'AMOF_20230201132601'
+        },
         'kasbex': {
             'revised_northangle': 55.62,
             'tracking_tag': 'AMOF_20250508133639'  # KASBEX-specific tracking tag
@@ -972,6 +976,7 @@ def process_campaign_day(
     processors = {
         'woest': process_kepler_woest_day_step1,
         'ccrest': process_kepler_ccrest_day_step1,
+        'ccrest-m': process_kepler_ccrest_day_step1,
         'cobalt': process_kepler_cobalt_day_step1,
         'kasbex': process_kepler_kasbex_day_step1
     }
