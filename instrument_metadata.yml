@@ -1,0 +1,19 @@
+---
+
+- ncas-mobile-ka-band-radar-1:
+
+    # -------------------
+    # Instrument metadata
+    # -------------------
+    nickname: Kepler
+    instrument_name: ncas-mobile-ka-band-radar-1
+    instrument_manufacturer: Meteorologische Messtechnik (Metek) GmbH
+    instrument_model: MIRA-35S
+    instrument_serial_number: BX3C
+    instrument_pid: https://hdl.handle.net/21.12132/3.b7a8298b7a54405f
+
+    # Note - instrument_software and instrument_software_version are declared in
+    # separate YAML project entry
+    # This allows project specific versions to be specified
+
+    references: www.metek.de
