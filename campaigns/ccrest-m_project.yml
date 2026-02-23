@@ -53,6 +53,9 @@
             email: chris.walden@ncas.ac.uk
             pid: https://orcid.org/0000-0002-5718-466X
             institution: National Centre for Atmospheric Science (NCAS) and Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)
+          processing_software:
+            url:  https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.1.0
+            version: v1.1.0
           data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
           acknowledgement: |-
             This dataset was developed as part of the activity "CCREST-M", 
