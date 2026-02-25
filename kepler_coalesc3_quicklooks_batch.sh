@@ -1,10 +1,10 @@
 #!/bin/bash 
 #SBATCH --partition=standard
-#SBATCH --job-name=ccrest-m-campaign
-#SBATCH -o slurm_logs/%A_%a.out
-#SBATCH -e slurm_logs/%A_%a.err
-#SBATCH --time=20:00:00
-#SBATCH --mem=128G
+#SBATCH --job-name=coalesc3_quicklooks_batch
+#SBATCH -o slurm_logs/coalesc3_ql_%A_%a.out
+#SBATCH -e slurm_logs/coalesc3_ql_%A_%a.err
+#SBATCH --time=06:00:00
+#SBATCH --mem=64G
 #SBATCH --account=ncas_radar
 #SBATCH --qos=standard
 
@@ -14,12 +14,14 @@ conda activate cao_3_11
 
 # Set up script path
 SCRIPT_DIR="/home/users/cjwalden/git/kepler-radar-utils-cobalt"
-PYTHON_SCRIPT="$SCRIPT_DIR/proc_kepler_ccrest_m_campaign_batch.py"
+PYTHON_SCRIPT="$SCRIPT_DIR/make_coalesc3_quicklooks.py"
 
-# Set date range and output path (can be overridden via environment variables)
-START_DATE=${START_DATE:-20240201}
-END_DATE=${END_DATE:-20240416}
-OUTPATH=${OUTPATH:-/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/ccrest-m/L1_v1.0.1}
+# Set date range (can be overridden via environment variables)
+# COALESC3 campaign ran from March to July 2017
+START_DATE=${START_DATE:-20170308}
+END_DATE=${END_DATE:-20170705}
+INPATH=${INPATH:-/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/coalesc3/L1_v1.0.1}
+OUTPATH=${OUTPATH:-$INPATH/quicklooks}
 
 # Calculate the date for this array task
 DATESTR=$(python -c "
@@ -39,11 +41,13 @@ if [ $? -ne 0 ]; then
     exit 0
 fi
 
-echo "Processing date: ${DATESTR}"
+echo "Processing COALESC3 quicklooks for date: ${DATESTR}"
 echo "SLURM Job ID: ${SLURM_JOB_ID}"
 echo "Array Task ID: ${SLURM_ARRAY_TASK_ID}"
+echo "Input path: ${INPATH}"
+echo "Output path: ${OUTPATH}"
 
-# Process the date
-time python $PYTHON_SCRIPT -d ${DATESTR} --skip-missing --single-sweep --gzip --data-version 1.0.1 --outpath ${OUTPATH}
+# Generate quicklooks
+time python $PYTHON_SCRIPT -d ${DATESTR} -i ${INPATH} -o ${OUTPATH}
 
-echo "Completed processing for ${DATESTR}"
+echo "Completed quicklook generation for ${DATESTR}"

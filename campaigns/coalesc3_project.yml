@@ -1,0 +1,56 @@
+---
+
+- AMF_07092016101810:
+
+    project_name: COALESC3 - Combined Observations of the Atmospheric Boundary Layer to study the Evolution of StratoCumulus
+
+    amof_admin: 
+      tracking_tag: AMF_07092016101810
+      project_type: Not-for-profit public sector
+      facility_charge:
+
+    principal_investigator:
+      name: Simon Osborne
+      institution: Met Office
+      email: simon.osborne@metoffice.gov.uk
+      pid: https://orcid.org/0000-0003-3623-4821
+
+    ncas_instruments:
+      - ncas-mobile-ka-band-radar-1:
+          title: Moment data from NCAS Mobile Ka-band Cloud Radar (Kepler) at Weybourne Atmospheric Observatory, UK
+          source: NCAS Ka-Band Mobile Cloud Radar unit 1
+          altitude:
+            value: 15
+            units: metres
+          altitude_agl: 
+            value:
+            units: metres
+          latitude: 
+            value: 52.95025
+            units: degrees_north
+          longitude: 
+            value: 1.12170
+            units: degrees_east
+          platform:
+            location: wao
+            altitude:
+            type: stationary_platform
+            deployment_mode: land
+            location_keywords: Weybourne, Norfolk, England
+          instrument_software: 
+            name: rx_client
+            version:
+          data_creator: 
+            name: Chris Walden
+            email: chris.walden@ncas.ac.uk
+            pid: https://orcid.org/0000-0002-5718-466X
+            institution: National Centre for Atmospheric Science (NCAS)
+          processing_software:
+            url: https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.1.0
+            version: v1.1.0
+          data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+          acknowledgement: |-
+            This dataset uses instrumentation provided by the Atmospheric Measurement and Observation Facility (AMOF), part of NERC National Capability.
+            Users should acknowledge the National Centre for Atmospheric Science (NCAS) as the data provider.
+          usage:
+            - bespoke scanning

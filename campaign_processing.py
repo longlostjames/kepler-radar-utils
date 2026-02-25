@@ -25,6 +25,8 @@ import glob
 import yaml
 import pyart
 import numpy as np
+import gzip
+import netCDF4 as nc4
 from kepler_utils import (
     read_mira35_mmclx, 
     multi_mmclx2cfrad,
@@ -35,6 +37,31 @@ from kepler_utils import (
     find_mmclx_ppi_files,
     split_monotonic_sequence
 )
+
+def get_file_elevation(filepath: str, gzip_flag: bool = True) -> Optional[float]:
+    """
+    Get the mean elevation angle from an mmclx file.
+    
+    Args:
+        filepath: Path to mmclx file
+        gzip_flag: Whether file is gzip compressed
+        
+    Returns:
+        Mean elevation angle in degrees, or None if unable to read
+    """
+    try:
+        if gzip_flag:
+            with gzip.open(filepath, 'rb') as gz:
+                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                    if 'elv' in nc.variables:
+                        return float(nc.variables['elv'][:].mean())
+        else:
+            with nc4.Dataset(filepath, 'r') as nc:
+                if 'elv' in nc.variables:
+                    return float(nc.variables['elv'][:].mean())
+    except Exception as e:
+        print(f"Warning: Could not read elevation from {filepath}: {e}")
+    return None
 
 def process_kepler_woest_day_step1(
     datestr: str, 
@@ -164,13 +191,15 @@ def process_kepler_ccrest_day_step1(
     revised_northangle: float = 55.7,
     gzip_flag: bool = False,
     data_version: str = "1.0.0",
+    single_sweep: bool = True,
     tracking_tag: str = 'AMOF_20230401000000',
+    campaign: str = 'ccrest',
     **kwargs
 ) -> None:
     """
-    Process CCREST campaign data for a single day - Step 1.
+    Process CCREST/CCREST-M campaign data for a single day - Step 1.
     
-    This function processes both RHI and PPI scans from the CCREST campaign.
+    This function processes both RHI and PPI scans from the CCREST campaigns.
     
     Args:
         datestr: Date string in YYYYMMDD format
@@ -182,8 +211,13 @@ def process_kepler_ccrest_day_step1(
         revised_northangle: North angle correction (default: 55.7)
         gzip_flag: Whether input files are gzip compressed
         data_version: Data version string
+        single_sweep: Create separate files for each sweep (default: True)
+        tracking_tag: AMOF tracking tag
+        campaign: Campaign name ('ccrest' or 'ccrest-m')
     """
-    print(f"Processing CCREST day: {datestr}")
+    print(f"Processing {campaign.upper()} day: {datestr}")
+    print(f"Single sweep mode: {single_sweep}")
+    print(f"Data version: {data_version}")
     print(f"Tracking tag: {tracking_tag}")
 
     # Create output directory
@@ -195,62 +229,175 @@ def process_kepler_ccrest_day_step1(
     start_time = f"{datestr[:4]}-{datestr[4:6]}-{datestr[6:8]} 00:00:00"
     end_time = f"{datestr[:4]}-{datestr[4:6]}-{datestr[6:8]} 23:59:59"
     
+    # Process VPT (vertical pointing) files if present
+    print("Processing VPT files...")
+    try:
+        vpt_files = find_mmclxfiles(start_time, end_time, 'vert', inpath, gzip_flag=gzip_flag)
+        print(f"Found {len(vpt_files)} VPT files")
+        
+        if len(vpt_files) > 0:
+            print("VPT files will always create multi-sweep output (ignoring single_sweep flag)")
+            RadarDS_VPT = multi_mmclx2cfrad(
+                vpt_files, outdir, scan_name='VPT', gzip_flag=gzip_flag,
+                azimuth_offset=azimuth_offset, 
+                tracking_tag=tracking_tag,
+                campaign=campaign,  # Use campaign parameter instead of hardcoded value
+                revised_northangle=revised_northangle,
+                data_version=data_version,
+                single_sweep=False,  # ALWAYS FALSE FOR VPT
+                yaml_project_file=yaml_project_file,
+                yaml_instrument_file=yaml_instrument_file
+            )
+            print(f"Processed {len(vpt_files)} VPT files into multi-sweep dataset")
+    except Exception as e:
+        print(f"VPT processing problem: {e}")
+        import traceback
+        traceback.print_exc()
+    
     # Process RHI files
     print("Processing RHI files...")
     rhi_files = find_mmclxfiles(start_time, end_time, "rhi", inpath, gzip_flag=gzip_flag)
+    print(f"Found {len(rhi_files)} RHI files")
     
-    for rhi_file in rhi_files:
-        try:
-            _process_single_ccrest_file(
-                rhi_file, outdir, yaml_project_file, yaml_instrument_file,
-                revised_northangle, gzip_flag, data_version, tracking_tag
-            )
-        except Exception as e:
-            print(f"Error processing RHI {rhi_file}: {e}")
+    if len(rhi_files) > 0:
+        if single_sweep:
+            # Process each RHI file separately
+            for f in rhi_files:
+                try:
+                    RadarDS_RHI = multi_mmclx2cfrad(
+                        [f], outdir, scan_name='RHI', gzip_flag=gzip_flag,
+                        azimuth_offset=azimuth_offset,
+                        tracking_tag=tracking_tag,
+                        campaign=campaign,
+                        revised_northangle=revised_northangle,
+                        data_version=data_version,
+                        single_sweep=True,
+                        yaml_project_file=yaml_project_file,
+                        yaml_instrument_file=yaml_instrument_file
+                    )
+                    print(f"Processed single RHI file: {f}")
+                except Exception as e:
+                    print(f"Error processing RHI file {f}: {e}")
+        else:
+            # Process all RHI files together (multi-sweep)
+            try:
+                RadarDS_RHI = multi_mmclx2cfrad(
+                    rhi_files, outdir, scan_name='RHI', gzip_flag=gzip_flag,
+                    azimuth_offset=azimuth_offset,
+                    tracking_tag=tracking_tag,
+                    campaign=campaign,
+                    revised_northangle=revised_northangle,
+                    data_version=data_version,
+                    single_sweep=False,
+                    yaml_project_file=yaml_project_file,
+                    yaml_instrument_file=yaml_instrument_file
+                )
+                print(f"Processed {len(rhi_files)} RHI files into combined dataset")
+            except Exception as e:
+                print(f"Error processing RHI files: {e}")
     
-    # Process PPI files
+    # Process PPI files (but check elevation - high elevation scans are VAD)
     print("Processing PPI files...")
     ppi_files = find_mmclxfiles(start_time, end_time, "ppi", inpath, gzip_flag=gzip_flag)
+    print(f"Found {len(ppi_files)} PPI files")
     
-    for ppi_file in ppi_files:
-        try:
-            _process_single_ccrest_file(
-                ppi_file, outdir, yaml_project_file, yaml_instrument_file,
-                revised_northangle, gzip_flag, data_version, tracking_tag
-            )
-        except Exception as e:
-            print(f"Error processing PPI {ppi_file}: {e}")
-
-def _process_single_ccrest_file(
-    infile: str,
-    outdir: str,
-    yaml_project_file: str,
-    yaml_instrument_file: str,
-    revised_northangle: float,
-    gzip_flag: bool,
-    data_version: str,
-    tracking_tag: str
-) -> None:
-    """
-    Process a single CCREST file.
-    """
-    # Read radar data
-    radar_ds = read_mira35_mmclx(infile, gzip_flag=gzip_flag, revised_northangle=revised_northangle)
+    # Separate PPI files by elevation (>10° are VAD scans)
+    true_ppi_files = []
+    vad_from_ppi_files = []
     
-    # Generate output filename
-    base_filename = os.path.basename(infile).replace('.mmclx', '').replace('.gz', '')
-    outfile = os.path.join(outdir, f"{base_filename}_l1_v{data_version}.nc")
+    for f in ppi_files:
+        elv = get_file_elevation(f, gzip_flag=gzip_flag)
+        if elv is not None:
+            if elv > 10.0:
+                vad_from_ppi_files.append(f)
+                print(f"  {os.path.basename(f)}: elv={elv:.1f}° -> VAD")
+            else:
+                true_ppi_files.append(f)
+                print(f"  {os.path.basename(f)}: elv={elv:.1f}° -> PPI")
+        else:
+            # If we can't read elevation, assume it's a true PPI
+            true_ppi_files.append(f)
+            print(f"  {os.path.basename(f)}: elv=unknown -> PPI (default)")
     
-    # Write CF-Radial file
-    pyart.io.write_cfradial(outfile, radar_ds, format='NETCDF4', time_reference=True)
+    print(f"Classified {len(true_ppi_files)} as true PPI, {len(vad_from_ppi_files)} as VAD")
     
-    # Add NCAS metadata
-    cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+    # Process true PPI files
+    if len(true_ppi_files) > 0:
+        if single_sweep:
+            # Process each PPI file separately
+            for f in true_ppi_files:
+                try:
+                    RadarDS_PPI = multi_mmclx2cfrad(
+                        [f], outdir, scan_name='PPI', gzip_flag=gzip_flag,
+                        azimuth_offset=azimuth_offset,
+                        tracking_tag=tracking_tag,
+                        campaign=campaign,
+                        revised_northangle=revised_northangle,
+                        data_version=data_version,
+                        single_sweep=True,
+                        yaml_project_file=yaml_project_file,
+                        yaml_instrument_file=yaml_instrument_file
+                    )
+                    print(f"Processed single PPI file: {f}")
+                except Exception as e:
+                    print(f"Error processing PPI file {f}: {e}")
+        else:
+            # Process all PPI files together (multi-sweep)
+            try:
+                RadarDS_PPI = multi_mmclx2cfrad(
+                    true_ppi_files, outdir, scan_name='PPI', gzip_flag=gzip_flag,
+                    azimuth_offset=azimuth_offset,
+                    tracking_tag=tracking_tag,
+                    campaign=campaign,
+                    revised_northangle=revised_northangle,
+                    data_version=data_version,
+                    single_sweep=False,
+                    yaml_project_file=yaml_project_file,
+                    yaml_instrument_file=yaml_instrument_file
+                )
+                print(f"Processed {len(true_ppi_files)} PPI files into combined dataset")
+            except Exception as e:
+                print(f"Error processing PPI files: {e}")
     
-    # Update history
-    update_history_attribute(outfile, f"CCREST Step 1: Convert mmclx to CF-Radial, revised_northangle={revised_northangle}")
+    # Process high-elevation PPI files as VAD (group by elevation, multi-sweep per elevation)
+    if len(vad_from_ppi_files) > 0:
+        # Group VAD files by elevation angle
+        from collections import defaultdict
+        vad_by_elevation = defaultdict(list)
+        
+        for f in vad_from_ppi_files:
+            elv = get_file_elevation(f, gzip_flag=gzip_flag)
+            if elv is not None:
+                # Round to nearest degree to group similar elevations
+                elv_rounded = round(elv)
+                vad_by_elevation[elv_rounded].append(f)
+        
+        print(f"Found {len(vad_by_elevation)} distinct VAD elevation angles")
+        
+        # Process each elevation group separately
+        for elv, files in sorted(vad_by_elevation.items()):
+            print(f"Processing {len(files)} VAD scans at {elv}° elevation...")
+            try:
+                # Include elevation in scan name to create unique filenames
+                scan_name = f'vad-{elv}deg' if len(vad_by_elevation) > 1 else 'vad'
+                RadarDS_VAD = multi_mmclx2cfrad(
+                    files, outdir, scan_name=scan_name, gzip_flag=gzip_flag,
+                    azimuth_offset=azimuth_offset,
+                    tracking_tag=tracking_tag,
+                    campaign=campaign,
+                    revised_northangle=revised_northangle,
+                    data_version=data_version,
+                    single_sweep=False,  # VAD always multi-sweep (one file per elevation per day)
+                    yaml_project_file=yaml_project_file,
+                    yaml_instrument_file=yaml_instrument_file
+                )
+                print(f"Processed {len(files)} VAD scans at {elv}° into single multi-sweep file")
+            except Exception as e:
+                print(f"Error processing VAD files at {elv}°: {e}")
+                import traceback
+                traceback.print_exc()
     
-    print(f"Created: {outfile}")
+    print(f"Completed {campaign.upper()} processing for {datestr}")
 
 def process_kepler_cobalt_day_step1(
     datestr: str,
@@ -264,12 +411,13 @@ def process_kepler_cobalt_day_step1(
     data_version: str = "1.0.3",
     single_sweep: bool = False,
     tracking_tag: str = 'AMOF_20231120125118',
+    campaign: str = 'cobalt',  # Add campaign parameter
     no_vpt: bool = False  # Add no_vpt argument
 ) -> None:
     """
     Process COBALT campaign data for a single day - Step 1.
     """
-    print(f"Processing COBALT day: {datestr}")
+    print(f"Processing {campaign.upper()} day: {datestr}")
     print(f"Single sweep mode: {single_sweep}")
     print(f"Data version: {data_version}")
     print(f"Tracking tag: {tracking_tag}")
@@ -308,7 +456,7 @@ def process_kepler_cobalt_day_step1(
                     vpt_files, outdir, scan_name='VPT', gzip_flag=gzip_flag,
                     azimuth_offset=azimuth_offset, 
                     tracking_tag=tracking_tag,
-                    campaign='cobalt', 
+                    campaign=campaign,  # Use campaign parameter instead of hardcoded 'cobalt'
                     revised_northangle=revised_northangle,
                     data_version=data_version,
                     single_sweep=False,  # ALWAYS FALSE FOR VPT
@@ -344,7 +492,7 @@ def process_kepler_cobalt_day_step1(
                         [f], outdir, scan_name='RHI', gzip_flag=gzip_flag,
                         azimuth_offset=azimuth_offset, 
                         tracking_tag=tracking_tag,
-                        campaign='cobalt', 
+                        campaign=campaign, 
                         revised_northangle=revised_northangle,
                         data_version=data_version,
                         single_sweep=True,
@@ -361,7 +509,7 @@ def process_kepler_cobalt_day_step1(
                     rhi_files, outdir, scan_name='RHI', gzip_flag=gzip_flag,
                     azimuth_offset=azimuth_offset, 
                     tracking_tag=tracking_tag,
-                    campaign='cobalt', 
+                    campaign=campaign, 
                     revised_northangle=revised_northangle,
                     data_version=data_version,
                     single_sweep=False,
@@ -391,7 +539,7 @@ def process_kepler_cobalt_day_step1(
                 vad_files, outdir, scan_name='VAD', gzip_flag=gzip_flag,
                 azimuth_offset=azimuth_offset, 
                 tracking_tag=tracking_tag,
-                campaign='cobalt', 
+                campaign=campaign, 
                 revised_northangle=revised_northangle,
                 data_version=data_version,
                 single_sweep=False,  # ALWAYS FALSE FOR VAD
@@ -403,7 +551,7 @@ def process_kepler_cobalt_day_step1(
         print(f"VAD problem: {e}")
         pass
     
-    print(f"Completed COBALT processing for {datestr}")
+    print(f"Completed {campaign.upper()} processing for {datestr}")
 
 def process_kepler_kasbex_day_step1(
     datestr: str,
@@ -881,6 +1029,10 @@ def get_campaign_info(campaign: str) -> Dict[str, Any]:
             'revised_northangle': 55.7,
             'tracking_tag': 'AMOF_20230201132601'
         },
+        'coalesc3': {
+            'revised_northangle': 287.0,
+            'tracking_tag': 'AMF_07092016101810'
+        },
         'kasbex': {
             'revised_northangle': 55.62,
             'tracking_tag': 'AMOF_20250508133639'  # KASBEX-specific tracking tag
@@ -980,6 +1132,7 @@ def process_campaign_day(
         'woest': process_kepler_woest_day_step1,
         'ccrest': process_kepler_ccrest_day_step1,
         'ccrest-m': process_kepler_ccrest_day_step1,
+        'coalesc3': process_kepler_ccrest_day_step1,
         'cobalt': process_kepler_cobalt_day_step1,
         'kasbex': process_kepler_kasbex_day_step1
     }
@@ -1002,6 +1155,7 @@ def process_campaign_day(
         'single_sweep': single_sweep,
         'revised_northangle': revised_northangle,  # Use the north angle from YAML or override
         'tracking_tag': campaign_info.get('tracking_tag', f'AMOF_{campaign.upper()}'),
+        'campaign': campaign_lower,  # Pass campaign name for CCREST processing
         'no_vpt': no_vpt,  # Pass no_vpt argument
         **kwargs
     }

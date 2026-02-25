@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-proc_kepler_ccrest_m_campaign_batch.py
+proc_kepler_coalesc3_campaign_batch.py
 
-Batch process CCREST-M campaign data over a date range using campaign_processing module.
+Batch process COALESC3 campaign data over a date range using campaign_processing module.
 
 Usage:
-    python proc_kepler_ccrest_m_campaign_batch.py --start-date YYYYMMDD --end-date YYYYMMDD
-    python proc_kepler_ccrest_m_campaign_batch.py -d YYYYMMDD
-    python proc_kepler_ccrest_m_campaign_batch.py -d YYYYMMDD --latest
+    python proc_kepler_coalesc3_campaign_batch.py --start-date YYYYMMDD --end-date YYYYMMDD
+    python proc_kepler_coalesc3_campaign_batch.py -d YYYYMMDD
 
 Author: Chris Walden, UK Research & Innovation and
         National Centre for Atmospheric Science
@@ -25,25 +24,21 @@ sys.path.insert(0, str(script_dir))
 
 from campaign_processing import process_campaign_day, get_campaign_info
 
-def setup_ccrest_m_paths(use_latest=False, outpath=None):
-    """Set up file and directory paths for CCREST-M campaign."""
+def setup_coalesc3_paths(outpath=None):
+    """Set up file and directory paths for COALESC3 campaign."""
 
-    # Base CCREST-M campaign paths
-    base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/ccrest-m/mom'
-
-    if use_latest:
-        print("Using 'latest' subdirectory for input data")
+    # Base COALESC3 campaign paths
+    base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/coalesc3/mom'
 
     # Default output path if not specified
     if outpath is None:
-        outpath = '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/ccrest-m/L1_v1.0.0'
+        outpath = '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/coalesc3/L1_v1.0.1'
 
     paths = {
         'inpath': base_inpath,
         'outpath': outpath,
-        'yaml_project_file': str(script_dir / 'campaigns' / 'ccrest-m_project.yml'),
-        'yaml_instrument_file': str(script_dir / 'instrument_metadata.yml'),
-        'use_latest': use_latest
+        'yaml_project_file': str(script_dir / 'campaigns' / 'coalesc3_project.yml'),
+        'yaml_instrument_file': str(script_dir / 'instrument_metadata.yml')
     }
 
     # Ensure output directory exists
@@ -73,24 +68,19 @@ def generate_date_list(start_date_str, end_date_str):
 
     return date_list
 
-def check_input_data(inpath, datestr, use_latest=False):
+def check_input_data(inpath, datestr):
     """
     Check if input data exists for the given date.
 
     Args:
         inpath: Base input directory path
         datestr: Date string in YYYYMMDD format
-        use_latest: If True, look in datestr/latest subdirectory
 
     Returns:
         bool: True if data exists, False otherwise
     """
-    if use_latest:
-        date_path = Path(inpath) / datestr / 'latest'
-        print(f"Looking for data in LATEST subdirectory: {date_path}")
-    else:
-        date_path = Path(inpath) / datestr
-        print(f"Looking for data in: {date_path}")
+    date_path = Path(inpath) / datestr
+    print(f"Looking for data in: {date_path}")
 
     if not date_path.exists():
         print(f"Date directory does not exist: {date_path}")
@@ -104,27 +94,18 @@ def check_input_data(inpath, datestr, use_latest=False):
     print(f"Found {len(mmclx_files)} mmclx files")
     return True
 
-def get_input_path(base_inpath, datestr, use_latest=False):
-    """Get the appropriate input path for the given date."""
-    if use_latest:
-        return os.path.join(base_inpath, datestr, 'latest')
-    else:
-        return os.path.join(base_inpath, datestr)
-
 def main():
     """Main batch processing function."""
     parser = argparse.ArgumentParser(
-        description="Batch process CCREST-M campaign radar data over a date range",
+        description="Batch process COALESC3 campaign radar data over a date range",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     parser.add_argument('--start-date', required=False, help='Start date in YYYYMMDD format')
     parser.add_argument('--end-date', required=False, help='End date in YYYYMMDD format')
     parser.add_argument('-d', '--date', help='Process a single date in YYYYMMDD format')
-    parser.add_argument('--latest', action='store_true',
-                        help='Process files from the "latest" subdirectory')
-    parser.add_argument('--gzip', action='store_true', help='Input files are gzip compressed')
-    parser.add_argument('--data-version', default='1.0.0', help='Data version string')
+    parser.add_argument('--gzip', action='store_true', default=True, help='Input files are gzip compressed (default: True)')
+    parser.add_argument('--data-version', default='1.0.1', help='Data version string')
     parser.add_argument('--force', action='store_true',
                         help='Force processing even if output files exist')
     parser.add_argument('--dry-run', action='store_true',
@@ -133,13 +114,11 @@ def main():
                         help='Skip dates with no input data instead of stopping')
     parser.add_argument('--single-sweep', action='store_true',
                         help='Create separate files for each sweep')
-    parser.add_argument('--north-angle', type=float, default=55.7,
-                        help='North angle correction for CCREST-M deployment (default: 55.7 degrees)')
+    parser.add_argument('--north-angle', type=float, default=287.0,
+                        help='North angle correction for COALESC3 deployment (default: 287.0 degrees)')
     parser.add_argument('--outpath', type=str, default=None,
-                        help='Output directory path (default: /gws/.../ccrest-m/L1_v1.0.0)')
+                        help='Output directory path (default: /gws/.../coalesc3/L1_v1.0.1)')
     parser.add_argument('--no-vpt', action='store_true', help='Disable vertical profiling')
-    parser.add_argument('--max-age', type=int, default=6,
-                        help='Maximum age of input files in hours (default: 6 hours)')
 
     args = parser.parse_args()
 
@@ -147,10 +126,8 @@ def main():
 
     # Set up paths
     try:
-        paths = setup_ccrest_m_paths(use_latest=args.latest, outpath=args.outpath)
-        print(f"CCREST-M Campaign Processing")
-        if args.latest:
-            print(f"Mode: Processing from 'latest' subdirectories")
+        paths = setup_coalesc3_paths(outpath=args.outpath)
+        print(f"COALESC3 Campaign Processing")
         print(f"Base input path: {paths['inpath']}")
         print(f"Output path: {paths['outpath']}")
         print(f"Project YAML: {paths['yaml_project_file']}")
@@ -182,29 +159,27 @@ def main():
 
     # Get campaign configuration
     try:
-        campaign_info = get_campaign_info('ccrest-m')
+        campaign_info = get_campaign_info('coalesc3')
         print(f"Campaign info: {campaign_info}")
     except Exception as e:
-        print(f"Warning: Could not get campaign info for CCREST-M: {e}")
+        print(f"Warning: Could not get campaign info for COALESC3: {e}")
         campaign_info = {
-            'tracking_tag': 'AMOF_20230201132601',
-            'location': 'cao',
+            'tracking_tag': 'AMF_07092016101810',
+            'location': 'wao',
             'revised_northangle': args.north_angle
         }
 
     if args.dry_run:
         print("\nDRY RUN: Would process the following dates:")
         for datestr in date_list:
-            has_data = check_input_data(paths['inpath'], datestr, use_latest=args.latest)
+            has_data = check_input_data(paths['inpath'], datestr)
             status = "HAS DATA" if has_data else "NO DATA"
-            input_path = get_input_path(paths['inpath'], datestr, use_latest=args.latest)
-            print(f"  {datestr} - {status} (from: {input_path})")
+            print(f"  {datestr} - {status}")
         print(f"\nConfiguration:")
         print(f"  Data version: {args.data_version}")
         print(f"  Single sweep mode: {args.single_sweep}")
         print(f"  North angle correction: {args.north_angle}°")
         print(f"  Gzip input: {args.gzip}")
-        print(f"  Use latest subdirectory: {args.latest}")
         sys.exit(0)
 
     # Process each date
@@ -216,10 +191,10 @@ def main():
 
     for i, datestr in enumerate(date_list, 1):
         print(f"\n{'='*60}")
-        print(f"Processing CCREST-M date {i}/{len(date_list)}: {datestr}")
+        print(f"Processing COALESC3 date {i}/{len(date_list)}: {datestr}")
         print(f"{'='*60}")
 
-        if not check_input_data(paths['inpath'], datestr, use_latest=args.latest):
+        if not check_input_data(paths['inpath'], datestr):
             print(f"No input data found for {datestr}")
             if args.skip_missing:
                 print("Skipping (--skip-missing enabled)")
@@ -238,11 +213,11 @@ def main():
                 continue
 
         try:
-            print(f"Starting CCREST-M processing for {datestr}...")
+            print(f"Starting COALESC3 processing for {datestr}...")
             start_time = datetime.datetime.now()
 
             process_campaign_day(
-                campaign='ccrest-m',
+                campaign='coalesc3',
                 datestr=datestr,
                 inpath=paths['inpath'],
                 outpath=paths['outpath'],
@@ -252,12 +227,11 @@ def main():
                 data_version=args.data_version,
                 single_sweep=args.single_sweep,
                 revised_northangle=args.north_angle,
-                no_vpt=args.no_vpt,
-                max_age=args.max_age
+                no_vpt=args.no_vpt
             )
 
             duration = datetime.datetime.now() - start_time
-            print(f"✓ Successfully completed CCREST-M processing for {datestr}")
+            print(f"✓ Successfully completed COALESC3 processing for {datestr}")
             print(f"Processing time: {duration}")
             total_processed += 1
 
@@ -271,7 +245,7 @@ def main():
 
     overall_duration = datetime.datetime.now() - overall_start_time
     print(f"\n{'='*60}")
-    print(f"CCREST-M BATCH PROCESSING SUMMARY")
+    print(f"COALESC3 BATCH PROCESSING SUMMARY")
     print(f"{'='*60}")
     print(f"Total processed: {total_processed}")
     print(f"Total skipped:   {total_skipped}")

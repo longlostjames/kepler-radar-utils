@@ -1724,9 +1724,25 @@ def _add_ncas_metadata_manually(
             ds.setncattr('platform_is_mobile', 'false')
             ds.setncattr('deployment_mode', 'land')
             
-            # Processing information
-            ds.setncattr('processing_software_url', 'https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.0.0')
-            ds.setncattr('processing_software_version', 'v1.0.0')
+            # Processing information - try to get from YAML first
+            if project_instrument_info and 'processing_software' in project_instrument_info:
+                ps_info = project_instrument_info['processing_software']
+                if 'url' in ps_info:
+                    ds.setncattr('processing_software_url', ps_info['url'])
+                    print(f"Set processing_software_url from YAML: {ps_info['url']}")
+                else:
+                    ds.setncattr('processing_software_url', 'https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.0.0')
+                
+                if 'version' in ps_info:
+                    ds.setncattr('processing_software_version', ps_info['version'])
+                    print(f"Set processing_software_version from YAML: {ps_info['version']}")
+                else:
+                    ds.setncattr('processing_software_version', 'v1.0.0')
+            else:
+                # Fallback to defaults
+                ds.setncattr('processing_software_url', 'https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.0.0')
+                ds.setncattr('processing_software_version', 'v1.0.0')
+                print("Using default processing_software metadata")
             
             # Add instrument software info if available
             ds.setncattr('instrument_software', 'rx_client')
@@ -1904,7 +1920,9 @@ def multi_mmclx2cfrad(
     # Determine location from campaign
     location_map = {
         'woest': 'lyneham',
-        'ccrest': 'cao', 
+        'ccrest': 'cao',
+        'ccrest-m': 'cao',
+        'coalesc3': 'wao',
         'cobalt': 'cao',
         'kasbex': 'cao'
     }
