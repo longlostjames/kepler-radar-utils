@@ -12,8 +12,8 @@
 source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
-# Set up script path
-SCRIPT_DIR="/home/users/cjwalden/git/kepler-radar-utils-cobalt"
+# Set up script path (use SLURM_SUBMIT_DIR for SLURM jobs)
+SCRIPT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 PYTHON_SCRIPT="$SCRIPT_DIR/proc_kepler_cobalt_campaign_batch.py"
 
 # Set date range (can be overridden via environment variables)

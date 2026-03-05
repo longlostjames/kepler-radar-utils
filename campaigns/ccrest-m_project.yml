@@ -39,7 +39,7 @@
     ncas_instruments:
       - ncas-radar-mobile-ka-band-1:
           title: Moment data from NCAS Mobile Ka-band Radar (Kepler)
-          source: NCAS Mobile Ka-band Radar unit 1
+          source: NCAS Ka-Band Mobile Cloud Radar unit 1
           platform:
             location: CAO
             type: stationary_platform

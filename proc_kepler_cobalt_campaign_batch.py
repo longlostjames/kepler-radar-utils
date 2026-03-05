@@ -200,8 +200,8 @@ def main():
     parser.add_argument(
         '--north-angle',
         type=float,
-        default=0.0,
-        help='North angle correction for COBALT deployment (default: 0.0 degrees)'
+        default=None,
+        help='North angle correction (default: load from YAML config, typically 55.62 degrees for COBALT)'
     )
 
     parser.add_argument(

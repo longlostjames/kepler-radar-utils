@@ -197,6 +197,20 @@ def make_cobalt_rhi_plot(ncfile,figpath,blflag=False):
 
     gatefilter = pyart.correct.GateFilter(RadarDS)
     gatefilter.exclude_below('SNR', -20)
+    
+    # Exclude rays flagged as antenna_transition (repositioning between sweeps)
+    if hasattr(RadarDS, 'antenna_transition') and RadarDS.antenna_transition is not None:
+        if 'data' in RadarDS.antenna_transition:
+            transition_flags = RadarDS.antenna_transition['data']
+            transition_indices = np.where(transition_flags == 1)[0]
+            if len(transition_indices) > 0:
+                # Exclude all gates in rays flagged as antenna_transition
+                # Properly access the gate_excluded attribute (2D boolean array)
+                for ray_idx in transition_indices:
+                    if hasattr(gatefilter, 'gate_excluded'):
+                        gatefilter.gate_excluded[ray_idx, :] = True
+                    elif hasattr(gatefilter, '_gate_excluded'):
+                        gatefilter._gate_excluded[ray_idx, :] = True
 
     #pyart.correct.despeckle_field(RadarDS, "SNR", size=3, threshold=-20, gatefilter=gatefilter, delta=5.0)
 

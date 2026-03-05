@@ -90,11 +90,14 @@ echo "  Single sweep: $([ -n "$SINGLE_SWEEP_FLAG" ] && echo "Yes" || echo "No")"
 echo "  Force overwrite: $([ -n "$FORCE_FLAG" ] && echo "Yes" || echo "No")"
 echo "============================================================"
 
+# Set up script path (use SLURM_SUBMIT_DIR for SLURM jobs)
+SCRIPT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
 # Create log directory if it doesn't exist
 mkdir -p slurm_logs
 
 # Execute the KASBEX processing script
-time python /home/users/cjwalden/git/kepler-radar-utils-cobalt/proc_kepler_kasbex_campaign_batch.py $cmd_args
+time python $SCRIPT_DIR/proc_kepler_kasbex_campaign_batch.py $cmd_args
 
 exit_code=$?
 

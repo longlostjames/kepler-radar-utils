@@ -142,11 +142,14 @@ echo "Processing Date: $target_date"
 echo "Command: make_cobalt_quicklooks.py $cmd_args"
 echo "============================================================"
 
+# Set up script path (use SLURM_SUBMIT_DIR for SLURM jobs)
+SCRIPT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
 # Create log directory if it doesn't exist
 mkdir -p slurm_logs
 
 # Execute the quicklooks script
-time python /home/users/cjwalden/git/kepler-radar-utils-cobalt/make_cobalt_quicklooks.py $cmd_args
+time python $SCRIPT_DIR/make_cobalt_quicklooks.py $cmd_args
 
 exit_code=$?
 

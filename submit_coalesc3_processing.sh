@@ -8,8 +8,8 @@ echo "COALESC3 Campaign Data Processing Submission"
 echo "============================================="
 echo ""
 
-# Check we're in the right directory
-SCRIPT_DIR="/home/users/cjwalden/git/kepler-radar-utils-cobalt"
+# Check we're in the right directory (self-locating)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ ! -d "$SCRIPT_DIR" ]; then
     echo "Error: Script directory not found: $SCRIPT_DIR"
     exit 1

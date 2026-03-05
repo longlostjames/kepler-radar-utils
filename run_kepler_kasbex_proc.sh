@@ -4,7 +4,8 @@
 
 # Path to your conda installation
 CONDA_BASE="$HOME/miniforge3"
-SCRIPT_DIR="$HOME/git/kepler-radar-utils-cobalt"
+# Set up script path (self-locating)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Get today's date or use the provided date
 if [ -n "$1" ]; then

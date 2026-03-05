@@ -133,8 +133,8 @@ def main():
                         help='Skip dates with no input data instead of stopping')
     parser.add_argument('--single-sweep', action='store_true',
                         help='Create separate files for each sweep')
-    parser.add_argument('--north-angle', type=float, default=55.7,
-                        help='North angle correction for CCREST-M deployment (default: 55.7 degrees)')
+    parser.add_argument('--north-angle', type=float, default=None,
+                        help='North angle correction (default: load from YAML config, typically 55.7 degrees for CCREST-M)')
     parser.add_argument('--outpath', type=str, default=None,
                         help='Output directory path (default: /gws/.../ccrest-m/L1_v1.0.0)')
     parser.add_argument('--no-vpt', action='store_true', help='Disable vertical profiling')

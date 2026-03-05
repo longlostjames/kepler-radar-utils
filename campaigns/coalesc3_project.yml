@@ -23,7 +23,7 @@
             value: 15
             units: metres
           altitude_agl: 
-            value:
+            value: 3.0
             units: metres
           latitude: 
             value: 52.95025
@@ -33,7 +33,7 @@
             units: degrees_east
           platform:
             location: wao
-            altitude:
+            altitude: 15 m (orthometric height above EGM2008 geoid)
             type: stationary_platform
             deployment_mode: land
             location_keywords: Weybourne, Norfolk, England

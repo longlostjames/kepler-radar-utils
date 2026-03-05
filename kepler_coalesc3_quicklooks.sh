@@ -12,8 +12,8 @@
 source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
-# Set up paths
-SCRIPT_DIR="/home/users/cjwalden/git/kepler-radar-utils-cobalt"
+# Set up paths (self-locating)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="$SCRIPT_DIR/make_coalesc3_quicklooks.py"
 INPATH=${INPATH:-/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/coalesc3/L1_v1.0.1}
 OUTPATH=${OUTPATH:-$INPATH/quicklooks}

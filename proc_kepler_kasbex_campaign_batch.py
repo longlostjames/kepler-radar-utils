@@ -200,8 +200,8 @@ def main():
     parser.add_argument(
         '--north-angle',
         type=float,
-        default=55.62,
-        help='North angle correction for KASBEX deployment (default: 55.5 degrees)'
+        default=None,
+        help='North angle correction (default: load from YAML config, typically 55.62 degrees for KASBEX)'
     )
 
     parser.add_argument(
