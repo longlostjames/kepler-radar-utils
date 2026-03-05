@@ -145,9 +145,16 @@ def read_mira35_mmclx(
         scan_name, sweep_mode, fixed_angle = _determine_scan_type(filename, ncobj, revised_northangle, filemetadata)
         
         # Extract angle information
-        azimuth, elevation, scan_rate, antenna_transition, target_scan_rate = _extract_angle_info(
+        angle_info = _extract_angle_info(
             ncobj, scan_name, time, revised_northangle, filemetadata
         )
+        azimuth = angle_info['azimuth']
+        elevation = angle_info['elevation']
+        scan_rate = angle_info.get('scan_rate')
+        antenna_transition = angle_info.get('antenna_transition')
+        target_scan_rate = angle_info.get('target_scan_rate')
+        elevation_scan_rate = angle_info.get('elevation_scan_rate')
+        azimuth_scan_rate = angle_info.get('azimuth_scan_rate')
         
         # Create sweep information
         sweep_info = _create_sweep_info(nrays, filemetadata)
@@ -177,6 +184,12 @@ def read_mira35_mmclx(
         radar_calibration={}  # Empty for now
     )
     
+    # Add elevation and azimuth scan rates for MAN scans (as coordinate variables)
+    if elevation_scan_rate is not None:
+        radar.elevation_scan_rate = elevation_scan_rate
+    if azimuth_scan_rate is not None:
+        radar.azimuth_scan_rate = azimuth_scan_rate
+    
     print("Successfully created Radar object")
     return radar
 
@@ -195,31 +208,31 @@ def _extract_location_info(ncobj: nc4.Dataset, filemetadata: FileMetadata) -> Tu
     longitude = filemetadata('longitude') 
     altitude = filemetadata('altitude')
     
-    # Parse latitude
+    # Parse latitude - use float64 for geolocation precision
     lat_str = ncobj.getncattr('Latitude')
     z = StringIO(lat_str)
     lat_data = np.genfromtxt(z, dtype=None, names=['lat', 'direction'])
     
     if lat_data['direction'] == b'S' and lat_data['lat'] > 0:
-        latitude['data'] = np.array([-lat_data['lat']], dtype='f4')
+        latitude['data'] = np.array([-lat_data['lat']], dtype='f8')
     else:
-        latitude['data'] = np.array([lat_data['lat']], dtype='f4')
+        latitude['data'] = np.array([lat_data['lat']], dtype='f8')
     
-    # Parse longitude  
+    # Parse longitude - use float64 for geolocation precision
     lon_str = ncobj.getncattr('Longitude')
     z = StringIO(lon_str)
     lon_data = np.genfromtxt(z, dtype=None, names=['lon', 'direction'])
     
     if lon_data['direction'] == b'W' and lon_data['lon'] > 0:
-        longitude['data'] = np.array([-lon_data['lon']], dtype='f4')
+        longitude['data'] = np.array([-lon_data['lon']], dtype='f8')
     else:
-        longitude['data'] = np.array([lon_data['lon']], dtype='f4')
+        longitude['data'] = np.array([lon_data['lon']], dtype='f8')
     
-    # Parse altitude
+    # Parse altitude - use float64 for geolocation precision
     alt_str = ncobj.getncattr('Altitude')
     z = StringIO(alt_str)
     alt_data = np.genfromtxt(z, dtype=None, names=['alt', 'units'])
-    altitude['data'] = np.array([alt_data['alt']], dtype='f4')
+    altitude['data'] = np.array([alt_data['alt']], dtype='f8')
     
     return latitude, longitude, altitude
 
@@ -357,72 +370,148 @@ def _extract_angle_info(
     time: Dict, 
     revised_northangle: float,
     filemetadata: FileMetadata
-) -> Tuple[Dict, Dict, Optional[Dict], Optional[Dict], Optional[Dict]]:
+) -> Dict:
     """
     Extract azimuth, elevation and scan rate information.
     
     Args:
         ncobj: Open netCDF4 Dataset
-        scan_name: Type of scan (ppi, rhi, etc.)
+        scan_name: Type of scan (ppi, rhi, manual_rhi, etc.)
         time: Time information dictionary
         revised_northangle: North angle correction in degrees
         filemetadata: PyART FileMetadata object
         
     Returns:
-        Tuple of (azimuth, elevation, scan_rate, antenna_transition, target_scan_rate)
+        Dictionary containing azimuth, elevation, scan_rate, antenna_transition, 
+        target_scan_rate, and for MAN scans: elevation_scan_rate, azimuth_scan_rate
     """
     ncvars = ncobj.variables
     
     azimuth = filemetadata('azimuth')
     elevation = filemetadata('elevation')
     
-    # Basic angle assignments
-    azimuth['data'] = (ncvars['azi'][:] + revised_northangle) % 360
-    elevation['data'] = ncvars['elv'][:]
+    # Basic angle assignments - explicitly cast to float32 for NCAS compliance
+    azimuth['data'] = ((ncvars['azi'][:] + revised_northangle) % 360).astype(np.float32)
+    elevation['data'] = ncvars['elv'][:].astype(np.float32)
     
     # Calculate ray durations for scan rate correction
     ray_duration = np.diff(time['data'])
     
-    if scan_name in ['ppi', 'rhi']:
+    result = {
+        'azimuth': azimuth,
+        'elevation': elevation
+    }
+    
+    if scan_name in ['ppi', 'rhi', 'manual_rhi']:
         # For scanning modes, calculate scan rates and antenna transitions
-        scan_rate = filemetadata("scan_rate")
         antenna_transition = filemetadata("antenna_transition") 
         target_scan_rate = filemetadata("target_scan_rate")
         
-        # Determine primary scan rate variable based on scan type
-        if scan_name == 'ppi':
+        if scan_name == 'manual_rhi':
+            # MAN scans: track both elevation and azimuth rates
+            elevation_scan_rate = filemetadata("elevation_scan_rate")
+            azimuth_scan_rate = filemetadata("azimuth_scan_rate")
+            
+            elevation_scan_rate['data'] = ncvars['elvv'][:]
+            elevation_scan_rate['units'] = 'degrees_per_second'
+            elevation_scan_rate['long_name'] = 'antenna elevation angle scan rate'
+            elevation_scan_rate['standard_name'] = 'platform_elevation_scan_rate'
+            
+            azimuth_scan_rate['data'] = ncvars['aziv'][:]
+            azimuth_scan_rate['units'] = 'degrees_per_second'
+            azimuth_scan_rate['long_name'] = 'antenna azimuth angle scan rate'
+            azimuth_scan_rate['standard_name'] = 'platform_azimuth_scan_rate'
+            
+            # For antenna_transition detection, use combined rate magnitude
+            combined_rate = np.sqrt(elevation_scan_rate['data']**2 + azimuth_scan_rate['data']**2)
+            antenna_transition['data'] = np.where(combined_rate < 0.01, 1, 0).astype('int8')
+            antenna_transition['long_name'] = "antenna is in transition between sweeps"
+            antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise"
+            
+            # For target scan rate, use mean elevation rate from scanning periods
+            scanning_indices = np.where(antenna_transition['data'] == 0)[0]
+            if len(scanning_indices) > 0:
+                target_rate = np.mean(np.abs(elevation_scan_rate['data'][scanning_indices]))
+                target_scan_rate['data'] = np.round(target_rate, 2)
+            else:
+                target_scan_rate['data'] = np.array([1.0], dtype="f4")
+            
+            target_scan_rate['long_name'] = 'target elevation scan rate for sweep'
+            
+            # For backward compatibility, set scan_rate to elevation rate
+            scan_rate = filemetadata("scan_rate")
+            scan_rate['data'] = elevation_scan_rate['data']
+            scan_rate['units'] = 'degrees_per_second'
+            scan_rate['long_name'] = 'antenna angle scan rate (elevation for MAN scans)'
+            
+            result.update({
+                'scan_rate': scan_rate,
+                'antenna_transition': antenna_transition,
+                'target_scan_rate': target_scan_rate,
+                'elevation_scan_rate': elevation_scan_rate,
+                'azimuth_scan_rate': azimuth_scan_rate
+            })
+            
+        elif scan_name == 'ppi':
+            # PPI: azimuth scanning only
+            scan_rate = filemetadata("scan_rate")
             scan_rate['data'] = ncvars['aziv'][:]
+            scan_rate['units'] = 'degrees_per_second'
+            scan_rate['long_name'] = 'antenna angle scan rate'
+            
+            # Identify antenna transitions (very low scan rates)
+            antenna_transition['data'] = np.where(np.abs(scan_rate['data']) < 0.01, 1, 0).astype('int8')
+            antenna_transition['long_name'] = "antenna is in transition between sweeps"
+            antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise"
+            
+            # Calculate target scan rate from non-transitioning periods
+            scanning_indices = np.where(antenna_transition['data'] == 0)[0]
+            if len(scanning_indices) > 0:
+                target_rate = np.mean(scan_rate['data'][scanning_indices])
+                target_scan_rate['data'] = np.round(target_rate, 2)
+            else:
+                target_scan_rate['data'] = np.array([4.0], dtype="f4")
+                
+            target_scan_rate['long_name'] = 'target scan rate for sweep'
+            
+            result.update({
+                'scan_rate': scan_rate,
+                'antenna_transition': antenna_transition,
+                'target_scan_rate': target_scan_rate
+            })
+            
         else:  # rhi
+            # RHI: elevation scanning only
+            scan_rate = filemetadata("scan_rate")
             scan_rate['data'] = ncvars['elvv'][:]
+            scan_rate['units'] = 'degrees_per_second'
+            scan_rate['long_name'] = 'antenna angle scan rate'
             
-        scan_rate['units'] = 'degrees_per_second'
-        scan_rate['long_name'] = 'antenna angle scan rate'
-        
-        # Identify antenna transitions (very low scan rates)
-        antenna_transition['data'] = np.where(np.abs(scan_rate['data']) < 0.01, 1, 0).astype('int8')
-        antenna_transition['long_name'] = "antenna is in transition between sweeps"
-        antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise"
-        
-        # Calculate target scan rate from non-transitioning periods
-        scanning_indices = np.where(antenna_transition['data'] == 0)[0]
-        if len(scanning_indices) > 0:
-            target_rate = np.mean(scan_rate['data'][scanning_indices])
-            target_scan_rate['data'] = np.round(target_rate, 2)
-        else:
-            target_scan_rate['data'] = np.array([4.0], dtype="f4")
+            # Identify antenna transitions (very low scan rates)
+            antenna_transition['data'] = np.where(np.abs(scan_rate['data']) < 0.01, 1, 0).astype('int8')
+            antenna_transition['long_name'] = "antenna is in transition between sweeps"
+            antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise"
             
-        target_scan_rate['long_name'] = 'target scan rate for sweep'
+            # Calculate target scan rate from non-transitioning periods
+            scanning_indices = np.where(antenna_transition['data'] == 0)[0]
+            if len(scanning_indices) > 0:
+                target_rate = np.mean(scan_rate['data'][scanning_indices])
+                target_scan_rate['data'] = np.round(target_rate, 2)
+            else:
+                target_scan_rate['data'] = np.array([4.0], dtype="f4")
+                
+            target_scan_rate['long_name'] = 'target scan rate for sweep'
+            
+            result.update({
+                'scan_rate': scan_rate,
+                'antenna_transition': antenna_transition,
+                'target_scan_rate': target_scan_rate
+            })
         
         # Apply timing corrections to angles
         _apply_timing_corrections(azimuth, elevation, ncvars, ray_duration, revised_northangle)
-        
-    else:
-        # For non-scanning modes (VPT), no scan rate information
-        scan_rate = None
-        antenna_transition = None  
-        target_scan_rate = None
     
-    return azimuth, elevation, scan_rate, antenna_transition, target_scan_rate
+    return result
 
 def _apply_timing_corrections(
     azimuth: Dict, 
@@ -463,7 +552,7 @@ def _apply_timing_corrections(
     azimuth['data'] -= 0.5 * ray_duration_extended * ncvars['aziv'][:]
     azimuth['units'] = "degrees"
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle"
-    azimuth['long_name'] = "sensor to target azimuth angle"
+    azimuth['long_name'] = "azimuth_angle_from_true_north"
     
     # Special handling for long-duration rays
     for idx in long_duration:
@@ -475,7 +564,7 @@ def _apply_timing_corrections(
     elevation['data'] -= 0.5 * ray_duration_extended * ncvars['elvv'][:]
     elevation['units'] = "degrees"
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle" 
-    elevation['long_name'] = "sensor to target elevation angle"
+    elevation['long_name'] = "elevation_angle_from_horizontal_plane"
     
     # Special handling for long-duration rays
     for idx in long_duration:
@@ -652,8 +741,8 @@ def _extract_instrument_parameters(ncobj: nc4.Dataset, nrays: int, filemetadata:
     # Pulse repetition time
     if "prf" in ncvars:
         prt_dict = filemetadata("prt")
-        prt = 1.0 / ncvars["prf"][:]
-        prt_dict["data"] = np.ones((nrays,), dtype="float32") * prt
+        prt_value = float(1.0 / ncvars["prf"][:])  # Extract scalar, ensure float64 intermediate
+        prt_dict["data"] = np.full((nrays,), prt_value, dtype=np.float32)
         instrument_parameters["prt"] = prt_dict
     
     # Parse hardware parameters from 'hrd' attribute
@@ -665,15 +754,15 @@ def _extract_instrument_parameters(ncobj: nc4.Dataset, nrays: int, filemetadata:
     # Pulse width
     if "PULSE_WIDTH" in hrd_variables:
         pw_dict = filemetadata("pulse_width")
-        pulse_width = hrd_variables["PULSE_WIDTH"]
-        pw_dict["data"] = np.ones((nrays,), dtype="float32") * pulse_width
+        pulse_width = float(hrd_variables["PULSE_WIDTH"])  # Ensure scalar
+        pw_dict["data"] = np.full((nrays,), pulse_width, dtype=np.float32)
         instrument_parameters["pulse_width"] = pw_dict
     
     # Transmit power
     if "tpow" in ncvars:
         tp_dict = filemetadata("radar_measured_transmit_power_h")
         txpower = 10.0 * np.log10(ncvars["tpow"][:]) + 30  # Convert to dBm
-        tp_dict["data"] = txpower
+        tp_dict["data"] = txpower.astype(np.float32)
         instrument_parameters["radar_measured_transmit_power_h"] = tp_dict
     
     return instrument_parameters
@@ -816,6 +905,9 @@ def convert_kepler_mmclx2l1(
     # Write CF-Radial file
     pyart.io.write_cfradial(outfile, radar_dataset, format='NETCDF4', time_reference=True)
     
+    # Add elevation and azimuth scan rates for MAN scans
+    add_scan_rate_coordinates(outfile, radar_dataset)
+    
     # Add NCAS metadata
     cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
     
@@ -865,6 +957,67 @@ def update_history_attribute(filename: str, history_entry: str) -> None:
         
     except Exception as e:
         print(f"Warning: Could not update history attribute: {e}")
+
+def add_scan_rate_coordinates(filename: str, radar_obj: Radar) -> None:
+    """
+    Add elevation_scan_rate and azimuth_scan_rate coordinate variables to NetCDF file.
+    
+    This is needed for MAN (manual_rhi) scans where both elevation and azimuth
+    change independently during aircraft tracking.
+    
+    Args:
+        filename: Path to CF-Radial NetCDF file
+        radar_obj: PyART Radar object containing the scan rate data
+    """
+    try:
+        import netCDF4 as nc4
+        
+        # Check if radar object has the scan rate attributes
+        has_elevation_rate = (hasattr(radar_obj, 'elevation_scan_rate') and 
+                             radar_obj.elevation_scan_rate is not None and
+                             'data' in radar_obj.elevation_scan_rate)
+        has_azimuth_rate = (hasattr(radar_obj, 'azimuth_scan_rate') and 
+                           radar_obj.azimuth_scan_rate is not None and
+                           'data' in radar_obj.azimuth_scan_rate)
+        
+        if not (has_elevation_rate or has_azimuth_rate):
+            return  # Nothing to add
+        
+        with nc4.Dataset(filename, 'a') as ds:
+            # Add elevation_scan_rate if present
+            if has_elevation_rate:
+                if 'elevation_scan_rate' not in ds.variables:
+                    var = ds.createVariable('elevation_scan_rate', 'f4', ('time',))
+                else:
+                    var = ds.variables['elevation_scan_rate']
+                
+                var[:] = radar_obj.elevation_scan_rate['data']
+                var.units = radar_obj.elevation_scan_rate.get('units', 'degrees_per_second')
+                var.long_name = radar_obj.elevation_scan_rate.get('long_name', 
+                                                                   'antenna elevation angle scan rate')
+                if 'standard_name' in radar_obj.elevation_scan_rate:
+                    var.standard_name = radar_obj.elevation_scan_rate['standard_name']
+                
+                print(f"  Added elevation_scan_rate to {filename}")
+            
+            # Add azimuth_scan_rate if present
+            if has_azimuth_rate:
+                if 'azimuth_scan_rate' not in ds.variables:
+                    var = ds.createVariable('azimuth_scan_rate', 'f4', ('time',))
+                else:
+                    var = ds.variables['azimuth_scan_rate']
+                
+                var[:] = radar_obj.azimuth_scan_rate['data']
+                var.units = radar_obj.azimuth_scan_rate.get('units', 'degrees_per_second')
+                var.long_name = radar_obj.azimuth_scan_rate.get('long_name', 
+                                                                 'antenna azimuth angle scan rate')
+                if 'standard_name' in radar_obj.azimuth_scan_rate:
+                    var.standard_name = radar_obj.azimuth_scan_rate['standard_name']
+                
+                print(f"  Added azimuth_scan_rate to {filename}")
+                
+    except Exception as e:
+        print(f"Warning: Could not add scan rate coordinates: {e}")
 
 def cfradial_get_bbox(cfradfile: str) -> str:
     """
@@ -1007,7 +1160,7 @@ def time_long_name(cfradfile: str) -> None:
     with nc4.Dataset(cfradfile, 'r+') as ds:
         time_var = ds.variables['time']
         if 'time_reference' in ds.variables:
-            time_var.long_name = "time in seconds since time_reference"
+            time_var.long_name = "time_since_time_reference"
 
 def find_mmclxfiles(
     start_time: str, 
@@ -1049,14 +1202,26 @@ def find_mmclxfiles(
     
     print(f"Searching for {sweep_type.upper()} files from {start_time} to {end_time}")
     
-    # Get the date string from start time to look in the right subdirectory
+    # Get the date string from start time
     date_str = start_datetime.strftime('%Y%m%d')
-    search_path = Path(inpath) / date_str
     
-    print(f"Looking in date directory: {search_path}")
+    # Check if we need to add date subdirectory or use path directly
+    # Try date subdirectory first (standard case for most campaigns)
+    # If that doesn't exist, use inpath directly (WOEST case with scan-type subdirs)
+    inpath_obj = Path(inpath)
+    date_subdir = inpath_obj / date_str
     
-    if not search_path.exists():
-        print(f"Date directory does not exist: {search_path}")
+    if date_subdir.exists():
+        # Standard case: files organized in YYYYMMDD subdirectories
+        search_path = date_subdir
+        print(f"Looking in date directory: {search_path}")
+    elif inpath_obj.exists():
+        # WOEST case: path already points to scan-type directory
+        search_path = inpath_obj
+        print(f"Using path directly (no date subdir): {search_path}")
+    else:
+        # Neither exists
+        print(f"Path does not exist: {inpath_obj} (with or without date {date_str})")
         return []
     
     # Define search patterns based on sweep type
@@ -1065,17 +1230,19 @@ def find_mmclxfiles(
             'rhi': "*rhi*.mmclx.gz",
             'ppi': "*ppi*.mmclx.gz", 
             'vert': "*vert*.mmclx.gz",
-            'vad': "*ppi*.mmclx.gz"  # VAD files are typically PPI scans
+            'vad': "*ppi*.mmclx.gz",  # VAD files are typically PPI scans
+            'man': "*man*.mmclx.gz"   # MAN (manual tracking) scans
         }
     else:
         patterns = {
             'rhi': "*rhi*.mmclx",
             'ppi': "*ppi*.mmclx",
             'vert': "*vert*.mmclx", 
-            'vad': "*ppi*.mmclx"  # VAD files are typically PPI scans
+            'vad': "*ppi*.mmclx",  # VAD files are typically PPI scans
+            'man': "*man*.mmclx"   # MAN (manual tracking) scans
         }
     
-    pattern = patterns.get(sweep_type.lower(), f"*{sweep_type}*.mmclx{'gz' if gzip_flag else ''}")
+    pattern = patterns.get(sweep_type.lower(), f"*{sweep_type}*.mmclx{'.gz' if gzip_flag else ''}")
     
     # Find candidate files
     candidate_files = list(search_path.glob(pattern))
@@ -1165,12 +1332,21 @@ def find_mmclx_rhi_files(
     
     # Get the date string from start time to look in the right subdirectory
     date_str = start_datetime.strftime('%Y%m%d')
-    search_path = Path(inpath) / date_str
     
-    print(f"Looking in date directory: {search_path}")
+    # Check if inpath already exists (WOEST case: path already includes date/scantype)
+    # or needs date subdirectory added (standard campaigns)
+    inpath_obj = Path(inpath)
+    if inpath_obj.exists():
+        # Path already exists, use directly (WOEST: /mom/20230614/hsrhi/)
+        search_path = inpath_obj
+        print(f"Using existing path directly: {search_path}")
+    else:
+        # Standard case: add date subdirectory
+        search_path = inpath_obj / date_str
+        print(f"Looking in date directory: {search_path}")
     
     if not search_path.exists():
-        print(f"Date directory does not exist: {search_path}")
+        print(f"Search path does not exist: {search_path}")
         return []
     
     # Define a list to store the found files
@@ -1178,13 +1354,13 @@ def find_mmclx_rhi_files(
     
     az_search_offset = -8.0  # Before July
     
-    # Look for RHI files
+    # Look for RHI files (use rglob for recursive search in subdirectories like WOEST's hsrhi/)
     if gzip_flag:
         rhi_pattern = "*rhi*.mmclx.gz"
     else:
         rhi_pattern = "*rhi*.mmclx"
     
-    candidate_files = list(search_path.glob(rhi_pattern))
+    candidate_files = list(search_path.rglob(rhi_pattern))
     print(f"Found {len(candidate_files)} candidate RHI files")
     
     # Check each file's timestamp and azimuth
@@ -1298,11 +1474,20 @@ def find_mmclx_ppi_files(
     print(f"Searching for PPI files from {start_time} to {end_time}")
     print(f"Elevation range: {elev_min}° to {elev_max}°")
     
-    # Get the date string from start time to look in the right subdirectory
+    # Get the date string from start time
     date_str = start_datetime.strftime('%Y%m%d')
-    search_path = Path(inpath) / date_str
     
-    print(f"Looking in date directory: {search_path}")
+    # Check if inpath already exists (e.g., for WOEST with scan-type subdirs)
+    # or if we need to add the date subdirectory
+    inpath_obj = Path(inpath)
+    if inpath_obj.exists():
+        # Path already exists, use it directly (WOEST case)
+        search_path = inpath_obj
+        print(f"Using existing path directly: {search_path}")
+    else:
+        # Add date subdirectory (standard case)
+        search_path = inpath_obj / date_str
+        print(f"Looking in date directory: {search_path}")
     
     if not search_path.exists():
         print(f"Date directory does not exist: {search_path}")
@@ -1400,33 +1585,15 @@ def cfradial_add_ncas_metadata(
     if not os.path.exists(yaml_instrument_file):
         raise FileNotFoundError(f"Instrument YAML file not found: {yaml_instrument_file}")
     
-    try:
-        # Try to use the official NCAS metadata library
-        from ncas_amof_netcdf_template import util
-        
-        util.add_ncas_metadata_to_netcdf_file(
-            cfradial_file, 
-            yaml_project_file, 
-            yaml_instrument_file, 
-            tracking_tag,
-            data_version
-        )
-        
-        print(f"Successfully added NCAS metadata using official library")
-        return
-        
-    except ImportError as e:
-        print(f"NCAS metadata library not available: {e}")
-        print("Falling back to manual metadata addition")
-    except Exception as e:
-        print(f"Error using NCAS metadata library: {e}")
-        print("Falling back to manual metadata addition")
-    
-    # Fallback: Add NCAS metadata manually (but still require YAML files)
+    # Add NCAS metadata manually by reading YAML project and instrument files
+    # The ncas_amof_netcdf_template library expects a different workflow (single metadata CSV/YAML),
+    # so we use our custom implementation that properly handles project + instrument YAML files
     try:
         _add_ncas_metadata_manually(cfradial_file, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+        print(f"Successfully added NCAS metadata")
     except Exception as e:
         raise RuntimeError(f"Error adding NCAS metadata to {cfradial_file}: {e}")
+
 
 def _add_ncas_metadata_manually(
     cfradial_file: str,
@@ -1612,6 +1779,14 @@ def _add_ncas_metadata_manually(
     if project_instrument_info:
         print(f"Project instrument info keys: {list(project_instrument_info.keys())}")
     
+    # Extract north_angle from project metadata for azimuth_correction
+    revised_northangle = 55.9  # Default value for COBALT
+    if project_instrument_info and 'north_angle' in project_instrument_info:
+        revised_northangle = float(project_instrument_info['north_angle'])
+        print(f"Using north_angle from project YAML: {revised_northangle}°")
+    else:
+        print(f"Using default north_angle: {revised_northangle}°")
+    
     # Open NetCDF file and update attributes
     try:
         with nc4.Dataset(cfradial_file, 'a') as ds:
@@ -1639,11 +1814,31 @@ def _add_ncas_metadata_manually(
             # Update Conventions
             ds.setncattr('Conventions', 'NCAS-Radar-1.0 CfRadial-1.4 instrument_parameters radar_parameters geometry_correction')
             
-            # Update core attributes
+            # Update core attributes - set defaults first
             ds.setncattr('title', 'Moment data from NCAS Mobile Ka-band Radar (Kepler)')
             ds.setncattr('institution', 'National Centre for Atmospheric Science (NCAS) and Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)')
-            ds.setncattr('source', 'NCAS Mobile Ka-band Radar unit 1')
+            ds.setncattr('source', 'NCAS Ka-Band Mobile Cloud Radar unit 1')
+            ds.setncattr('comment', ' ')
             ds.setncattr('references', 'www.metek.de')
+            
+            # Override source, title, references from YAML if available
+            # Check project_instrument_info first (from project YAML)
+            if project_instrument_info:
+                if 'source' in project_instrument_info:
+                    ds.setncattr('source', project_instrument_info['source'])
+                    print(f"Set source from project YAML: {project_instrument_info['source']}")
+                if 'title' in project_instrument_info:
+                    ds.setncattr('title', project_instrument_info['title'])
+                    print(f"Set title from project YAML: {project_instrument_info['title']}")
+            
+            # Check instrument_info (from instrument YAML) as fallback
+            if instrument_info:
+                if 'source' in instrument_info and not (project_instrument_info and 'source' in project_instrument_info):
+                    ds.setncattr('source', instrument_info['source'])
+                    print(f"Set source from instrument YAML: {instrument_info['source']}")
+                if 'references' in instrument_info:
+                    ds.setncattr('references', instrument_info['references'])
+                    print(f"Set references from instrument YAML: {instrument_info['references']}")
             ds.setncattr('product_version', f'v{data_version}')
             ds.setncattr('processing_level', '1')
             ds.setncattr('licence', 'This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).')
@@ -1653,29 +1848,46 @@ def _add_ncas_metadata_manually(
             ds.setncattr('creator_email', 'chris.walden@ncas.ac.uk')
             ds.setncattr('creator_url', 'https://orcid.org/0000-0002-5718-466X')
             
-            # Add instrument metadata from YAML if available
+            # Add instrument metadata - always set defaults, then override from YAML if available
+            ds.setncattr('instrument_manufacturer', 'Meteorologische Messtechnik (Metek) GmbH')
+            ds.setncattr('instrument_model', 'MIRA-35S')
+            ds.setncattr('instrument_serial_number', 'BX3C')
+            ds.setncattr('instrument_pid', 'https://hdl.handle.net/21.12132/3.b7a8298b7a54405f')
+            
             if instrument_info:
-                print("Adding instrument metadata from YAML")
-                if 'manufacturer' in instrument_info:
+                print("Overriding instrument metadata from YAML")
+                # Check for both prefixed (instrument_*) and non-prefixed key names
+                if 'instrument_manufacturer' in instrument_info:
+                    ds.setncattr('instrument_manufacturer', instrument_info['instrument_manufacturer'])
+                elif 'manufacturer' in instrument_info:
                     ds.setncattr('instrument_manufacturer', instrument_info['manufacturer'])
-                if 'model' in instrument_info:
+                
+                if 'instrument_model' in instrument_info:
+                    ds.setncattr('instrument_model', instrument_info['instrument_model'])
+                elif 'model' in instrument_info:
                     ds.setncattr('instrument_model', instrument_info['model'])
-                if 'serial_number' in instrument_info:
+                
+                if 'instrument_serial_number' in instrument_info:
+                    ds.setncattr('instrument_serial_number', instrument_info['instrument_serial_number'])
+                elif 'serial_number' in instrument_info:
                     ds.setncattr('instrument_serial_number', instrument_info['serial_number'])
-                if 'pid' in instrument_info:
+                
+                if 'instrument_pid' in instrument_info:
+                    ds.setncattr('instrument_pid', instrument_info['instrument_pid'])
+                elif 'pid' in instrument_info:
                     ds.setncattr('instrument_pid', instrument_info['pid'])
             else:
                 print("Using default instrument metadata")
-                # Default instrument metadata
-                ds.setncattr('instrument_manufacturer', 'Meteorologische Messtechnik (Metek) GmbH')
-                ds.setncattr('instrument_model', 'MIRA-35S')
-                ds.setncattr('instrument_serial_number', 'BX3C')
-                ds.setncattr('instrument_pid', 'https://hdl.handle.net/21.12132/3.b7a8298b7a54405f')
             
-            # Add project metadata from YAML if available
+            # Add project metadata - always set default, then override from YAML if available
+            ds.setncattr('project', 'Contrail Observations and Lifecycle Tracking (COBALT)')
+            
             if project_info:
-                print("Adding project metadata from YAML")
-                if 'title' in project_info:
+                print("Overriding project metadata from YAML")
+                # Check for project_name first (standard key), then title (fallback)
+                if 'project_name' in project_info:
+                    ds.setncattr('project', project_info['project_name'])
+                elif 'title' in project_info:
                     ds.setncattr('project', project_info['title'])
                 
                 if 'principal_investigator' in project_info:
@@ -1685,8 +1897,8 @@ def _add_ncas_metadata_manually(
                             ds.setncattr('project_principal_investigator', pi['name'])
                         if 'email' in pi:
                             ds.setncattr('project_principal_investigator_email', pi['email'])
-                        if 'orcid' in pi:
-                            ds.setncattr('project_principal_investigator_url', pi['orcid'])
+                        if 'pid' in pi:
+                            ds.setncattr('project_principal_investigator_url', pi['pid'])
                 
                 # Try to get acknowledgement from project_instrument_info first (from project YAML)
                 acknowledgement_set = False
@@ -1710,19 +1922,82 @@ def _add_ncas_metadata_manually(
                         print("Set acknowledgement from project info (alternative spelling)")
             else:
                 print("Using default project metadata for COBALT")
-                # Default project metadata for COBALT
-                ds.setncattr('project', 'Contrail Observations and Lifecycle Tracking (COBALT)')
+                # Default project metadata for COBALT (project already set above)
                 ds.setncattr('project_principal_investigator', 'Edward Gryspeerdt')
                 ds.setncattr('project_principal_investigator_email', 'e.gryspeerdt@imperial.ac.uk')
                 ds.setncattr('project_principal_investigator_url', 'https://orcid.org/0000-0002-3815-4756')
                 ds.setncattr('acknowledgement', 'This dataset was developed as part of the activity "Contrail Observations and Lifecycle Tracking (COBALT)", funded by\nNatural Environment Research Council (NERC) Grant NE/Z503794/1.\nIt uses instrumentation provided by the Atmospheric Measurement and Observation Facility (AMOF), part of NERC National Capability.\nUsers should acknowledge the National Centre for Atmospheric Science (NCAS) as the data provider.')
             
-            # Platform information
-            ds.setncattr('platform', 'CAO')
-            ds.setncattr('platform_type', 'stationary_platform')
-            ds.setncattr('location_keywords', 'Chilbolton, Hampshire, England')
-            ds.setncattr('platform_is_mobile', 'false')
-            ds.setncattr('deployment_mode', 'land')
+            # Platform information - try to get from project_instrument_info first
+            platform_set = False
+            if project_instrument_info and 'platform' in project_instrument_info:
+                platform_info = project_instrument_info['platform']
+                print("Setting platform info from project YAML instrument section")
+                if 'location' in platform_info:
+                    ds.setncattr('platform', platform_info['location'].lower())
+                    platform_set = True
+                if 'type' in platform_info:
+                    ds.setncattr('platform_type', platform_info['type'])
+                if 'location_keywords' in platform_info:
+                    ds.setncattr('location_keywords', platform_info['location_keywords'])
+                if 'deployment_mode' in platform_info:
+                    ds.setncattr('deployment_mode', platform_info['deployment_mode'])
+                ds.setncattr('platform_is_mobile', 'false')
+            
+            # Fallback to default if platform info not found in YAML
+            if not platform_set:
+                print("Using default platform info (cao)")
+                ds.setncattr('platform', 'cao')
+                ds.setncattr('platform_type', 'stationary_platform')
+                ds.setncattr('location_keywords', 'Chilbolton, Hampshire, England')
+                ds.setncattr('platform_is_mobile', 'false')
+                ds.setncattr('deployment_mode', 'land')
+            
+            # Add platform_altitude - try multiple sources to ensure it's always set
+            platform_altitude_set = False
+            
+            # First try: extract from NetCDF altitude variable
+            if 'altitude' in ds.variables:
+                try:
+                    alt_var = ds.variables['altitude']
+                    if len(alt_var) > 0:
+                        platform_altitude = float(alt_var[0])
+                        ds.setncattr('platform_altitude', f'{platform_altitude:.1f} m')
+                        print(f"Set platform_altitude to {platform_altitude:.1f} m from altitude variable")
+                        platform_altitude_set = True
+                except Exception as e:
+                    print(f"Warning: Could not extract platform_altitude from altitude variable: {e}")
+            
+            # Second try: get from YAML altitude value
+            if not platform_altitude_set and project_instrument_info and 'altitude' in project_instrument_info:
+                try:
+                    alt_info = project_instrument_info['altitude']
+                    if isinstance(alt_info, dict) and 'value' in alt_info:
+                        alt_value = float(alt_info['value'])
+                        alt_units = alt_info.get('units', 'm')
+                        if alt_units == 'metres' or alt_units == 'm':
+                            ds.setncattr('platform_altitude', f'{alt_value:.1f} m')
+                            print(f"Set platform_altitude to {alt_value:.1f} m from YAML altitude")
+                            platform_altitude_set = True
+                except Exception as e:
+                    print(f"Warning: Could not extract platform_altitude from YAML altitude: {e}")
+            
+            # Third try: get from YAML platform.altitude string
+            if not platform_altitude_set and project_instrument_info and 'platform' in project_instrument_info:
+                try:
+                    platform_info = project_instrument_info['platform']
+                    if isinstance(platform_info, dict) and 'altitude' in platform_info:
+                        # Use the string as-is (e.g., "83 m (orthometric height above EGM2008 geoid)")
+                        ds.setncattr('platform_altitude', platform_info['altitude'])
+                        print(f"Set platform_altitude to '{platform_info['altitude']}' from YAML platform.altitude")
+                        platform_altitude_set = True
+                except Exception as e:
+                    print(f"Warning: Could not extract platform_altitude from YAML platform: {e}")
+            
+            # Last resort: use default for Chilbolton
+            if not platform_altitude_set:
+                ds.setncattr('platform_altitude', '83.0 m')
+                print("Set platform_altitude to default '83.0 m' for Chilbolton")
             
             # Processing information - try to get from YAML first
             if project_instrument_info and 'processing_software' in project_instrument_info:
@@ -1764,21 +2039,31 @@ def _add_ncas_metadata_manually(
             ds.setncattr('date_created', current_time)
             
             # Update variable attributes for NCAS compliance
-            _update_variable_attributes_for_ncas(ds)
+            _update_variable_attributes_for_ncas(ds, revised_northangle)
         
     except Exception as e:
         raise RuntimeError(f"Error modifying NetCDF file {cfradial_file}: {e}")
     
     print(f"Successfully added manual NCAS metadata to {cfradial_file}")
 
-def _update_variable_attributes_for_ncas(ds):
-    """Update variable attributes to be NCAS compliant."""
+def _update_variable_attributes_for_ncas(ds, revised_northangle: float = 55.9):
+    """
+    Update variable attributes to be NCAS compliant.
+    
+    PyART automatically sets the 'type' attribute based on each variable's dtype,
+    so we rely on that automatic behavior rather than explicitly setting types.
+    We only update other attributes like standard_name, comment, units, etc.
+    
+    Args:
+        ds: NetCDF4 Dataset object
+        revised_northangle: North angle correction in degrees (default: 55.9 for COBALT)
+    """
     
     # Update time variable
     if 'time' in ds.variables:
         time_var = ds.variables['time']
-        time_var.setncattr('comment', '')
-        time_var.setncattr('long_name', 'time in seconds since time_reference')
+        time_var.setncattr('comment', ' ')
+        time_var.setncattr('long_name', 'time_since_time_reference')
     
     # Update range variable  
     if 'range' in ds.variables:
@@ -1790,21 +2075,48 @@ def _update_variable_attributes_for_ncas(ds):
         else:
             range_var.setncattr('meters_to_center_of_first_gate', range_var[0])
     
-    # Update azimuth variable
+    # Update azimuth variable - fix standard_name
     if 'azimuth' in ds.variables:
         azim_var = ds.variables['azimuth']
         azim_var.setncattr('comment', 'Azimuth of antenna relative to true north')
+        azim_var.setncattr('standard_name', 'ray_azimuth_angle')
+        # PyART automatically sets type based on variable dtype (float32 -> 'float')
     
-    # Update elevation variable
+    # Update elevation variable - fix standard_name
     if 'elevation' in ds.variables:
         elev_var = ds.variables['elevation']
         elev_var.setncattr('comment', 'Elevation of antenna relative to the horizontal plane')
+        elev_var.setncattr('standard_name', 'ray_elevation_angle')
+        # PyART automatically sets type based on variable dtype (float32 -> 'float')
+    
+    # Update latitude variable
+    if 'latitude' in ds.variables:
+        lat_var = ds.variables['latitude']
+        # PyART automatically sets type based on variable dtype (float64 -> 'double')
+    
+    # Update longitude variable
+    if 'longitude' in ds.variables:
+        lon_var = ds.variables['longitude']
+        # PyART automatically sets type based on variable dtype (float64 -> 'double')
     
     # Update altitude variable
     if 'altitude' in ds.variables:
         alt_var = ds.variables['altitude']
         alt_var.setncattr('comment', 'Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model')
         alt_var.setncattr('units', 'metres')
+        # PyART automatically sets type based on variable dtype (float64 -> 'double')
+    
+    # Update prt variable
+    if 'prt' in ds.variables:
+        prt_var = ds.variables['prt']
+        # PyART automatically sets type based on variable dtype
+    
+    # Update radar_measured_transmit_power_h
+    if 'radar_measured_transmit_power_h' in ds.variables:
+        power_var = ds.variables['radar_measured_transmit_power_h']
+        if not hasattr(power_var, 'units'):
+            power_var.setncattr('units', 'dBm')
+        # PyART automatically sets type based on variable dtype
     
     # Update sweep_mode variable
     if 'sweep_mode' in ds.variables:
@@ -1836,7 +2148,7 @@ def _update_variable_attributes_for_ncas(ds):
         azim_corr_var.setncattr('units', 'degrees')
         azim_corr_var.setncattr('meta_group', 'geometry_correction')
         azim_corr_var.setncattr('comment', 'Azimuth correction applied. North angle relative to instrument home azimuth.')
-        azim_corr_var[:] = 55.9  # Default value for COBALT
+        azim_corr_var[:] = revised_northangle
 
 def multi_mmclx2cfrad(
    
@@ -1917,16 +2229,36 @@ def multi_mmclx2cfrad(
         print("No valid radar files could be read")
         return None
     
-    # Determine location from campaign
-    location_map = {
-        'woest': 'lyneham',
-        'ccrest': 'cao',
-        'ccrest-m': 'cao',
-        'coalesc3': 'wao',
-        'cobalt': 'cao',
-        'kasbex': 'cao'
-    }
-    location = location_map.get(campaign.lower(), 'unknown')
+    # Determine location from project YAML file
+    location = 'unknown'  # default
+    try:
+        with open(yaml_project_file, 'r') as f:
+            projects = yaml.safe_load(f)
+        
+        # Find the project with the matching tracking_tag
+        project = None
+        for p in projects:
+            if tracking_tag in p:
+                project = p[tracking_tag]
+                break
+        
+        if project and 'ncas_instruments' in project:
+            # Find the radar instrument
+            for instrument in project['ncas_instruments']:
+                if 'ncas-mobile-ka-band-radar-1' in instrument:
+                    radar_info = instrument['ncas-mobile-ka-band-radar-1']
+                    if 'platform' in radar_info and 'location' in radar_info['platform']:
+                        location = radar_info['platform']['location'].lower()
+                        print(f"Found location from YAML: {location}")
+                        break
+        
+        if location == 'unknown':
+            print(f"Warning: Could not find platform location in {yaml_project_file}, using 'unknown'")
+    
+    except Exception as e:
+        print(f"Warning: Error reading location from {yaml_project_file}: {e}")
+        print("Using 'unknown' as location")
+    
     scan_name_lower = scan_name.lower().replace('_', '-')
     
    
@@ -1960,6 +2292,9 @@ def multi_mmclx2cfrad(
                 
                 # Write CF-Radial file
                 pyart.io.write_cfradial(outfile, radar, format='NETCDF4', time_reference=True)
+                
+                # Add elevation and azimuth scan rates for MAN scans
+                add_scan_rate_coordinates(outfile, radar)
                 
                 # Add time coverage attributes
                 cfradial_add_time_coverage(outfile)
@@ -2018,6 +2353,9 @@ def multi_mmclx2cfrad(
         
         # Write CF-Radial file
         pyart.io.write_cfradial(outfile, combined_radar, format='NETCDF4', time_reference=True)
+        
+        # Add elevation and azimuth scan rates for MAN scans
+        add_scan_rate_coordinates(outfile, combined_radar)
         
         # Add time coverage attributes
         cfradial_add_time_coverage(outfile)
@@ -2192,7 +2530,7 @@ def _manual_combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
     combined_time = base_radar.time.copy()
     combined_time['data'] = np.array(time_data)
     
-    # Create new angle arrays
+    # Create new angle arrays - explicitly use float32
     azimuth_data = []
     elevation_data = []
     for radar in radar_list:
@@ -2200,10 +2538,10 @@ def _manual_combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
         elevation_data.extend(radar.elevation['data'])
     
     combined_azimuth = base_radar.azimuth.copy()
-    combined_azimuth['data'] = np.array(azimuth_data)
+    combined_azimuth['data'] = np.array(azimuth_data, dtype=np.float32)
     
     combined_elevation = base_radar.elevation.copy()
-    combined_elevation['data'] = np.array(elevation_data)
+    combined_elevation['data'] = np.array(elevation_data, dtype=np.float32)
     
     # Combine fields
     combined_fields = {}
@@ -2324,8 +2662,8 @@ def _combine_ppi_sweeps(radar_list: List[Radar]) -> Radar:
         all_times.extend(radar.time['data'])
         ray_counts.append(radar.nrays)
     
-    all_azimuths = np.array(all_azimuths)
-    all_elevations = np.array(all_elevations)
+    all_azimuths = np.array(all_azimuths, dtype=np.float32)
+    all_elevations = np.array(all_elevations, dtype=np.float32)
     all_times = np.array(all_times)
     
     # Identify monotonic azimuth sequences (individual sweeps)
@@ -2465,11 +2803,20 @@ def find_mmclx_vad_files(
     print(f"Searching for VAD files from {start_time} to {end_time}")
     print(f"Elevation range: {elev_min}° to {elev_max}°")
     
-    # Get the date string from start time to look in the right subdirectory
+    # Get the date string from start time
     date_str = start_datetime.strftime('%Y%m%d')
-    search_path = Path(inpath) / date_str
     
-    print(f"Looking in date directory: {search_path}")
+    # Check if inpath already exists (e.g., for WOEST with scan-type subdirs)
+    # or if we need to add the date subdirectory
+    inpath_obj = Path(inpath)
+    if inpath_obj.exists():
+        # Path already exists, use it directly (WOEST case)
+        search_path = inpath_obj
+        print(f"Using existing path directly: {search_path}")
+    else:
+        # Add date subdirectory (standard case)
+        search_path = inpath_obj / date_str
+        print(f"Looking in date directory: {search_path}")
     
     if not search_path.exists():
         print(f"Date directory does not exist: {search_path}")
