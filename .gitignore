@@ -20,3 +20,4 @@ __pycache__/
 # Misc
 BAD_SCANS
 slurm_logs/*.out
+slurm_logs/*.err
