@@ -1,0 +1,122 @@
+# PICASSO Campaign - Period 2 Configuration
+# Date Range: 2018-04-09 to 2018-04-24 (Winter/Spring deployment in Chilbolton)
+# north_angle: 100.5
+# This file is automatically selected for dates in this period by proc_kepler_picasso_campaign_batch.py
+---
+
+- CFARR_0002:
+
+    project_name: PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency doppler radar data)
+
+    amof_admin: 
+      tracking_tag: CFARR_0002
+      project_type: NERC Grant
+      facility_charge: TBD
+
+    grant:
+      ref: NE/P003702/1
+      start_date: 02/06/2016
+      end_date: 31/12/2021
+      value: £609,423
+      grade:
+      scheme: Standard Grant FEC
+      programme: Standard Grant
+
+      abstract: |-
+        Ice clouds have an important role in the atmosphere, influencing radiative transfer and precipitation 
+        formation. The global climatic impact of all clouds types is estimated as a cooling effect. This net 
+        cooling effect results from the opposing impacts from liquid clouds (which cool by reflecting sunlight 
+        back into space) and ice clouds (which warm through a "greenhouse" effect). Unfortunately there is a 
+        lack of understanding of many of the physical processes occurring in ice clouds due to the complexity 
+        of ice particle processes and interactions between atmospheric motions, water vapour, and aerosol 
+        particles. This means ice clouds are a source of significant uncertainty in climate simulations, and 
+        can lead to errors in weather forecasts. Establishing which models are the most accurate remains 
+        difficult due to the lack of observations of ice cloud properties. Remote sensing techniques (e.g. 
+        radar) can provide observations of ice clouds over large areas on a continuous basis, making them ideal 
+        for assessing model skill. However, these techniques do not typically directly measure the atmospherically 
+        relevant quantity (e.g. mass of condensed water in a volume of air), and a retrieval must be used to 
+        obtain comparable data. These retrievals must invoke several assumptions about the properties of the ice 
+        clouds, properties which in reality are highly uncertain. We propose a project to collect a new dataset 
+        using in-situ observations from a research aircraft to directly observed ice cloud properties. At the same 
+        time, three different radars operating at difference wavelengths will scan the same clouds to allow a 
+        variety of radar retrievals to be developed and evaluated. We will obtain data during overpasses from a 
+        variety of different satellites which observe ice clouds from space. This work will improve fundamental 
+        understanding of ice cloud properties, and lead to improved remote sensing retrievals, both of which will 
+        lead to improved model accuracy and reduced uncertainty.
+
+      scientific_area:
+        - Atmospheric: 100%
+        - Earth: 0%
+        - Freshwater: 0%
+        - Marine: 0%
+        - Terrestrial: 0%
+      ENRI:
+        - Biodiversity: 0%
+        - Environmental Risks and Hazards: 50%
+        - Global Change: 50%
+        - Natural Resource Management: 0%
+        - Pollution and Waste: 0%
+      research_area:
+        - Atmospheric physics and chemistry:
+          - Clouds and precipitation: 100%
+      keywords:
+
+    principal_investigator:
+      name: Jonathan Crosier
+      institution: The University of Manchester
+      email: jonathan.crosier@manchester.ac.uk
+      pid: https://orcid.org/0000-0002-3086-4729
+
+    co-investigators:
+      - Chris Westbrook:
+          institution: University of Reading
+          pid: https://orcid.org/0000-0002-2889-8815
+      - James Dorsey:
+          institution: The University of Manchester
+          pid: https://orcid.org/0000-0002-1720-9412
+
+    project_partners:
+
+    ncas_instruments:
+      - ncas-mobile-ka-band-radar-1:
+          title: Moment data from NCAS Ka-band Mobile Cloud Radar (Kepler) at Chilbolton Atmospheric Observatory, UK
+          source: NCAS Ka-Band Mobile Cloud Radar unit 1
+          altitude:
+            value: 83.0
+            units: metres
+          altitude_agl:
+            value: 3.0
+            units: metres
+          latitude:
+            value: 51.14421
+            units: degrees_north
+          longitude:
+            value: -1.438579
+            units: degrees_east
+          platform:
+            location: CAO
+            altitude: 83 m (orthometric height above EGM2008 geoid)
+            type: stationary_platform
+            deployment_mode: land
+            location_keywords: Chilbolton, Hampshire, England
+          instrument_software: 
+            name: rx_client
+            version: /home/vin/WORK/MBR3_XCRL_B3XC/ews/rx_client/Debug/rx_client 20161014-1951
+          data_creator: 
+            name: Chris Walden
+            email: chris.walden@ncas.ac.uk
+            pid: https://orcid.org/0000-0002-5718-466X
+            institution: National Centre for Atmospheric Science (NCAS) and Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)
+          processing_software:
+            url:  https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.1.0
+            version: v1.1.0
+          data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+          acknowledgement: |-
+            This dataset was developed as part of the PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency doppler radar data) campaign, 
+            funded by Natural Environment Research Council (NERC) Grant NE/P012426/1.
+            It uses instrumentation provided by the Atmospheric Measurement and Observation Facility (AMOF), part of NERC National Capability.
+            Users should acknowledge the National Centre for Atmospheric Science (NCAS) as the data provider.
+          usage:
+            - bespoke scanning
+          north_angle: 100.5
+

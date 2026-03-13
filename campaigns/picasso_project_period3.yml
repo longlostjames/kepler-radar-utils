@@ -1,12 +1,16 @@
+# PICASSO Campaign - Period 3 Configuration
+# Date Range: 2019-05-07 to 2019-05-23 (Spring deployment in Chilbolton)
+# north_angle: 93.6
+# This file is automatically selected for dates in this period by proc_kepler_picasso_campaign_batch.py
 ---
 
 - CFARR_0002:
 
     project_name: PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency doppler radar data)
 
-    cfa_admin: 
+    amof_admin: 
       tracking_tag: CFARR_0002
-      project_type: CFA Project
+      project_type: NERC Grant
       facility_charge: TBD
 
     grant:
@@ -114,6 +118,6 @@
             Users should acknowledge the National Centre for Atmospheric Science (NCAS) as the data provider.
           usage:
             - bespoke scanning
-          north_angle: 97.1
+          north_angle: 99.0
 
 
