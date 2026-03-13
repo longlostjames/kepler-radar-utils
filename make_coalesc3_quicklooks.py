@@ -47,6 +47,9 @@ import matplotlib.gridspec as gridspec
 from matplotlib import colors
 import cmocean
 
+# Import kepler utilities
+from kepler_utils import get_valid_sweep_indices
+
 # Configuration
 VERSION = 0.1
 TRACKING_TAG = 'AMF_07092016101810'
@@ -68,14 +71,14 @@ def parse_command_line():
     Parse command line arguments.
     
     Returns:
-        tuple: (datestr, inpath, outpath, blflag)
+        tuple: (datestr, inpath, outpath, blflag, skip_all_transition)
     """
     try:
         opts, args = getopt.getopt(sys.argv[1:], "d:i:o:b", 
-                                   ["date=", "inpath=", "outpath="])
+                                   ["date=", "inpath=", "outpath=", "skip-all-transition"])
     except getopt.GetoptError as err:
         print(f"Error: {err}")
-        print("Usage: python make_coalesc3_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b]")
+        print("Usage: python make_coalesc3_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [--skip-all-transition]")
         sys.exit(2)
 
     # Default values
@@ -84,6 +87,7 @@ def parse_command_line():
     inpath = None
     outpath = None
     blflag = False
+    skip_all_transition = False
 
     for option, argument in opts:
         if option in ("-d", "--date"):
@@ -94,11 +98,13 @@ def parse_command_line():
             outpath = argument
         elif option == "-b":
             blflag = True
+        elif option == "--skip-all-transition":
+            skip_all_transition = True
         else:
             print(f"Unhandled option: {option}")
             sys.exit(2)
 
-    return datestr, inpath, outpath, blflag
+    return datestr, inpath, outpath, blflag, skip_all_transition
 
 def setup_paths(datestr, inpath=None, outpath=None):
     """
@@ -623,7 +629,7 @@ def make_coalesc3_rhi_plots_day(datestr, inpath, figpath, blflag=False):
 
 def main():
     """Main execution function."""
-    datestr, inpath, outpath, blflag = parse_command_line()
+    datestr, inpath, outpath, blflag, skip_all_transition = parse_command_line()
     inpath, figpath = setup_paths(datestr, inpath, outpath)
     
     print(f"COALESC3 Quicklooks Generation")
@@ -631,6 +637,7 @@ def main():
     print(f"Input path: {inpath}")
     print(f"Output path: {figpath}")
     print(f"Boundary layer mode: {blflag}")
+    print(f"Skip all-transition sweeps: {'enabled' if skip_all_transition else 'disabled'}")
     print("-" * 60)
     
     # Generate VPT quicklooks

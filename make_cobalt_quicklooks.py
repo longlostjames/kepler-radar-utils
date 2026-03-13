@@ -12,14 +12,16 @@ It generates RHI (Range Height Indicator) and VPT (Vertical Pointing) plots
 with overlaid aircraft position information.
 
 Usage:
-    python make_cobalt_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [-l]
+    python make_cobalt_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [-l] [--no-aircraft] [--skip-all-transition]
 
 Arguments:
-    -d, --date:     Date string in YYYYMMDD format
-    -i, --inpath:   Input directory containing CF-Radial files
-    -o, --outpath:  Output directory for quicklook images
-    -b:             Boundary layer flag (limits plots to 4km height)
-    -l:             Latest flag (process most recent data)
+    -d, --date:              Date string in YYYYMMDD format
+    -i, --inpath:            Input directory containing CF-Radial files
+    -o, --outpath:           Output directory for quicklook images
+    -b:                      Boundary layer flag (limits plots to 4km height)
+    -l:                      Latest flag (process most recent data)
+    --no-aircraft:           Skip aircraft markers and related processing
+    --skip-all-transition:   Skip sweeps where 100% of rays are antenna_transition=1
 
 Author: Chris Walden, UK Research & Innovation and
         National Centre for Atmospheric Science
@@ -46,6 +48,9 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import colors
 import cmocean
+
+# Import kepler utilities
+from kepler_utils import get_valid_sweep_indices
 
 # Configuration
 VERSION = 0.1
@@ -77,10 +82,10 @@ def parse_command_line():
     """
     try:
         opts, args = getopt.getopt(sys.argv[1:], "d:i:o:bl", 
-                                   ["date=", "inpath=", "outpath=", "no-aircraft"])
+                                   ["date=", "inpath=", "outpath=", "no-aircraft", "skip-all-transition"])
     except getopt.GetoptError as err:
         print(f"Error: {err}")
-        print("Usage: python make_cobalt_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [-l] [--no-aircraft]")
+        print("Usage: python make_cobalt_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [-l] [--no-aircraft] [--skip-all-transition]")
         sys.exit(2)
 
     # Default values
@@ -91,6 +96,7 @@ def parse_command_line():
     blflag = False
     latest = False
     no_aircraft = False
+    skip_all_transition = False
 
     for option, argument in opts:
         if option in ("-d", "--date"):
@@ -105,11 +111,13 @@ def parse_command_line():
             latest = True
         elif option == "--no-aircraft":
             no_aircraft = True
+        elif option == "--skip-all-transition":
+            skip_all_transition = True
         else:
             print(f"Unhandled option: {option}")
             sys.exit(2)
 
-    return datestr, inpath, outpath, blflag, latest, no_aircraft
+    return datestr, inpath, outpath, blflag, latest, no_aircraft, skip_all_transition
 
 def setup_paths(datestr):
     """
@@ -309,7 +317,7 @@ def setup_plot_limits(blflag, wind_scan=False):
     else:
         return 14, 0, 40
 
-def make_cobalt_rhi_plot(ncfile, figpath, cobalt_cmd_path, blflag=False, no_aircraft=False):
+def make_cobalt_rhi_plot(ncfile, figpath, cobalt_cmd_path, blflag=False, no_aircraft=False, skip_all_transition=False):
     """
     Create RHI (Range Height Indicator) quicklook plot for COBALT data.
     
@@ -319,6 +327,7 @@ def make_cobalt_rhi_plot(ncfile, figpath, cobalt_cmd_path, blflag=False, no_airc
         cobalt_cmd_path: Path to COBALT command files
         blflag: Boundary layer flag for plot limits
         no_aircraft: If True, skip aircraft markers and related processing
+        skip_all_transition: If True, skip sweeps where 100% of rays are antenna_transition=1
     """
     print(f"Creating RHI plot for: {ncfile}")
     
@@ -402,9 +411,15 @@ def make_cobalt_rhi_plot(ncfile, figpath, cobalt_cmd_path, blflag=False, no_airc
     dtime0 = cftime.num2pydate(radar_ds.time['data'][0], radar_ds.time['units'])
     dtime0_str = dtime0.strftime("%Y%m%d-%H%M%S")
     
+    # Get valid sweep indices (optionally filtering out all-transition sweeps)
+    valid_sweep_indices = get_valid_sweep_indices(radar_ds, skip_all_transition=skip_all_transition)
+    
+    if skip_all_transition and len(valid_sweep_indices) < nsweeps:
+        print(f"Skipping {nsweeps - len(valid_sweep_indices)} sweep(s) that are 100% antenna transitions")
+    
     if nsweeps > 1:
         # Multiple sweeps - create separate plots
-        for sweep_idx in range(nsweeps):
+        for sweep_idx in valid_sweep_indices:
             print(f"Processing sweep {sweep_idx}/{nsweeps}")
             
             fig, axes = plt.subplots(2, 2, figsize=(15, 15), constrained_layout=False)
@@ -762,7 +777,7 @@ def _plot_vpt_fields_overlay(display, axes, gatefilter, vel_min, vel_max):
                      gatefilter=gatefilter, vmin=-35, vmax=5, cmap=COLORMAPS['ldr'],
                      colorbar_flag=False, title_flag=False)
 
-def make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=False, no_aircraft=False):
+def make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=False, no_aircraft=False, skip_all_transition=False):
     """
     Create RHI plots for all files from a given day.
     
@@ -772,6 +787,7 @@ def make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=False, no_aircraf
         figpath: Output directory path  
         blflag: Boundary layer flag
         no_aircraft: If True, skip aircraft markers and related processing
+        skip_all_transition: If True, skip sweeps where 100% of rays are antenna_transition=1
     """
     print(f"Creating RHI plots for date: {datestr}")
     
@@ -825,7 +841,7 @@ def make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=False, no_aircraf
     for i, rhi_file in enumerate(rhi_files):
         print(f"Processing RHI file {i+1}/{len(rhi_files)}: {os.path.basename(rhi_file)}")
         try:
-            make_cobalt_rhi_plot(rhi_file, figpath, cobalt_cmd_path, blflag=blflag, no_aircraft=no_aircraft)
+            make_cobalt_rhi_plot(rhi_file, figpath, cobalt_cmd_path, blflag=blflag, no_aircraft=no_aircraft, skip_all_transition=skip_all_transition)
         except Exception as e:
             print(f"Error processing {rhi_file}: {e}")
             import traceback
@@ -885,7 +901,7 @@ def main():
     print("=" * 50)
     
     # Parse command line arguments
-    datestr, inpath_arg, outpath_arg, blflag, latest, no_aircraft = parse_command_line()
+    datestr, inpath_arg, outpath_arg, blflag, latest, no_aircraft, skip_all_transition = parse_command_line()
     
     # Set up paths
     inpath, figpath, _ = setup_paths(datestr)
@@ -901,11 +917,12 @@ def main():
     print(f"Output path: {figpath}")
     print(f"Boundary layer mode: {blflag}")
     print(f"Aircraft markers: {'disabled' if no_aircraft else 'enabled'}")
+    print(f"Skip all-transition sweeps: {'enabled' if skip_all_transition else 'disabled'}")
     
     # Create quicklook plots
     try:
         # RHI plots - ADD no_aircraft parameter
-        make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=blflag, no_aircraft=no_aircraft)
+        make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=blflag, no_aircraft=no_aircraft, skip_all_transition=skip_all_transition)
         
         # VPT plots  
         make_cobalt_vpt_plot_day(datestr, inpath, figpath, blflag=blflag)

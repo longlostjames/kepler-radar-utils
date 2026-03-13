@@ -30,6 +30,9 @@ import pandas as pd
 
 import cftime
 
+# Import kepler utilities
+from kepler_utils import get_valid_sweep_indices
+
 version = 0.1
 
 from pathlib import Path
@@ -75,7 +78,7 @@ COLORMAPS = {
 try:
     opts, args = getopt.getopt(sys.argv[1:], "d:i:o:bkzm:a:t:", 
                               ["date=","inpath=","outpath=","dbz-only","basemap=","azimuth-offset=",
-                               "min-lat=","max-lat=","min-lon=","max-lon=","max-age="])
+                               "min-lat=","max-lat=","min-lon=","max-lon=","max-age=","skip-all-transition"])
 except getopt.GetoptError as err:
         # print help information and exit:
         print(err) # will print something like "option -a not recognized
@@ -102,6 +105,7 @@ basemap_type = "opentopo"  # Default
 basemap_type_options = ["satellite", "opentopo", "cartodb"]
 azimuth_offset = 0.0  # Default azimuth offset
 max_file_age_hours = None  # Default: no age limit
+skip_all_transition = False  # Default: don't skip all-transition sweeps
 
 # Default lat/lon bounds for KASBEX at CAO
 lat_min = 50.75
@@ -136,6 +140,8 @@ for o, a in opts:
         lon_min = float(a)
     elif o == "--max-lon":
         lon_max = float(a)
+    elif o == "--skip-all-transition":
+        skip_all_transition = True
     else:
         assert False, "unhandled option"
 
@@ -151,6 +157,7 @@ if max_file_age_hours is not None:
     print(f"Maximum file age: {max_file_age_hours} hours")
 else:
     print("No maximum file age limit set")
+print(f"Skip all-transition sweeps: {'enabled' if skip_all_transition else 'disabled'}")
 
 def filter_files_by_age(files, max_age_hours=None):
     """
@@ -343,7 +350,7 @@ def get_average_ray_duration(radar):
         print(f"Could not calculate ray duration: {e}")
         return None
 
-def make_dymecs_rhi_plot(ncfile, figpath, region, blflag=False, darkmode=False, azimuth_offset=0.0):
+def make_dymecs_rhi_plot(ncfile, figpath, region, blflag=False, darkmode=False, azimuth_offset=0.0, skip_all_transition=False):
     if darkmode:
         plt.style.use('dark_background')
 
@@ -406,6 +413,12 @@ def make_dymecs_rhi_plot(ncfile, figpath, region, blflag=False, darkmode=False, 
     #dtime_sweep = cftime.num2pydate(RadarDS.time['data'][0], RadarDS.time['units'])
     #dtime_sweep_str = dtime_sweep.strftime("%Y%m%d-%H%M%S")
     nsweeps = RadarDS.nsweeps
+    
+    # Get valid sweep indices (optionally filtering out all-transition sweeps)
+    valid_sweep_indices = get_valid_sweep_indices(RadarDS, skip_all_transition=skip_all_transition)
+    
+    if skip_all_transition and len(valid_sweep_indices) < nsweeps:
+        print(f"Skipping {nsweeps - len(valid_sweep_indices)} sweep(s) that are 100% antenna transitions")
 
     vel_field = RadarDS.fields['VEL']
     vel_limit_lower = vel_field['field_limit_lower']
@@ -416,7 +429,7 @@ def make_dymecs_rhi_plot(ncfile, figpath, region, blflag=False, darkmode=False, 
         os.makedirs(figpath)
 
     if nsweeps > 0:
-        for s in range(nsweeps):
+        for s in valid_sweep_indices:
             Radar = RadarDS.extract_sweeps([s])
             display = pyart.graph.RadarDisplay(Radar)
             gatefilter = pyart.correct.GateFilter(Radar)
@@ -481,7 +494,7 @@ def make_dymecs_rhi_plot(ncfile, figpath, region, blflag=False, darkmode=False, 
 
 
 
-def make_dymecs_rhi_plots_day(datestr, inpath, figpath, blflag=False, darkmode=False, azimuth_offset=0.0, max_file_age_hours=None):
+def make_dymecs_rhi_plots_day(datestr, inpath, figpath, blflag=False, darkmode=False, azimuth_offset=0.0, max_file_age_hours=None, skip_all_transition=False):
     inpath_date = inpath
 
     os.chdir(inpath_date)
@@ -570,7 +583,7 @@ def make_dymecs_rhi_plots_day(datestr, inpath, figpath, blflag=False, darkmode=F
         DS.close()  # Close the dataset
     
         print(f"Processing: {os.path.basename(f)} - {comment_attribute}")
-        make_dymecs_rhi_plot(f, figpath, '', blflag=blflag, darkmode=darkmode, azimuth_offset=azimuth_offset)
+        make_dymecs_rhi_plot(f, figpath, '', blflag=blflag, darkmode=darkmode, azimuth_offset=azimuth_offset, skip_all_transition=skip_all_transition)
 
     return
 
@@ -1136,6 +1149,6 @@ make_dymecs_ppi_map_plots_day(datestr, inpath, figpath, dbz_only=dbz_only, basem
                              azimuth_offset=azimuth_offset, lat_bounds=(lat_min, lat_max), lon_bounds=(lon_min, lon_max),
                              max_file_age_hours=max_file_age_hours);
 make_dymecs_rhi_plots_day(datestr,inpath,figpath,blflag=blflag,darkmode=darkmode,azimuth_offset=azimuth_offset,
-                         max_file_age_hours=max_file_age_hours);
+                         max_file_age_hours=max_file_age_hours,skip_all_transition=skip_all_transition);
 #make_cobalt_vpt_plot_day(datestr, inpath, figpath, blflag=blflag, max_file_age_hours=max_file_age_hours)
 

@@ -23,6 +23,9 @@ import pandas as pd
 
 import cftime
 
+# Import kepler utilities
+from kepler_utils import get_valid_sweep_indices
+
 version = 0.1
 
 from pathlib import Path
@@ -30,7 +33,7 @@ homepath = Path.home()
 
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "d:i:o:b", ["date=","inpath=","outpath="])
+    opts, args = getopt.getopt(sys.argv[1:], "d:i:o:b", ["date=","inpath=","outpath=","skip-all-transition"])
 except getopt.GetoptError as err:
         # print help information and exit:
         print(err) # will print something like "option -a not recognized
@@ -48,6 +51,7 @@ yaml_project_file = os.path.join(homepath,'amof_campaigns',f'{campaign}_project.
 yaml_instrument_file = os.path.join(homepath,'amof_instruments','amof_instruments.yml')
 
 blflag = False;
+skip_all_transition = False;
 
 for o, a in opts:
     if o == "-d":
@@ -58,6 +62,8 @@ for o, a in opts:
         outpath = a;
     elif o == "-b":
         blflag = True;
+    elif o == "--skip-all-transition":
+        skip_all_transition = True;
     else:
         assert False, "unhandled option"
 
@@ -70,12 +76,17 @@ inpath = os.path.join(ncas_obs_proc_path,campaign,'L1b')
 
 figpath = os.path.join(inpath,'quicklooks');
 
+print(f"Processing date: {datestr}")
+print(f"Input path: {inpath}")
+print(f"Output path: {figpath}")
+print(f"Boundary layer mode: {blflag}")
+print(f"Skip all-transition sweeps: {'enabled' if skip_all_transition else 'disabled'}")
 
 #inpath = os.path.join(ncas_radar_vol1_path,'cjw','projects',campaign,'kepler','L1a');
 #figpath = os.path.join(ncas_radar_vol1_path,'public','ccrest_kepler');
 
 
-def make_ccrest_rhi_plot(ncfile,figpath,ccrest_az,blflag=False):
+def make_ccrest_rhi_plot(ncfile,figpath,ccrest_az,blflag=False,skip_all_transition=False):
 
     if blflag:
         hmax = 4;
@@ -106,6 +117,12 @@ def make_ccrest_rhi_plot(ncfile,figpath,ccrest_az,blflag=False):
     dtime0 = cftime.num2pydate(RadarDS.time['data'][0],RadarDS.time['units']);
     dtime0_str = dtime0.strftime("%Y%m%d-%H%M%S");
     nsweeps = RadarDS.nsweeps;
+    
+    # Get valid sweep indices (optionally filtering out all-transition sweeps)
+    valid_sweep_indices = get_valid_sweep_indices(RadarDS, skip_all_transition=skip_all_transition)
+    
+    if skip_all_transition and len(valid_sweep_indices) < nsweeps:
+        print(f"Skipping {nsweeps - len(valid_sweep_indices)} sweep(s) that are 100% antenna transitions")
 
 #    fig, ax = plt.subplots(nsweeps,4,figsize=(24,nsweeps*4),constrained_layout=True)
 #    fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.2,wspace=0.2)
@@ -128,7 +145,7 @@ def make_ccrest_rhi_plot(ncfile,figpath,ccrest_az,blflag=False):
 
     if nsweeps>1:
 
-        for s in range(nsweeps):
+        for s in valid_sweep_indices:
             print(f"sweep {s}/{nsweeps}");
             rhi_az = RadarDS.get_azimuth(s)[0];
             fig, ax = plt.subplots(2,2,figsize=(15,15)); #,constrained_layout=True)
@@ -515,7 +532,7 @@ def make_ccrest_vad_plot_day(datestr,inpath,figpath,zlevels,blflag=False):
 
 
 
-def make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=False):
+def make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=False,skip_all_transition=False):
     inpath_date = os.path.join(inpath,datestr);
     
     os.chdir(inpath_date);
@@ -524,11 +541,11 @@ def make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=False):
     print(f'ccrest-1 files = ',ccrest1_rhi_files);
 
     for f in ccrest1_rhi_files:
-        make_ccrest_rhi_plot(f,figpath,'ccrest-1',blflag=blflag);
+        make_ccrest_rhi_plot(f,figpath,'ccrest-1',blflag=blflag,skip_all_transition=skip_all_transition);
 
     return
 
-def make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False):
+def make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False,skip_all_transition=False):
     inpath_date = os.path.join(inpath,datestr);
     
     os.chdir(inpath_date);
@@ -537,14 +554,14 @@ def make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False):
     print(f'ccrest-2 files = ',ccrest2_rhi_files);
 
     for f in ccrest2_rhi_files:
-        make_ccrest_rhi_plot(f,figpath,'ccrest-2',blflag=blflag);
+        make_ccrest_rhi_plot(f,figpath,'ccrest-2',blflag=blflag,skip_all_transition=skip_all_transition);
 
     return
 
 
-make_ccrest_vpt_plot_day(datestr,inpath,figpath,blflag=False);
-make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=False);
-make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=False);
+make_ccrest_vpt_plot_day(datestr,inpath,figpath,blflag=blflag);
+make_ccrest1_rhi_plots_day(datestr,inpath,figpath,blflag=blflag,skip_all_transition=skip_all_transition);
+make_ccrest2_rhi_plots_day(datestr,inpath,figpath,blflag=blflag,skip_all_transition=skip_all_transition);
 zlevels = np.arange(100, 15000, 100);  # height above radar
 make_ccrest_vad_plot_day(datestr,inpath,figpath,zlevels);
 
