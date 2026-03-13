@@ -204,6 +204,789 @@ def apply_phase_sweeps_to_radar(radar: pyart.core.Radar, phases: List[Dict[str, 
     return radar
 
 
+def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray, 
+                                   time: np.ndarray,
+                                   min_sweep_rays: int = 5) -> List[Dict[str, Any]]:
+    """
+    Detect separate sweeps in PPI scan based on direction changes and stationary periods.
+    
+    This function identifies:
+    - Large azimuth jumps (>10°) indicating antenna resets
+    - Window-based resets (>30° change over 5 rays)
+    - Transitions between scanning and stationary (dwell) periods
+    
+    Sweeps with fewer than min_sweep_rays are filtered out (likely data capture artifacts).
+    
+    Args:
+        azimuth: Array of azimuth angles (degrees)
+        elevation: Array of elevation angles (degrees)
+        time: Array of time values
+        min_sweep_rays: Minimum rays required for a valid sweep (default: 5)
+        
+    Returns:
+        List of sweep dictionaries with keys:
+            - 'start_idx': Starting ray index
+            - 'end_idx': Ending ray index (inclusive)
+            - 'sweep_number': Sweep number (1-indexed)
+            - 'direction': 'clockwise', 'counter-clockwise', or 'stationary'
+            - 'n_rays': Number of rays in sweep
+    """
+    n_rays = len(azimuth)
+    
+    if n_rays < 2:
+        return [{
+            'start_idx': 0,
+            'end_idx': 0,
+            'sweep_number': 1,
+            'direction': 'unknown',
+            'n_rays': n_rays
+        }]
+    
+    # Calculate azimuth differences with wrap-around handling
+    d_az = np.zeros(n_rays - 1)
+    for i in range(n_rays - 1):
+        diff = azimuth[i + 1] - azimuth[i]
+        # Handle 360° wrap-around
+        if diff > 180:
+            diff -= 360
+        elif diff < -180:
+            diff += 360
+        d_az[i] = diff
+    
+    # Detect large azimuth jumps (>5°) - antenna resets between sweeps
+    large_jump_threshold = 5.0
+    large_jumps = []
+    for i in range(len(d_az)):
+        if abs(d_az[i]) > large_jump_threshold:
+            large_jumps.append(i + 1)  # Boundary after this ray
+            print(f"  Large azimuth jump detected at ray {i}: Δaz = {d_az[i]:.1f}°")
+    
+    # Detect window-based resets (>30° change over 5-ray window)
+    window_size = 5
+    window_threshold = 30.0
+    for i in range(len(d_az) - window_size + 1):
+        window_sum = np.sum(d_az[i:i + window_size])
+        if abs(window_sum) > window_threshold:
+            boundary_idx = i + window_size
+            if boundary_idx not in large_jumps:
+                large_jumps.append(boundary_idx)
+                print(f"  Window-based reset detected at ray {boundary_idx}: {window_sum:.1f}° over {window_size} rays")
+    
+    # Classify rays as stationary (|d_az| < 0.5°) or scanning
+    stationary_threshold = 0.5
+    is_stationary = np.abs(d_az) < stationary_threshold
+    
+    # Apply median filter to smooth classification
+    from scipy.ndimage import median_filter
+    window = 5
+    is_stationary_smooth = median_filter(is_stationary.astype(float), size=window) > 0.5
+    
+    # Find transitions between scanning and stationary (dwell)
+    scan_dwell_transitions = []
+    for i in range(len(is_stationary_smooth) - 1):
+        if is_stationary_smooth[i] != is_stationary_smooth[i + 1]:
+            scan_dwell_transitions.append(i + 1)
+            if is_stationary_smooth[i + 1]:
+                print(f"  Entering dwell at ray {i + 1}")
+            else:
+                print(f"  Leaving dwell at ray {i + 1}")
+    
+    # Combine all boundaries
+    all_boundaries = sorted(set(list(large_jumps) + scan_dwell_transitions))
+    
+    # Build sweep segments
+    sweeps = []
+    sweep_num = 1
+    start_idx = 0
+    
+    for boundary in all_boundaries:
+        if boundary > start_idx:
+            end_idx = boundary - 1
+            sweeps.append({
+                'start_idx': start_idx,
+                'end_idx': end_idx,
+                'sweep_number': sweep_num,
+                'n_rays': end_idx - start_idx + 1
+            })
+            sweep_num += 1
+            start_idx = boundary
+    
+    # Add final sweep
+    if start_idx < n_rays:
+        sweeps.append({
+            'start_idx': start_idx,
+            'end_idx': n_rays - 1,
+            'sweep_number': sweep_num,
+            'n_rays': n_rays - start_idx
+        })
+    
+    # Characterize each sweep direction
+    for sweep in sweeps:
+        start = sweep['start_idx']
+        end = sweep['end_idx']
+        
+        if start >= end:
+            sweep['direction'] = 'unknown'
+            continue
+        
+        sweep_az = azimuth[start:end + 1]
+        az_std = np.std(sweep_az)
+        az_range = np.ptp(sweep_az)
+        
+        # Check if stationary (low variation)
+        if az_std < 1.0 and az_range < 2.0:
+            sweep['direction'] = 'stationary'
+        else:
+            # Determine scanning direction from mean d_az
+            if end < len(d_az):
+                sweep_d_az = d_az[start:end]
+            else:
+                sweep_d_az = d_az[start:]
+            
+            if len(sweep_d_az) > 0:
+                mean_rate = np.median(sweep_d_az)
+                if mean_rate > 0.1:
+                    sweep['direction'] = 'clockwise'
+                elif mean_rate < -0.1:
+                    sweep['direction'] = 'counter-clockwise'
+                else:
+                    sweep['direction'] = 'stationary'
+            else:
+                sweep['direction'] = 'unknown'
+    
+    # Filter out sweeps with too few rays (likely capture artifacts)
+    filtered_sweeps = [s for s in sweeps if s['n_rays'] >= min_sweep_rays]
+    
+    # If filtering removed sweeps at the start, adjust indices
+    if len(filtered_sweeps) > 0 and filtered_sweeps[0]['start_idx'] > 0:
+        print(f"  Filtered out initial {filtered_sweeps[0]['start_idx']} rays (capture artifact)")
+    
+    # Renumber remaining sweeps
+    for i, sweep in enumerate(filtered_sweeps):
+        sweep['sweep_number'] = i + 1
+    
+    # If no valid sweeps remain, return the whole file as one sweep
+    if len(filtered_sweeps) == 0:
+        print(f"  Warning: All sweeps filtered out (< {min_sweep_rays} rays), keeping original data")
+        return [{
+            'start_idx': 0,
+            'end_idx': n_rays - 1,
+            'sweep_number': 1,
+            'direction': 'unknown',
+            'n_rays': n_rays
+        }]
+    
+    return filtered_sweeps
+
+
+def detect_ppi_pointing_periods(azimuth: np.ndarray, elevation: np.ndarray, 
+                                time: np.ndarray) -> List[Dict[str, Any]]:
+    """
+    Detect distinct phases in PPI scan: scanning vs extended pointing periods.
+    
+    A pointing period is characterized by:
+    - Low azimuth standard deviation (< 1.0°)
+    - Extended duration (> 10 rays)
+    
+    Args:
+        azimuth: Array of azimuth angles (degrees)
+        elevation: Array of elevation angles (degrees)
+        time: Array of time values
+        
+    Returns:
+        List of phase dictionaries with keys:
+            - 'start_idx': Starting ray index
+            - 'end_idx': Ending ray index (inclusive)
+            - 'phase': 'ppi' or 'pointing'
+            - 'n_rays': Number of rays
+    """
+    n_rays = len(azimuth)
+    
+    if n_rays < 2:
+        return [{'start_idx': 0, 'end_idx': n_rays - 1, 'phase': 'ppi', 'n_rays': n_rays}]
+    
+    # Calculate azimuth variation using rolling window
+    window_size = 10
+    az_std_threshold = 1.0
+    min_pointing_rays = 10
+    
+    # Calculate rolling standard deviation
+    is_pointing = np.zeros(n_rays, dtype=bool)
+    
+    for i in range(n_rays):
+        start = max(0, i - window_size // 2)
+        end = min(n_rays, i + window_size // 2 + 1)
+        window_az = azimuth[start:end]
+        
+        # Handle wrap-around for azimuth
+        window_range = np.ptp(window_az)
+        if window_range > 180:
+            # Likely crossing 0°/360° boundary
+            window_az_unwrapped = np.where(window_az > 180, window_az - 360, window_az)
+            az_std = np.std(window_az_unwrapped)
+        else:
+            az_std = np.std(window_az)
+        
+        is_pointing[i] = az_std < az_std_threshold
+    
+    # Find contiguous pointing regions
+    phases = []
+    phase_type = 'ppi' if not is_pointing[0] else 'pointing'
+    start_idx = 0
+    
+    for i in range(1, n_rays):
+        current_pointing = is_pointing[i]
+        current_type = 'pointing' if current_pointing else 'ppi'
+        
+        if current_type != phase_type:
+            # Phase change
+            n_phase_rays = i - start_idx
+            
+            # Only keep pointing periods if they're long enough
+            if phase_type == 'pointing' and n_phase_rays < min_pointing_rays:
+                # Merge short pointing period into scanning
+                phase_type = 'ppi'
+            else:
+                # Save current phase
+                phases.append({
+                    'start_idx': start_idx,
+                    'end_idx': i - 1,
+                    'phase': phase_type,
+                    'n_rays': n_phase_rays
+                })
+                start_idx = i
+                phase_type = current_type
+    
+    # Add final phase
+    n_phase_rays = n_rays - start_idx
+    if phase_type == 'pointing' and n_phase_rays < min_pointing_rays:
+        # Merge short final pointing period
+        if phases:
+            phases[-1]['end_idx'] = n_rays - 1
+            phases[-1]['n_rays'] = n_rays - phases[-1]['start_idx']
+        else:
+            phases.append({
+                'start_idx': start_idx,
+                'end_idx': n_rays - 1,
+                'phase': 'ppi',
+                'n_rays': n_phase_rays
+            })
+    else:
+        phases.append({
+            'start_idx': start_idx,
+            'end_idx': n_rays - 1,
+            'phase': phase_type,
+            'n_rays': n_phase_rays
+        })
+    
+    return phases
+
+
+def _extract_rays_from_radar(radar: pyart.core.Radar, ray_indices: List[int]) -> pyart.core.Radar:
+    """
+    Extract specific rays from a radar object to create a new radar object.
+    
+    This function properly handles PyART's dimension caching by creating a completely
+    new radar object with correct dimensions.
+    
+    Args:
+        radar: Source PyART Radar object
+        ray_indices: List of ray indices to extract
+        
+    Returns:
+        New PyART Radar object containing only the specified rays
+    """
+    import copy
+    
+    # Extract ray-indexed data
+    ray_indices_arr = np.array(ray_indices)
+    n_extracted_rays = len(ray_indices)
+    
+    # Build time dictionary with extracted data only
+    time_dict = {}
+    for key, value in radar.time.items():
+        if key == 'data':
+            time_dict['data'] = radar.time['data'][ray_indices_arr]
+        else:
+            time_dict[key] = copy.deepcopy(value)
+    
+    # Build azimuth dictionary with extracted data only
+    azimuth_dict = {}
+    for key, value in radar.azimuth.items():
+        if key == 'data':
+            azimuth_dict['data'] = radar.azimuth['data'][ray_indices_arr]
+        else:
+            azimuth_dict[key] = copy.deepcopy(value)
+    
+    # Build elevation dictionary with extracted data only
+    elevation_dict = {}
+    for key, value in radar.elevation.items():
+        if key == 'data':
+            elevation_dict['data'] = radar.elevation['data'][ray_indices_arr]
+        else:
+            elevation_dict[key] = copy.deepcopy(value)
+    
+    # Create sweep info for single sweep with extracted rays
+    sweep_start_dict = copy.deepcopy(radar.sweep_start_ray_index)
+    sweep_start_dict['data'] = np.array([0], dtype=np.int32)
+    
+    sweep_end_dict = copy.deepcopy(radar.sweep_end_ray_index)
+    sweep_end_dict['data'] = np.array([n_extracted_rays - 1], dtype=np.int32)
+    
+    # Handle instrument parameters - extract ray-indexed parameters
+    instrument_params = None
+    if radar.instrument_parameters is not None:
+        instrument_params = {}
+        for param_name, param_dict in radar.instrument_parameters.items():
+            if param_dict is not None and 'data' in param_dict:
+                param_data = param_dict['data']
+                # Check if this parameter has ray dimension
+                if hasattr(param_data, 'shape') and len(param_data.shape) > 0 and param_data.shape[0] == len(radar.time['data']):
+                    # Ray-indexed parameter - extract
+                    new_param_dict = copy.deepcopy(param_dict)
+                    new_param_dict['data'] = param_data[ray_indices_arr]
+                    instrument_params[param_name] = new_param_dict
+                else:
+                    # Not ray-indexed - copy as-is
+                    instrument_params[param_name] = copy.deepcopy(param_dict)
+            else:
+                instrument_params[param_name] = copy.deepcopy(param_dict)
+    
+    # Create new radar object with extracted dimensions
+    new_radar = pyart.core.Radar(
+        time=time_dict,
+        _range=copy.deepcopy({k: v for k, v in radar.range.items()}),
+        fields={},
+        metadata=copy.deepcopy(radar.metadata),
+        scan_type=radar.scan_type,
+        latitude=copy.deepcopy(radar.latitude),
+        longitude=copy.deepcopy(radar.longitude),
+        altitude=copy.deepcopy(radar.altitude),
+        sweep_number=copy.deepcopy(radar.sweep_number),
+        sweep_mode=copy.deepcopy(radar.sweep_mode),
+        fixed_angle=copy.deepcopy(radar.fixed_angle),
+        sweep_start_ray_index=sweep_start_dict,
+        sweep_end_ray_index=sweep_end_dict,
+        azimuth=azimuth_dict,
+        elevation=elevation_dict,
+        instrument_parameters=instrument_params
+    )
+    
+    # Extract fields (ray x range dimensions)
+    for field_name in radar.fields.keys():
+        field_data = radar.fields[field_name]['data']
+        new_field_data = field_data[ray_indices_arr, :]
+        
+        # Copy field metadata
+        new_field_dict = copy.deepcopy(radar.fields[field_name])
+        new_field_dict['data'] = new_field_data
+        new_radar.fields[field_name] = new_field_dict
+    
+    # Handle other optional ray-indexed attributes
+    for attr_name in ['scan_rate', 'antenna_transition', 'rotation', 'tilt', 
+                      'roll', 'drift', 'heading', 'pitch', 'georefs_applied',
+                      'target_scan_rate', 'azimuth_scan_rate', 'elevation_scan_rate']:
+        if hasattr(radar, attr_name):
+            attr_val = getattr(radar, attr_name)
+            if attr_val is not None and isinstance(attr_val, dict) and 'data' in attr_val:
+                attr_data = attr_val['data']
+                # Check if ray-indexed
+                if hasattr(attr_data, 'shape') and len(attr_data.shape) > 0 and attr_data.shape[0] == len(radar.time['data']):
+                    attr_dict = {}
+                    for key, value in attr_val.items():
+                        if key == 'data':
+                            attr_dict['data'] = attr_data[ray_indices_arr]
+                        else:
+                            attr_dict[key] = copy.deepcopy(value)
+                    setattr(new_radar, attr_name, attr_dict)
+                else:
+                    # Not ray-indexed, copy as-is
+                    setattr(new_radar, attr_name, copy.deepcopy(attr_val))
+    
+    # Set correct dimensions (this is critical for PyART's internal tracking)
+    new_radar.nrays = n_extracted_rays
+    new_radar.ngates = radar.ngates
+    new_radar.nsweeps = 1
+    
+    return new_radar
+
+
+def process_ppi_file_with_sweep_detection(
+    filepath: str,
+    outdir: str,
+    gzip_flag: bool,
+    revised_northangle: float,
+    azimuth_offset: float,
+    tracking_tag: str,
+    campaign: str,
+    data_version: str,
+    yaml_project_file: str,
+    yaml_instrument_file: str,
+    split_ppi_by_direction: bool = True,
+    split_ppi_pointing: bool = True
+) -> List[str]:
+    """
+    Process a single PPI file with sweep detection and splitting.
+    
+    This function:
+    1. Reads the PPI file
+    2. Detects sweeps by direction changes and stationary periods
+    3. Writes stationary sweeps directly as pointing files
+    4. Optionally splits scanning sweeps by pointing periods
+    5. Writes all output files with NCAS-compliant names
+    
+    Args:
+        filepath: Path to input mmclx file
+        outdir: Output directory
+        gzip_flag: Whether input is gzipped
+        revised_northangle: North angle correction
+        azimuth_offset: Azimuth offset correction
+        tracking_tag: AMOF tracking tag
+        campaign: Campaign name
+        data_version: Data version string
+        yaml_project_file: Path to project YAML
+        yaml_instrument_file: Path to instrument YAML
+        split_ppi_by_direction: If True, detect and split by direction changes
+        split_ppi_pointing: If True, split scanning sweeps by pointing periods
+        
+    Returns:
+        List of output file paths created
+    """
+    import shutil
+    
+    output_files = []
+    
+    # Read file
+    print(f"Analyzing PPI file for direction changes: {os.path.basename(filepath)}")
+    
+    # Open original netCDF to check for fill values in time before PyART processing
+    import netCDF4 as nc4
+    import gzip
+    
+    if gzip_flag:
+        with gzip.open(filepath) as gz:
+            ncobj = nc4.Dataset('dummy', mode='r', memory=gz.read())
+            gz_memory = True
+    else:
+        ncobj = nc4.Dataset(filepath)
+        gz_memory = False
+    
+    try:
+        # Check original time variable for fill/missing values
+        time_var = ncobj.variables['time']
+        original_time = time_var[:]
+        
+        # Also check microsec variable
+        microsec_var = ncobj.variables.get('microsec', None)
+        if microsec_var is not None:
+            original_microsec = microsec_var[:]
+        else:
+            original_microsec = None
+        
+        # Get fill value from netCDF variable attributes
+        fill_value = None
+        if hasattr(time_var, '_FillValue'):
+            fill_value = time_var._FillValue
+        elif hasattr(time_var, 'missing_value'):
+            fill_value = time_var.missing_value
+        
+        print(f"  Original time array shape: {original_time.shape}, fill_value: {fill_value}")
+        if len(original_time) > 0:
+            if np.ma.isMaskedArray(original_time):
+                # For masked arrays, use min/max only on unmasked values
+                if np.ma.count(original_time) > 0:
+                    print(f"  Time range (valid): min={np.ma.min(original_time):.2f}, max={np.ma.max(original_time):.2f}")
+                else:
+                    print(f"  Time range: all values masked")
+            else:
+                valid_for_stats = np.isfinite(original_time)
+                if np.sum(valid_for_stats) > 0:
+                    print(f"  Time range: min={np.min(original_time[valid_for_stats]):.2f}, max={np.max(original_time[valid_for_stats]):.2f}")
+                else:
+                    print(f"  Time range: no finite values")
+        else:
+            print(f"  Time range: empty array")
+        
+        # Identify valid time indices BEFORE PyART reads it
+        if np.ma.isMaskedArray(original_time):
+            valid_time_indices = ~original_time.mask
+            print(f"  Time is masked array, {np.sum(original_time.mask)} masked values")
+        else:
+            valid_time_indices = np.ones(len(original_time), dtype=bool)
+            # Check for fill values
+            if fill_value is not None:
+                has_fill = (original_time == fill_value)
+                valid_time_indices = valid_time_indices & ~has_fill
+                if np.sum(has_fill) > 0:
+                    print(f"  Found {np.sum(has_fill)} rays with fill_value={fill_value}")
+            # Check for NaN/inf
+            has_nan = ~np.isfinite(original_time)
+            valid_time_indices = valid_time_indices & ~has_nan
+            if np.sum(has_nan) > 0:
+                print(f"  Found {np.sum(has_nan)} rays with NaN/inf")
+        
+        # Also check microsec if present
+        if original_microsec is not None:
+            if np.ma.isMaskedArray(original_microsec):
+                microsec_valid = ~original_microsec.mask
+                valid_time_indices = valid_time_indices & microsec_valid
+                if np.sum(original_microsec.mask) > 0:
+                    print(f"  Found {np.sum(original_microsec.mask)} rays with masked microsec")
+            else:
+                microsec_valid = np.isfinite(original_microsec)
+                valid_time_indices = valid_time_indices & microsec_valid
+                if np.sum(~microsec_valid) > 0:
+                    print(f"  Found {np.sum(~microsec_valid)} rays with invalid microsec")
+    finally:
+        ncobj.close()
+    
+    # Now read with PyART
+    radar = read_mira35_mmclx(filepath, gzip_flag=gzip_flag, revised_northangle=revised_northangle)
+    
+    # Filter radar object to only valid time rays
+    n_invalid = np.sum(~valid_time_indices)
+    if n_invalid > 0:
+        print(f"  Warning: Found {n_invalid} rays with missing/invalid time data, filtering them out")
+        
+        # Show example of invalid values for diagnosis
+        invalid_indices = np.where(~valid_time_indices)[0]
+        if len(invalid_indices) > 0:
+            sample_idx = invalid_indices[:min(5, len(invalid_indices))]
+            print(f"  Example invalid time values at indices {sample_idx}: {original_time[sample_idx]}")
+        
+        valid_indices = np.where(valid_time_indices)[0]
+        
+        if len(valid_indices) == 0:
+            print(f"  Error: No valid rays found in file, skipping")
+            return output_files
+        
+        # Extract only valid rays
+        radar = _extract_rays_from_radar(radar, valid_indices.tolist())
+        print(f"  Kept {len(valid_indices)} valid rays out of {len(original_time)} total")
+        
+        # Verify dimensions after extraction
+        print(f"  Radar object after filtering: nrays={radar.nrays}, time.shape={radar.time['data'].shape}, az.shape={radar.azimuth['data'].shape}")
+    
+    if split_ppi_by_direction:
+        # Get arrays for sweep detection
+        azimuth = radar.azimuth['data']
+        elevation = radar.elevation['data']
+        time = radar.time['data']
+        
+        # Detect sweeps by direction changes
+        sweeps = detect_ppi_sweeps_by_direction(azimuth, elevation, time)
+        
+        if len(sweeps) > 1:
+            print(f"  Found {len(sweeps)} sweeps (direction changes):")
+            for sw in sweeps:
+                print(f"    Sweep {sw['sweep_number']}: rays {sw['start_idx']}-{sw['end_idx']} "
+                      f"({sw['n_rays']} rays, direction: {sw['direction']})")
+        else:
+            print(f"  Single sweep detected")
+        
+        # Process each sweep
+        for sweep in sweeps:
+            start_ray = sweep['start_idx']
+            end_ray = sweep['end_idx']
+            sweep_direction = sweep['direction']
+            
+            # Extract rays for this sweep
+            ray_indices = list(range(start_ray, end_ray + 1))
+            sweep_radar = _extract_rays_from_radar(radar, ray_indices)
+            
+            # Get location for NCAS filename
+            location = campaign
+            try:
+                with open(yaml_project_file, 'r') as file:
+                    projects = yaml.safe_load(file)
+                for p in projects:
+                    if tracking_tag in p:
+                        project = p[tracking_tag]
+                        if 'ncas_instruments' in project:
+                            for instrument in project['ncas_instruments']:
+                                if 'ncas-mobile-ka-band-radar-1' in instrument:
+                                    radar_info = instrument['ncas-mobile-ka-band-radar-1']
+                                    if 'platform' in radar_info and 'location' in radar_info['platform']:
+                                        location = radar_info['platform']['location'].lower()
+                                        break
+                        break
+            except:
+                pass
+            
+            # Extract actual start time
+            time_str = sweep_radar.time['units'].split()[-1]
+            start_time_dt = datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+            first_ray_time = start_time_dt + datetime.timedelta(seconds=float(sweep_radar.time['data'][0]))
+            
+            # Handle stationary sweeps (dwells) - write directly as pointing files
+            if sweep_direction == 'stationary':
+                print(f"  Stationary sweep detected - writing as pointing file")
+                
+                # Set sweep mode to pointing
+                sweep_radar.sweep_mode['data'][0] = 'pointing'
+                
+                # Build NCAS filename
+                filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_pointing_l1_v{data_version}.nc"
+                output_path = os.path.join(outdir, filename)
+                
+                # Write file
+                pyart.io.write_cfradial(output_path, sweep_radar, format='NETCDF4')
+                
+                # Add NCAS metadata
+                cfradial_add_ncas_metadata(
+                    output_path,
+                    yaml_project_file,
+                    yaml_instrument_file,
+                    tracking_tag,
+                    data_version,
+                    revised_northangle=revised_northangle
+                )
+                
+                print(f"  Wrote stationary sweep: {filename}")
+                output_files.append(output_path)
+                
+            else:
+                # Scanning sweep - optionally split by pointing periods
+                if split_ppi_pointing:
+                    azimuth_sweep = sweep_radar.azimuth['data']
+                    elevation_sweep = sweep_radar.elevation['data']
+                    time_sweep = sweep_radar.time['data']
+                    
+                    phases = detect_ppi_pointing_periods(azimuth_sweep, elevation_sweep, time_sweep)
+                    
+                    if len(phases) > 1:
+                        print(f"  Found {len(phases)} phases in scanning sweep:")
+                        for ph in phases:
+                            print(f"    {ph['phase']}: rays {ph['start_idx']}-{ph['end_idx']} ({ph['n_rays']} rays)")
+                        
+                        # Split into phases
+                        for phase in phases:
+                            phase_start = phase['start_idx']
+                            phase_end = phase['end_idx']
+                            phase_type = phase['phase']
+                            
+                            # Extract phase rays
+                            phase_ray_indices = list(range(phase_start, phase_end + 1))
+                            phase_radar = _extract_rays_from_radar(sweep_radar, phase_ray_indices)
+                            
+                            # Update sweep mode
+                            phase_radar.sweep_mode['data'][0] = phase_type
+                            
+                            # Get phase start time
+                            phase_time_str = phase_radar.time['units'].split()[-1]
+                            phase_start_dt = datetime.datetime.strptime(phase_time_str, '%Y-%m-%dT%H:%M:%SZ')
+                            phase_first_ray_time = phase_start_dt + datetime.timedelta(seconds=float(phase_radar.time['data'][0]))
+                            
+                            # Build filename
+                            filename = f"ncas-mobile-ka-band-radar-1_{location}_{phase_first_ray_time.strftime('%Y%m%d-%H%M%S')}_{phase_type}_l1_v{data_version}.nc"
+                            output_path = os.path.join(outdir, filename)
+                            
+                            # Write file
+                            pyart.io.write_cfradial(output_path, phase_radar, format='NETCDF4')
+                            
+                            # Add NCAS metadata
+                            cfradial_add_ncas_metadata(
+                                output_path,
+                                yaml_project_file,
+                                yaml_instrument_file,
+                                tracking_tag,
+                                data_version,
+                                revised_northangle=revised_northangle
+                            )
+                            
+                            print(f"  Wrote {phase_type} phase: {filename}")
+                            output_files.append(output_path)
+                    else:
+                        # Single phase scanning sweep - write as PPI
+                        sweep_radar.sweep_mode['data'][0] = 'ppi'
+                        
+                        filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
+                        output_path = os.path.join(outdir, filename)
+                        
+                        pyart.io.write_cfradial(output_path, sweep_radar, format='NETCDF4')
+                        
+                        cfradial_add_ncas_metadata(
+                            output_path,
+                            yaml_project_file,
+                            yaml_instrument_file,
+                            tracking_tag,
+                            data_version,
+                            revised_northangle=revised_northangle
+                        )
+                        
+                        print(f"  Wrote single-phase ppi: {filename}")
+                        output_files.append(output_path)
+                else:
+                    # No pointing period splitting - write as single PPI
+                    sweep_radar.sweep_mode['data'][0] = 'ppi'
+                    
+                    filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
+                    output_path = os.path.join(outdir, filename)
+                    
+                    pyart.io.write_cfradial(output_path, sweep_radar, format='NETCDF4')
+                    
+                    cfradial_add_ncas_metadata(
+                        output_path,
+                        yaml_project_file,
+                        yaml_instrument_file,
+                        tracking_tag,
+                        data_version,
+                        revised_northangle=revised_northangle
+                    )
+                    
+                    print(f"  Wrote ppi sweep: {filename}")
+                    output_files.append(output_path)
+    else:
+        # No direction-based splitting - write single PPI file using filtered radar
+        # Apply azimuth offset if specified
+        if azimuth_offset != 0:
+            radar.azimuth['data'] = (radar.azimuth['data'] + azimuth_offset) % 360
+        
+        # Set scan mode
+        radar.sweep_mode['data'][0] = 'ppi'
+        
+        # Get location from project YAML
+        yaml_content = load_yaml_config(yaml_project_file)
+        location = yaml_content.get('location')
+        
+        # Get first ray time for filename
+        time_str = radar.time['units'].split()[-1]
+        start_time_dt = datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+        first_ray_time = start_time_dt + datetime.timedelta(seconds=float(radar.time['data'][0]))
+        
+        # Create output filename
+        filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
+        output_path = os.path.join(outdir, filename)
+        
+        # Write file
+        pyart.io.write_cfradial(output_path, radar, format='NETCDF4')
+        
+        # Verify written file dimensions
+        with nc4.Dataset(output_path, 'r') as verify_nc:
+            written_time_size = len(verify_nc.dimensions['time'])
+            expected_time_size = radar.nrays
+            if written_time_size != expected_time_size:
+                print(f"  WARNING: Written file has time dimension={written_time_size}, but expected {expected_time_size}")
+                print(f"  This indicates PyART write_cfradial is not respecting the radar object dimensions!")
+            else:
+                print(f"  Verified: Written file has correct time dimension={written_time_size}")
+        
+        # Add NCAS metadata
+        cfradial_add_ncas_metadata(
+            output_path,
+            yaml_project_file,
+            yaml_instrument_file,
+            tracking_tag,
+            data_version,
+            revised_northangle=revised_northangle
+        )
+        
+        print(f"  Wrote single ppi file: {filename}")
+        output_files.append(output_path)
+    
+    return output_files
+
+
 def detect_man_sweep_phases(azimuth: np.ndarray, elevation: np.ndarray, 
                             time: np.ndarray, 
                             elev_rate_threshold: float = 0.005,
@@ -1497,26 +2280,31 @@ def process_kepler_general_day_step1(
     
     print(f"Classified {len(true_ppi_files)} as true PPI, {len(vad_from_ppi_files)} as VAD")
     
-    # Process true PPI files
+    # Process true PPI files with sweep detection
     if len(true_ppi_files) > 0:
         if single_sweep:
-            # Process each PPI file separately
+            # Process each PPI file separately with sweep detection
             for f in true_ppi_files:
                 try:
-                    RadarDS_PPI = multi_mmclx2cfrad(
-                        [f], outdir, scan_name='PPI', gzip_flag=gzip_flag,
+                    output_files = process_ppi_file_with_sweep_detection(
+                        filepath=f,
+                        outdir=outdir,
+                        gzip_flag=gzip_flag,
+                        revised_northangle=revised_northangle,
                         azimuth_offset=azimuth_offset,
                         tracking_tag=tracking_tag,
                         campaign=campaign,
-                        revised_northangle=revised_northangle,
                         data_version=data_version,
-                        single_sweep=True,
                         yaml_project_file=yaml_project_file,
-                        yaml_instrument_file=yaml_instrument_file
+                        yaml_instrument_file=yaml_instrument_file,
+                        split_ppi_by_direction=True,
+                        split_ppi_pointing=True
                     )
-                    print(f"Processed single PPI file: {f}")
+                    print(f"Processed PPI file {os.path.basename(f)} -> {len(output_files)} output file(s)")
                 except Exception as e:
                     print(f"Error processing PPI file {f}: {e}")
+                    import traceback
+                    traceback.print_exc()
         else:
             # Process all PPI files together (multi-sweep)
             try:
@@ -1718,26 +2506,31 @@ def process_kepler_picasso_day_step1(
     
     print(f"Classified {len(true_ppi_files)} as true PPI, {len(vad_from_ppi_files)} as VAD")
     
-    # Process true PPI files
+    # Process true PPI files with sweep detection
     if len(true_ppi_files) > 0:
         if single_sweep:
-            # Process each PPI file separately
+            # Process each PPI file separately with sweep detection
             for f in true_ppi_files:
                 try:
-                    RadarDS_PPI = multi_mmclx2cfrad(
-                        [f], outdir, scan_name='PPI', gzip_flag=gzip_flag,
+                    output_files = process_ppi_file_with_sweep_detection(
+                        filepath=f,
+                        outdir=outdir,
+                        gzip_flag=gzip_flag,
+                        revised_northangle=revised_northangle,
                         azimuth_offset=azimuth_offset,
                         tracking_tag=tracking_tag,
                         campaign=campaign,
-                        revised_northangle=revised_northangle,
                         data_version=data_version,
-                        single_sweep=True,
                         yaml_project_file=yaml_project_file,
-                        yaml_instrument_file=yaml_instrument_file
+                        yaml_instrument_file=yaml_instrument_file,
+                        split_ppi_by_direction=True,
+                        split_ppi_pointing=True
                     )
-                    print(f"Processed single PPI file: {f}")
+                    print(f"Processed PPI file {os.path.basename(f)} -> {len(output_files)} output file(s)")
                 except Exception as e:
                     print(f"Error processing PPI file {f}: {e}")
+                    import traceback
+                    traceback.print_exc()
         else:
             # Process all PPI files together (multi-sweep)
             try:
@@ -1791,6 +2584,8 @@ def process_kepler_picasso_day_step1(
                 print(f"Processed {len(files)} VAD scans at {elv}° into single multi-sweep file")
             except Exception as e:
                 print(f"Error processing VAD files at {elv}°: {e}")
+                import traceback
+                traceback.print_exc()
     
     # Process MAN (manual tracking) scans - PICASSO-specific
     # These track aircraft with simultaneous azimuth and elevation changes
@@ -2576,9 +3371,21 @@ def load_yaml_config(yaml_project_file, yaml_instrument_file):
         
         print(f"Loading configuration from: {yaml_project_file}")
         
-        # Navigate through your YAML structure: ncas_instruments -> ncas-mobile-ka-band-radar-1
-        if 'ncas_instruments' in project_data:
-            for instrument in project_data['ncas_instruments']:
+        # YAML structure starts with a list containing tracking tag dictionary
+        # Example: - CFARR_0002: { project_name: ..., ncas_instruments: [...] }
+        if isinstance(project_data, list) and len(project_data) > 0:
+            # Get the first item (the tracking tag dictionary)
+            tracking_dict = project_data[0]
+            # Get the first key's value (the project data for that tracking tag)
+            tracking_tag = list(tracking_dict.keys())[0]
+            project_info = tracking_dict[tracking_tag]
+        else:
+            # If not a list, assume it's directly the project dictionary
+            project_info = project_data
+        
+        # Navigate through YAML structure: ncas_instruments -> ncas-mobile-ka-band-radar-1
+        if 'ncas_instruments' in project_info:
+            for instrument in project_info['ncas_instruments']:
                 if 'ncas-mobile-ka-band-radar-1' in instrument:
                     radar_config = instrument['ncas-mobile-ka-band-radar-1']
                     
@@ -2598,6 +3405,8 @@ def load_yaml_config(yaml_project_file, yaml_instrument_file):
         
     except Exception as e:
         print(f"Warning: Could not load project YAML config: {e}")
+        import traceback
+        traceback.print_exc()
     
     return config
 
