@@ -25,8 +25,59 @@ sys.path.insert(0, str(script_dir))
 
 from campaign_processing import process_campaign_day, get_campaign_info
 
-def setup_picasso_paths(outpath=None, data_version='1.0.0'):
-    """Set up file and directory paths for PICASSO campaign."""
+def select_picasso_yaml_for_date(datestr):
+    """
+    Select the appropriate PICASSO project YAML file based on date.
+    
+    PICASSO campaign had different radar setups/north angles in different periods:
+    - Period 1: 2017-12-12 to 2018-04-08 (winter/spring deployment, north_angle: 96.1)
+    - Period 2: 2018-04-09 to 2018-04-24 (winter/spring deployment, north_angle: 100.5)
+    - Period 3: 2019-05-07 to 2019-05-23 (spring deployment, north_angle: 93.6)
+    
+    Args:
+        datestr: Date string in YYYYMMDD format
+        
+    Returns:
+        Path to appropriate YAML file
+    """
+    date_obj = datetime.datetime.strptime(datestr, '%Y%m%d')
+    
+    # Define period boundaries
+    period1_start = datetime.datetime(2017, 12, 12)
+    period1_end = datetime.datetime(2018, 4, 8)
+    period2_start = datetime.datetime(2018, 4, 9)
+    period2_end = datetime.datetime(2018, 4, 24)
+    period3_start = datetime.datetime(2019, 5, 7)
+    period3_end = datetime.datetime(2019, 5, 23)
+    
+    if period1_start <= date_obj <= period1_end:
+        yaml_file = 'picasso_project_period1.yml'
+        print(f"Date {datestr} in Period 1 (2017-12-12 to 2018-04-08) - using {yaml_file}")
+    elif period2_start <= date_obj <= period2_end:
+        yaml_file = 'picasso_project_period2.yml'
+        print(f"Date {datestr} in Period 2 (2018-04-09 to 2018-04-24) - using {yaml_file}")
+    elif period3_start <= date_obj <= period3_end:
+        yaml_file = 'picasso_project_period3.yml'
+        print(f"Date {datestr} in Period 3 (2019-05-07 to 2019-05-23) - using {yaml_file}")
+    else:
+        # Fallback for dates outside known periods
+        yaml_file = 'picasso_project.yml'
+        print(f"Warning: Date {datestr} outside PICASSO campaign periods - using default {yaml_file}")
+    
+    return str(script_dir / 'campaigns' / yaml_file)
+
+def setup_picasso_paths(datestr=None, outpath=None, data_version='1.0.0'):
+    """
+    Set up file and directory paths for PICASSO campaign.
+    
+    Args:
+        datestr: Date string in YYYYMMDD format (used to select period-specific YAML)
+        outpath: Output directory path (optional)
+        data_version: Data version string
+        
+    Returns:
+        Dictionary of paths
+    """
     
     # Base PICASSO campaign paths
     base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/picasso/mom'
@@ -35,10 +86,18 @@ def setup_picasso_paths(outpath=None, data_version='1.0.0'):
     if outpath is None:
         outpath = f'/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/picasso/L1_v{data_version}'
     
+    # Select appropriate YAML file based on date (if provided)
+    if datestr is not None:
+        yaml_project_file = select_picasso_yaml_for_date(datestr)
+    else:
+        # Fallback if no date provided (shouldn't happen in normal processing)
+        yaml_project_file = str(script_dir / 'campaigns' / 'picasso_project.yml')
+        print("Warning: No date provided to setup_picasso_paths - using default YAML")
+    
     paths = {
         'inpath': base_inpath,
         'outpath': outpath,
-        'yaml_project_file': str(script_dir / 'campaigns' / 'picasso_project.yml'),
+        'yaml_project_file': yaml_project_file,
         'yaml_instrument_file': str(script_dir / 'instrument_metadata.yml')
     }
     
@@ -130,14 +189,22 @@ def main():
     
     print(f"Arguments: {args}")
     
-    # Set up paths
+    # Set up base paths (without date-specific YAML)
     try:
-        paths = setup_picasso_paths(outpath=args.outpath, data_version=args.data_version)
+        # Get first date for initial setup
+        if args.date:
+            initial_date = args.date
+        elif args.start_date:
+            initial_date = args.start_date
+        else:
+            initial_date = None
+            
+        paths = setup_picasso_paths(datestr=initial_date, outpath=args.outpath, data_version=args.data_version)
         print(f"PICASSO Campaign Processing")
         print(f"Base input path: {paths['inpath']}")
         print(f"Output path: {paths['outpath']}")
-        print(f"Project YAML: {paths['yaml_project_file']}")
         print(f"Instrument YAML: {paths['yaml_instrument_file']}")
+        print(f"Note: Project YAML will be selected per-date based on campaign period")
     except Exception as e:
         print(f"Error setting up paths: {e}")
         sys.exit(1)
@@ -199,13 +266,16 @@ def main():
             print(f"Processing {datestr}")
             print(f"{'='*60}")
             
+            # Select period-specific YAML file for this date
+            date_yaml_file = select_picasso_yaml_for_date(datestr)
+            
             # Call the campaign processor
             process_campaign_day(
                 campaign='picasso',
                 datestr=datestr,
                 inpath=paths['inpath'],
                 outpath=paths['outpath'],
-                yaml_project_file=paths['yaml_project_file'],
+                yaml_project_file=date_yaml_file,  # Use date-specific YAML
                 yaml_instrument_file=paths['yaml_instrument_file'],
                 gzip_flag=args.gzip,
                 data_version=args.data_version,
