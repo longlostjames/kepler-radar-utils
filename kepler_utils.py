@@ -459,10 +459,30 @@ def _extract_angle_info(
             scan_rate['units'] = 'degrees_per_second'
             scan_rate['long_name'] = 'antenna angle scan rate'
             
-            # Identify antenna transitions (very low scan rates)
-            antenna_transition['data'] = np.where(np.abs(scan_rate['data']) < 0.01, 1, 0).astype('int8')
+            # Identify antenna transitions using multiple criteria:
+            # 1. Very low scan rates (< 0.01 deg/s)
+            low_rate_flags = np.abs(scan_rate['data']) < 0.01
+            
+            # 2. Non-monotonic azimuth (detect direction reversals)
+            azimuth_data = azimuth['data']
+            azimuth_diff = np.diff(azimuth_data)
+            # Handle 360° wrap-around
+            azimuth_diff = np.where(azimuth_diff > 180, azimuth_diff - 360, azimuth_diff)
+            azimuth_diff = np.where(azimuth_diff < -180, azimuth_diff + 360, azimuth_diff)
+            
+            # Determine predominant scan direction
+            median_diff = np.median(azimuth_diff)
+            if median_diff > 0:
+                # Scanning clockwise - flag counter-clockwise rays as transitions
+                non_monotonic = np.concatenate([[False], azimuth_diff < -1.0])  # -1° tolerance
+            else:
+                # Scanning counter-clockwise - flag clockwise rays as transitions  
+                non_monotonic = np.concatenate([[False], azimuth_diff > 1.0])   # +1° tolerance
+            
+            # Combine criteria
+            antenna_transition['data'] = np.where(low_rate_flags | non_monotonic, 1, 0).astype('int8')
             antenna_transition['long_name'] = "antenna is in transition between sweeps"
-            antenna_transition['comment'] = "1 if antenna is in transition, 0 otherwise"
+            antenna_transition['comment'] = "1 if antenna is in transition (low rate or non-monotonic), 0 otherwise"
             
             # Calculate target scan rate from non-transitioning periods
             scanning_indices = np.where(antenna_transition['data'] == 0)[0]
@@ -508,8 +528,9 @@ def _extract_angle_info(
                 'target_scan_rate': target_scan_rate
             })
         
-        # Apply timing corrections to angles
-        _apply_timing_corrections(azimuth, elevation, ncvars, ray_duration, revised_northangle)
+        # Apply timing corrections to angles (pass antenna_transition for RHI and MAN)
+        _apply_timing_corrections(azimuth, elevation, ncvars, ray_duration, 
+                                 revised_northangle, antenna_transition['data'])
     
     return result
 
@@ -518,7 +539,8 @@ def _apply_timing_corrections(
     elevation: Dict, 
     ncvars: Dict, 
     ray_duration: np.ndarray,
-    revised_northangle: float
+    revised_northangle: float,
+    antenna_transition: np.ndarray = None
 ) -> None:
     """
     Apply timing corrections to azimuth and elevation angles.
@@ -532,13 +554,30 @@ def _apply_timing_corrections(
         ncvars: NetCDF variables
         ray_duration: Array of ray durations
         revised_northangle: North angle correction
+        antenna_transition: Optional array of antenna transition flags (1=transition, 0=scanning)
     """
-    # Calculate target ray duration and identify anomalies
-    target_ray_duration = np.round(np.mean(ray_duration), 3)
-    ok_duration = np.where(ray_duration / target_ray_duration < 1.5)[0]
-    
-    if len(ok_duration) > 0:
-        target_ray_duration = np.round(np.mean(ray_duration[ok_duration]), 3)
+    # Calculate target ray duration using only non-transition rays if available
+    if antenna_transition is not None:
+        scanning_rays = np.where(antenna_transition == 0)[0]
+        if len(scanning_rays) > 1:
+            ray_duration_for_calc = ray_duration[scanning_rays[:-1]]  # Exclude last (no duration after it)
+            target_ray_duration = np.round(np.mean(ray_duration_for_calc), 3)
+            ok_duration = np.where(ray_duration_for_calc / target_ray_duration < 1.5)[0]
+            if len(ok_duration) > 0:
+                target_ray_duration = np.round(np.mean(ray_duration_for_calc[ok_duration]), 3)
+        else:
+            # Fallback if no scanning rays found
+            target_ray_duration = np.round(np.mean(ray_duration), 3)
+            ok_duration = np.where(ray_duration / target_ray_duration < 1.5)[0]
+            if len(ok_duration) > 0:
+                target_ray_duration = np.round(np.mean(ray_duration[ok_duration]), 3)
+    else:
+        # Original logic for scans without antenna_transition array
+        target_ray_duration = np.round(np.mean(ray_duration), 3)
+        ok_duration = np.where(ray_duration / target_ray_duration < 1.5)[0]
+        
+        if len(ok_duration) > 0:
+            target_ray_duration = np.round(np.mean(ray_duration[ok_duration]), 3)
     
     # Prepend target duration for first ray
     ray_duration_extended = np.insert(ray_duration, 0, target_ray_duration)
@@ -554,11 +593,16 @@ def _apply_timing_corrections(
     azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle"
     azimuth['long_name'] = "azimuth_angle_from_true_north"
     
-    # Special handling for long-duration rays
-    for idx in long_duration:
+    # Special handling for long-duration rays and antenna transitions
+    # For antenna_transition rays, don't apply timing correction (just use raw angles)
+    special_rays = long_duration if antenna_transition is None else np.union1d(long_duration, np.where(antenna_transition == 1)[0])
+    
+    for idx in special_rays:
         if idx < len(azimuth['data']):
             azimuth['data'][idx] = (ncvars['azi'][idx] + revised_northangle) % 360
-            azimuth['data'][idx] -= 0.5 * target_ray_duration * ncvars['aziv'][idx]
+            # Only apply timing correction for long-duration rays (not for antenna_transition)
+            if antenna_transition is None or antenna_transition[idx] == 0:
+                azimuth['data'][idx] -= 0.5 * target_ray_duration * ncvars['aziv'][idx]
     
     # Apply corrections for elevation
     elevation['data'] -= 0.5 * ray_duration_extended * ncvars['elvv'][:]
@@ -566,11 +610,13 @@ def _apply_timing_corrections(
     elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle" 
     elevation['long_name'] = "elevation_angle_from_horizontal_plane"
     
-    # Special handling for long-duration rays
-    for idx in long_duration:
+    # Special handling for long-duration rays and antenna transitions
+    for idx in special_rays:
         if idx < len(elevation['data']):
             elevation['data'][idx] = ncvars['elv'][idx]
-            elevation['data'][idx] -= 0.5 * target_ray_duration * ncvars['elvv'][idx]
+            # Only apply timing correction for long-duration rays (not for antenna_transition)
+            if antenna_transition is None or antenna_transition[idx] == 0:
+                elevation['data'][idx] -= 0.5 * target_ray_duration * ncvars['elvv'][idx]
 
 def _create_sweep_info(nrays: int, filemetadata: FileMetadata) -> Dict:
     """
@@ -908,8 +954,8 @@ def convert_kepler_mmclx2l1(
     # Add elevation and azimuth scan rates for MAN scans
     add_scan_rate_coordinates(outfile, radar_dataset)
     
-    # Add NCAS metadata
-    cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+    # Add NCAS metadata (revised_northangle=None will cause function to extract from YAML)
+    cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version, revised_northangle=None)
     
     # Update history
     update_history_attribute(outfile, "Convert mmclx to CF-Radial with NCAS metadata")
@@ -1557,7 +1603,8 @@ def cfradial_add_ncas_metadata(
     yaml_project_file: str, 
     yaml_instrument_file: str,
     tracking_tag: str,
-    data_version: str
+    data_version: str,
+    revised_northangle: float = None
 ) -> None:
     """
     Add NCAS metadata to a CF-Radial file.
@@ -1568,6 +1615,7 @@ def cfradial_add_ncas_metadata(
         yaml_instrument_file: Path to instrument YAML file  
         tracking_tag: AMOF tracking tag
         data_version: Data version string
+        revised_northangle: North angle correction (if None, will try to extract from YAML)
         
     Raises:
         FileNotFoundError: If YAML files don't exist
@@ -1589,7 +1637,7 @@ def cfradial_add_ncas_metadata(
     # The ncas_amof_netcdf_template library expects a different workflow (single metadata CSV/YAML),
     # so we use our custom implementation that properly handles project + instrument YAML files
     try:
-        _add_ncas_metadata_manually(cfradial_file, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+        _add_ncas_metadata_manually(cfradial_file, yaml_project_file, yaml_instrument_file, tracking_tag, data_version, revised_northangle)
         print(f"Successfully added NCAS metadata")
     except Exception as e:
         raise RuntimeError(f"Error adding NCAS metadata to {cfradial_file}: {e}")
@@ -1600,7 +1648,8 @@ def _add_ncas_metadata_manually(
     yaml_project_file: str,
     yaml_instrument_file: str,
     tracking_tag: str,
-    data_version: str
+    data_version: str,
+    revised_northangle: float = None
 ) -> None:
     """
     Manually add NCAS metadata to a CF-Radial file by reading YAML files and updating attributes.
@@ -1780,12 +1829,16 @@ def _add_ncas_metadata_manually(
         print(f"Project instrument info keys: {list(project_instrument_info.keys())}")
     
     # Extract north_angle from project metadata for azimuth_correction
-    revised_northangle = 55.9  # Default value for COBALT
-    if project_instrument_info and 'north_angle' in project_instrument_info:
-        revised_northangle = float(project_instrument_info['north_angle'])
-        print(f"Using north_angle from project YAML: {revised_northangle}°")
+    # Use the parameter if provided, otherwise try to extract from YAML
+    if revised_northangle is None:
+        revised_northangle = 55.9  # Default value
+        if project_instrument_info and 'north_angle' in project_instrument_info:
+            revised_northangle = float(project_instrument_info['north_angle'])
+            print(f"Using north_angle from project YAML: {revised_northangle}°")
+        else:
+            print(f"Using default north_angle: {revised_northangle}°")
     else:
-        print(f"Using default north_angle: {revised_northangle}°")
+        print(f"Using north_angle from parameter: {revised_northangle}°")
     
     # Open NetCDF file and update attributes
     try:
@@ -2300,7 +2353,7 @@ def multi_mmclx2cfrad(
                 cfradial_add_time_coverage(outfile)
                 
                 # Add NCAS metadata
-                cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+                cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version, revised_northangle)
                 
                 # Update history with correct information - USE "deg" INSTEAD OF DEGREE SYMBOL
                 if scan_name == 'RHI':
@@ -2361,7 +2414,7 @@ def multi_mmclx2cfrad(
         cfradial_add_time_coverage(outfile)
         
         # Add NCAS metadata
-        cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version)
+        cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version, revised_northangle)
         
         # Update history - USE "deg" INSTEAD OF DEGREE SYMBOL
         history_msg = f"{campaign.upper()}: Multi-sweep {scan_name} conversion"
@@ -2877,3 +2930,790 @@ def find_mmclx_vad_files(
 
 
 
+
+
+def export_sweep_metadata_to_csv(
+    cfradial_file: str,
+    sweep_csv: str = None,
+    antenna_transition_csv: str = None
+) -> None:
+    """
+    Export sweep metadata and antenna_transition flags from CF-Radial file to CSV.
+    
+    Creates two CSV files for manual editing:
+    1. Sweep metadata (sweep_number, start_idx, end_idx, start_time, end_time, n_rays, sweep_mode, phase, fixed_angle, start_az, end_az, start_el, end_el)
+    2. Antenna transition flags (ray_index, time, azimuth, elevation, antenna_transition)
+    
+    The CSV includes both:
+    - sweep_mode: CF-Radial standard (manual_rhi, vertical_pointing, etc.) - preserved in NetCDF
+    - phase: Campaign-specific descriptions (upward_rhi, downward_rhi, tracking, dwell, etc.)
+      For PICASSO: from phase_sequence metadata
+      For other campaigns: defaults to sweep_mode if no phase_sequence exists
+    
+    Args:
+        cfradial_file: Path to CF-Radial NetCDF file
+        sweep_csv: Output path for sweep metadata CSV (default: <file>_sweeps.csv)
+        antenna_transition_csv: Output path for antenna transition CSV (default: <file>_antenna_transition.csv)
+        
+    Example:
+        >>> export_sweep_metadata_to_csv('myfile.nc')
+        Exported sweep metadata to myfile_sweeps.csv (77 sweeps)
+        Exported antenna transition flags to myfile_antenna_transition.csv (1234 rays, 56 transitions)
+    """
+    import csv
+    import netCDF4 as nc4
+    from pathlib import Path
+    
+    # Generate default output paths if not provided
+    if sweep_csv is None:
+        sweep_csv = str(Path(cfradial_file).with_suffix('')) + '_sweeps.csv'
+    if antenna_transition_csv is None:
+        antenna_transition_csv = str(Path(cfradial_file).with_suffix('')) + '_antenna_transition.csv'
+    
+    with nc4.Dataset(cfradial_file, 'r') as ds:
+        # Export sweep metadata
+        nsweeps = len(ds.dimensions['sweep'])
+        
+        # Read time variable and convert to datetime
+        time_var = ds.variables['time']
+        time_data = time_var[:]
+        time_units = time_var.units
+        
+        # Convert time to datetime objects
+        import cftime
+        time_datetimes = cftime.num2pydate(time_data, time_units)
+        
+        # Read azimuth and elevation data
+        azimuth_data = ds.variables['azimuth'][:]
+        elevation_data = ds.variables['elevation'][:]
+        
+        # Read sweep_mode variable (CF-Radial standard)
+        sweep_mode_var = ds.variables['sweep_mode']
+        if sweep_mode_var.dtype.char == 'S':
+            # Character array - use netCDF4's chartostring conversion
+            sweep_modes = nc4.chartostring(sweep_mode_var[:])
+            sweep_modes = [s.decode('utf-8') if isinstance(s, bytes) else str(s) for s in sweep_modes]
+        else:
+            # Already strings or other format
+            sweep_modes = [str(sweep_mode_var[i]).strip() for i in range(nsweeps)]
+        
+        # Read phase_sequence metadata (campaign-specific phase descriptions)
+        phase_list = []
+        if 'phase_sequence' in ds.ncattrs():
+            phase_sequence = ds.getncattr('phase_sequence')
+            phase_list = [p.strip() for p in phase_sequence.split(',')]
+        
+        # If no phase_sequence or mismatch, use sweep_mode as phase
+        if len(phase_list) != nsweeps:
+            if phase_list:
+                print(f"  INFO: phase_sequence has {len(phase_list)} phases but file has {nsweeps} sweeps, using sweep_mode for phase column")
+            phase_list = sweep_modes.copy()
+        
+        # Get total number of rays for bounds checking
+        n_rays_total = len(time_data)
+        
+        with open(sweep_csv, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['sweep_number', 'start_idx', 'end_idx', 'start_time', 'end_time', 'n_rays', 'sweep_mode', 'phase', 'fixed_angle', 'start_az', 'end_az', 'start_el', 'end_el'])
+            
+            for i in range(nsweeps):
+                sweep_num = int(ds.variables['sweep_number'][i])
+                start_idx = int(ds.variables['sweep_start_ray_index'][i])
+                end_idx = int(ds.variables['sweep_end_ray_index'][i])
+                
+                # Validate indices are within bounds
+                if start_idx < 0 or start_idx >= n_rays_total:
+                    print(f"  WARNING: Sweep {i} start_idx {start_idx} out of bounds (0-{n_rays_total-1}), skipping")
+                    continue
+                if end_idx < 0 or end_idx >= n_rays_total:
+                    print(f"  WARNING: Sweep {i} end_idx {end_idx} out of bounds (0-{n_rays_total-1}), clamping to {n_rays_total-1}")
+                    end_idx = n_rays_total - 1
+                
+                n_rays = end_idx - start_idx + 1
+                
+                # Get timestamps for start and end rays
+                start_time = time_datetimes[start_idx].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # milliseconds
+                end_time = time_datetimes[end_idx].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                
+                # Get azimuth and elevation at start and end of sweep
+                start_az = float(azimuth_data[start_idx])
+                end_az = float(azimuth_data[end_idx])
+                start_el = float(elevation_data[start_idx])
+                end_el = float(elevation_data[end_idx])
+                
+                # Get sweep_mode and phase for this sweep
+                sweep_mode = sweep_modes[i].strip()
+                phase = phase_list[i].strip() if i < len(phase_list) else sweep_mode
+                
+                fixed_angle = float(ds.variables['fixed_angle'][i])
+                
+                writer.writerow([sweep_num, start_idx, end_idx, start_time, end_time, n_rays, sweep_mode, phase, f'{fixed_angle:.2f}', f'{start_az:.2f}', f'{end_az:.2f}', f'{start_el:.2f}', f'{end_el:.2f}'])
+        
+        print(f"Exported sweep metadata to {sweep_csv} ({nsweeps} sweeps)")
+        
+        # Export antenna_transition flags
+        if 'antenna_transition' in ds.variables:
+            antenna_transition = ds.variables['antenna_transition'][:]
+            n_rays = len(antenna_transition)
+            n_transitions = int(np.sum(antenna_transition == 1))
+            
+            with open(antenna_transition_csv, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['ray_index', 'time', 'azimuth', 'elevation', 'antenna_transition'])
+                
+                for i in range(n_rays):
+                    ray_time = time_datetimes[i].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # milliseconds
+                    azimuth = float(azimuth_data[i])
+                    elevation = float(elevation_data[i])
+                    writer.writerow([i, ray_time, f'{azimuth:.2f}', f'{elevation:.2f}', int(antenna_transition[i])])
+            
+            print(f"Exported antenna transition flags to {antenna_transition_csv} ({n_rays} rays, {n_transitions} transitions)")
+        else:
+            print(f"No antenna_transition variable found in {cfradial_file}")
+
+
+def import_sweep_metadata_from_csv(
+    cfradial_file: str,
+    sweep_csv: str = None,
+    antenna_transition_csv: str = None,
+    backup: bool = True
+) -> None:
+    """
+    Import edited sweep metadata and antenna_transition flags from CSV into CF-Radial file.
+    
+    Updates the NetCDF file with edited values from CSV. Creates a backup by default.
+    
+    IMPORTANT: This function can only modify existing sweep boundaries and antenna_transition
+    flags. It CANNOT change the number of sweeps (e.g., splitting one sweep into two).
+    If you need to change the number of sweeps, you must regenerate the file from raw data
+    with the modified sweep structure.
+    
+    Args:
+        cfradial_file: Path to CF-Radial NetCDF file to modify
+        sweep_csv: Input path for sweep metadata CSV (default: <file>_sweeps.csv)
+        antenna_transition_csv: Input path for antenna transition CSV (default: <file>_antenna_transition.csv)
+        backup: Create backup file before modifying (default: True)
+        
+    Example:
+        >>> import_sweep_metadata_from_csv('myfile.nc')
+        Created backup: myfile.nc.bak
+        Updated sweep metadata (77 sweeps)
+        Updated antenna transition flags (1234 rays, 62 transitions)
+        
+    Note:
+        To split or merge sweeps (changing the total number), regenerate the file rather
+        than using this import function.
+    """
+    import csv
+    import netCDF4 as nc4
+    from pathlib import Path
+    import shutil
+    
+    # Generate default input paths if not provided
+    if sweep_csv is None:
+        sweep_csv = str(Path(cfradial_file).with_suffix('')) + '_sweeps.csv'
+    if antenna_transition_csv is None:
+        antenna_transition_csv = str(Path(cfradial_file).with_suffix('')) + '_antenna_transition.csv'
+    
+    # Create backup if requested
+    if backup:
+        backup_file = cfradial_file + '.bak'
+        shutil.copy2(cfradial_file, backup_file)
+        print(f"Created backup: {backup_file}")
+    
+    # Read sweep metadata from CSV
+    sweep_data = []
+    phases = []
+    sweep_modes = []
+    if Path(sweep_csv).exists():
+        with open(sweep_csv, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                sweep_data.append({
+                    'sweep_number': int(row['sweep_number']),
+                    'start_idx': int(row['start_idx']),
+                    'end_idx': int(row['end_idx']),
+                    'fixed_angle': float(row['fixed_angle'])
+                })
+                # Read phase if it exists in CSV (campaign-specific)
+                if 'phase' in row:
+                    phases.append(row['phase'].strip())
+                # Read sweep_mode if it exists in CSV (CF-Radial standard)
+                if 'sweep_mode' in row:
+                    sweep_modes.append(row['sweep_mode'].strip())
+    else:
+        print(f"Sweep CSV not found: {sweep_csv}")
+    
+    # Read antenna_transition from CSV
+    antenna_transition_data = {}
+    if Path(antenna_transition_csv).exists():
+        with open(antenna_transition_csv, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                ray_idx = int(row['ray_index'])
+                antenna_transition_data[ray_idx] = int(row['antenna_transition'])
+    else:
+        print(f"Antenna transition CSV not found: {antenna_transition_csv}")
+    
+    # Update NetCDF file
+    with nc4.Dataset(cfradial_file, 'a') as ds:
+        # Update sweep metadata
+        sweep_updated = False
+        if sweep_data:
+            nsweeps_csv = len(sweep_data)
+            nsweeps_nc = len(ds.dimensions['sweep'])
+            
+            if nsweeps_csv != nsweeps_nc:
+                print(f"\nERROR: Cannot change the number of sweeps!")
+                print(f"  Current file:  {nsweeps_nc} sweeps")
+                print(f"  CSV file:      {nsweeps_csv} sweeps")
+                print(f"  Difference:    {nsweeps_csv - nsweeps_nc:+d} sweeps")
+                print(f"\nNetCDF dimension sizes are fixed and cannot be changed after file creation.")
+                print(f"\nOptions:")
+                print(f"  1. Use rebuild_file_from_csv() instead to recreate the file:")
+                print(f"     >>> from kepler_utils import rebuild_file_from_csv")
+                print(f"     >>> rebuild_file_from_csv('{cfradial_file}')")
+                print(f"  2. Revert your CSV to have {nsweeps_nc} sweeps")
+                print(f"  3. Regenerate from raw data with modified phase detection parameters")
+                return
+            
+            for i, sweep in enumerate(sweep_data):
+                ds.variables['sweep_number'][i] = sweep['sweep_number']
+                ds.variables['sweep_start_ray_index'][i] = sweep['start_idx']
+                ds.variables['sweep_end_ray_index'][i] = sweep['end_idx']
+                ds.variables['fixed_angle'][i] = sweep['fixed_angle']
+            
+            # Update sweep_mode variable if values were provided in CSV
+            if sweep_modes and len(sweep_modes) == nsweeps_csv and 'sweep_mode' in ds.variables:
+                sweep_mode_var = ds.variables['sweep_mode']
+                # Handle character array (old-style NetCDF3 strings)
+                if sweep_mode_var.dtype.char == 'S':
+                    # Convert list of strings to character array
+                    sweep_mode_array = np.array(sweep_modes, dtype='S32')
+                    char_array = nc4.stringtochar(sweep_mode_array)
+                    sweep_mode_var[:] = char_array
+                else:
+                    # Direct string assignment for NetCDF4 string types
+                    for i, mode in enumerate(sweep_modes):
+                        sweep_mode_var[i] = mode
+                print(f"Updated sweep_mode variable for {nsweeps_csv} sweeps")
+            
+            # Update phase_sequence metadata if phases were provided
+            if phases and len(phases) == nsweeps_csv:
+                phase_sequence_str = ', '.join(phases)
+                ds.setncattr('phase_sequence', phase_sequence_str)
+                print(f"Updated phase_sequence metadata: {phase_sequence_str}")
+            
+            sweep_updated = True
+            print(f"Updated sweep metadata ({nsweeps_csv} sweeps)")
+        
+        # Update antenna_transition
+        transition_updated = False
+        if antenna_transition_data and 'antenna_transition' in ds.variables:
+            antenna_transition_var = ds.variables['antenna_transition']
+            n_rays = len(antenna_transition_var)
+            
+            # Update values from CSV
+            for ray_idx, value in antenna_transition_data.items():
+                if 0 <= ray_idx < n_rays:
+                    antenna_transition_var[ray_idx] = value
+            
+            n_transitions = int(np.sum(antenna_transition_var[:] == 1))
+            transition_updated = True
+            print(f"Updated antenna transition flags ({n_rays} rays, {n_transitions} transitions)")
+        elif antenna_transition_data:
+            print("Warning: antenna_transition variable not found in NetCDF file")
+        
+        # Update last_revised_date
+        if sweep_updated or transition_updated:
+            import datetime
+            current_time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+            ds.setncattr('last_revised_date', current_time)
+    
+    # Update history attribute (outside the dataset context to use update_history_attribute)
+    if sweep_updated or transition_updated:
+        history_parts = []
+        if sweep_updated:
+            history_parts.append("sweep metadata")
+        if transition_updated:
+            history_parts.append("antenna_transition flags")
+        
+        history_msg = f"Applied manual edits from CSV ({', '.join(history_parts)})"
+        update_history_attribute(cfradial_file, history_msg)
+    
+    print(f"Successfully updated {cfradial_file}")
+
+
+def export_sweep_metadata_for_date(
+    datestr: str,
+    data_dir: str,
+    pattern: str = '*.nc',
+    overwrite: bool = False
+) -> None:
+    """
+    Export sweep metadata and antenna_transition flags from all NetCDF files for a given date.
+    
+    Finds all NetCDF files matching the pattern for the specified date and exports
+    their sweep metadata and antenna transition flags to CSV files for manual editing.
+    
+    Args:
+        datestr: Date string in YYYYMMDD format
+        data_dir: Base directory containing date subdirectories (e.g., /path/to/output)
+        pattern: Filename pattern to match (default: '*.nc')
+        overwrite: Overwrite existing CSV files (default: False)
+        
+    Example:
+        >>> export_sweep_metadata_for_date('20171213', '/path/to/picasso/L1_v1.0.0', pattern='*_man_*.nc')
+        Processing date: 20171213
+        Found 5 files to process
+        
+        Processing: ncas-mobile-ka-band-radar-1_cao_20171213-212527_man_l1_v1.0.0.nc
+        Exported sweep metadata to ...sweeps.csv (12 sweeps)
+        Exported antenna transition flags to ...antenna_transition.csv (1234 rays, 56 transitions)
+        ...
+        
+        Completed: 5 files processed, 0 skipped
+    """
+    import glob
+    import os
+    from pathlib import Path
+    
+    # Construct the date directory path
+    date_path = os.path.join(data_dir, datestr)
+    
+    if not os.path.exists(date_path):
+        print(f"ERROR: Date directory not found: {date_path}")
+        return
+    
+    # Find all matching files
+    search_pattern = os.path.join(date_path, pattern)
+    nc_files = sorted(glob.glob(search_pattern))
+    
+    if not nc_files:
+        print(f"No files found matching pattern: {search_pattern}")
+        return
+    
+    print(f"Processing date: {datestr}")
+    print(f"Found {len(nc_files)} file(s) to process\n")
+    
+    processed = 0
+    skipped = 0
+    
+    for nc_file in nc_files:
+        print(f"Processing: {os.path.basename(nc_file)}")
+        
+        # Generate expected CSV filenames
+        base_name = str(Path(nc_file).with_suffix(''))
+        sweep_csv = base_name + '_sweeps.csv'
+        antenna_csv = base_name + '_antenna_transition.csv'
+        
+        # Check if CSV files already exist
+        if not overwrite and (os.path.exists(sweep_csv) or os.path.exists(antenna_csv)):
+            print(f"  CSV files already exist - skipping (use --overwrite to replace)")
+            skipped += 1
+            continue
+        
+        try:
+            export_sweep_metadata_to_csv(
+                cfradial_file=nc_file,
+                sweep_csv=sweep_csv,
+                antenna_transition_csv=antenna_csv
+            )
+            processed += 1
+        except Exception as e:
+            print(f"  ERROR: Failed to export {os.path.basename(nc_file)}: {e}")
+            import traceback
+            traceback.print_exc()
+            skipped += 1
+        
+        print()  # Blank line between files
+    
+    print("="*70)
+    print(f"Completed: {processed} file(s) processed, {skipped} skipped")
+    print("="*70)
+
+
+def apply_csv_edits_for_date(
+    datestr: str,
+    data_dir: str,
+    csv_dir: str = None,
+    backup: bool = True,
+    pattern: str = '*_man_*.nc'
+) -> None:
+    """
+    Apply CSV edits to all MAN files for a given date.
+    
+    Finds all NetCDF files matching the pattern for the specified date and applies
+    any edited CSV files found in the CSV directory. Automatically detects if the number
+    of sweeps has changed and rebuilds the file if necessary.
+    
+    Args:
+        datestr: Date string in YYYYMMDD format
+        data_dir: Base directory containing date subdirectories with NetCDF files (e.g., /path/to/output)
+        csv_dir: Directory containing CSV files in YYYYMMDD subdirectories (default: same as data_dir)
+        backup: Create backup files before modifying (default: True)
+        pattern: Filename pattern to match (default: '*_man_*.nc')
+        
+    Example:
+        >>> apply_csv_edits_for_date('20250305', '/path/to/picasso/output', csv_dir='/path/to/csv_edits')
+        Processing date: 20250305
+        Found 12 files to process
+        
+        Processing: ncas-mobile-ka-band-radar-1_cao_20250305-120000_man_l1_v1.0.nc
+        Sweep count changed (5 -> 7), rebuilding file...
+        Created backup: ...nc.bak
+        Original file: 5 sweeps
+        CSV file: 7 sweeps (+2 sweeps added)
+        Successfully rebuilt ...nc with 7 sweeps
+        Applying antenna transition edits...
+        Updated antenna transition flags (456 rays, 12 transitions)
+        ...
+        
+        Completed: 12 files processed, 0 skipped
+        
+    Note:
+        When the CSV has a different number of sweeps than the NetCDF file,
+        the entire file is rebuilt. When the sweep count is unchanged, only
+        the specific fields are updated (faster operation).
+    """
+    import glob
+    import os
+    from pathlib import Path
+    
+    # If csv_dir not specified, use data_dir
+    if csv_dir is None:
+        csv_dir = data_dir
+    
+    # Construct the date directory paths
+    data_date_path = os.path.join(data_dir, datestr)
+    csv_date_path = os.path.join(csv_dir, datestr)
+    
+    if not os.path.exists(data_date_path):
+        print(f"ERROR: Data directory not found: {data_date_path}")
+        return
+    
+    if not os.path.exists(csv_date_path):
+        print(f"ERROR: CSV directory not found: {csv_date_path}")
+        return
+    
+    # Find all matching files
+    search_pattern = os.path.join(data_date_path, pattern)
+    nc_files = sorted(glob.glob(search_pattern))
+    
+    if not nc_files:
+        print(f"No files found matching pattern: {search_pattern}")
+        return
+    
+    print(f"Processing date: {datestr}")
+    print(f"Data directory: {data_date_path}")
+    print(f"CSV directory:  {csv_date_path}")
+    print(f"Found {len(nc_files)} file(s) to process\n")
+    
+    processed = 0
+    skipped = 0
+    
+    for nc_file in nc_files:
+        print(f"Processing: {os.path.basename(nc_file)}")
+        
+        # Generate expected CSV filenames in the CSV directory
+        nc_basename = os.path.basename(nc_file)
+        csv_base_name = os.path.join(csv_date_path, str(Path(nc_basename).with_suffix('')))
+        sweep_csv = csv_base_name + '_sweeps.csv'
+        antenna_csv = csv_base_name + '_antenna_transition.csv'
+        
+        # Check if at least one CSV file exists
+        if not os.path.exists(sweep_csv) and not os.path.exists(antenna_csv):
+            print(f"  No CSV files found - skipping")
+            skipped += 1
+            continue
+        
+        # Determine if we need to rebuild (sweep count changed) or just update
+        needs_rebuild = False
+        if os.path.exists(sweep_csv):
+            import csv
+            import netCDF4 as nc4
+            
+            # Count sweeps in CSV
+            with open(sweep_csv, 'r') as f:
+                reader = csv.DictReader(f)
+                nsweeps_csv = sum(1 for _ in reader)
+            
+            # Count sweeps in NetCDF
+            with nc4.Dataset(nc_file, 'r') as ds:
+                nsweeps_nc = len(ds.dimensions['sweep'])
+            
+            if nsweeps_csv != nsweeps_nc:
+                needs_rebuild = True
+                print(f"  Sweep count changed ({nsweeps_nc} -> {nsweeps_csv}), rebuilding file...")
+        
+        # Apply the edits using appropriate method
+        try:
+            if needs_rebuild:
+                # Rebuild entire file with new sweep structure
+                rebuild_file_from_csv(
+                    cfradial_file=nc_file,
+                    sweep_csv=sweep_csv,
+                    backup=backup
+                )
+                # Apply antenna transition edits after rebuild if CSV exists
+                if os.path.exists(antenna_csv):
+                    print("  Applying antenna transition edits...")
+                    import_sweep_metadata_from_csv(
+                        cfradial_file=nc_file,
+                        sweep_csv=None,  # Don't update sweeps again
+                        antenna_transition_csv=antenna_csv,
+                        backup=False  # Already backed up
+                    )
+            else:
+                # Just update existing file (same sweep count)
+                import_sweep_metadata_from_csv(
+                    cfradial_file=nc_file,
+                    sweep_csv=sweep_csv if os.path.exists(sweep_csv) else None,
+                    antenna_transition_csv=antenna_csv if os.path.exists(antenna_csv) else None,
+                    backup=backup
+                )
+            processed += 1
+        except Exception as e:
+            print(f"  ERROR: Failed to process {os.path.basename(nc_file)}: {e}")
+            import traceback
+            traceback.print_exc()
+            skipped += 1
+        
+        print()  # Blank line between files
+    
+    print(f"Completed: {processed} file(s) processed, {skipped} skipped")
+
+
+def rebuild_file_from_csv(
+    cfradial_file: str,
+    sweep_csv: str = None,
+    backup: bool = True
+) -> None:
+    """
+    Rebuild a CF-Radial file with new sweep structure from edited CSV.
+    
+    This function recreates the NetCDF file with a new sweep structure based on
+    the CSV file. Use this when you need to split or merge sweeps (change the
+    number of sweeps), which cannot be done with import_sweep_metadata_from_csv.
+    
+    Args:
+        cfradial_file: Path to CF-Radial NetCDF file to rebuild
+        sweep_csv: Input path for sweep metadata CSV (default: <file>_sweeps.csv)
+        backup: Create backup file before rebuilding (default: True)
+        
+    Example:
+        >>> rebuild_file_from_csv('myfile.nc')
+        Created backup: myfile.nc.bak
+        Original file: 5 sweeps
+        CSV file: 7 sweeps (2 sweeps added)
+        Reading radar data...
+        Applying new sweep structure...
+        Writing updated file...
+        Successfully rebuilt myfile.nc with 7 sweeps
+        
+    Note:
+        This recreates the entire file, which takes longer than import_sweep_metadata_from_csv
+        but allows changing the number of sweeps.
+    """
+    import csv
+    import netCDF4 as nc4
+    from pathlib import Path
+    import shutil
+    import pyart
+    from campaign_processing import apply_phase_sweeps_to_radar
+    
+    # Generate default input path if not provided
+    if sweep_csv is None:
+        sweep_csv = str(Path(cfradial_file).with_suffix('')) + '_sweeps.csv'
+    
+    if not Path(sweep_csv).exists():
+        print(f"ERROR: Sweep CSV not found: {sweep_csv}")
+        return
+    
+    # Read sweep metadata from CSV
+    sweep_data = []
+    phases_list = []
+    sweep_modes_list = []
+    with open(sweep_csv, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            sweep_data.append({
+                'sweep_number': int(row['sweep_number']),
+                'start_idx': int(row['start_idx']),
+                'end_idx': int(row['end_idx']),
+                'fixed_angle': float(row['fixed_angle'])
+            })
+            # Read phase if it exists (campaign-specific)
+            if 'phase' in row:
+                phases_list.append(row['phase'].strip())
+            # Read sweep_mode if it exists (CF-Radial standard)
+            if 'sweep_mode' in row:
+                sweep_modes_list.append(row['sweep_mode'].strip())
+            # If neither exists, use default
+            if 'phase' not in row and 'sweep_mode' not in row:
+                phases_list.append('tracking')  # Default fallback
+    
+    # Check original file sweep count
+    with nc4.Dataset(cfradial_file, 'r') as ds:
+        nsweeps_original = len(ds.dimensions['sweep'])
+    
+    nsweeps_csv = len(sweep_data)
+    print(f"Original file: {nsweeps_original} sweeps")
+    print(f"CSV file: {nsweeps_csv} sweeps", end='')
+    if nsweeps_csv != nsweeps_original:
+        diff = nsweeps_csv - nsweeps_original
+        print(f" ({diff:+d} sweeps {'added' if diff > 0 else 'removed'})")
+    else:
+        print()
+    
+    # Create backup if requested
+    if backup:
+        backup_file = cfradial_file + '.bak'
+        shutil.copy2(cfradial_file, backup_file)
+        print(f"Created backup: {backup_file}")
+    
+    # Read radar data
+    print("Reading radar data...")
+    try:
+        radar = pyart.io.read_cfradial(cfradial_file)
+    except Exception as e:
+        print(f"ERROR: Failed to read radar file: {e}")
+        return
+    
+    # Build phases list from CSV (format expected by apply_phase_sweeps_to_radar)
+    print("Applying new sweep structure...")
+    phases = []
+    for i, sweep in enumerate(sweep_data):
+        # Use phase directly from CSV
+        phase_type = phases_list[i]
+        
+        # Calculate mean azimuth and elevation from the ray indices
+        start_idx = sweep['start_idx']
+        end_idx = sweep['end_idx']
+        mean_az = float(np.mean(radar.azimuth['data'][start_idx:end_idx+1]))
+        mean_el = float(np.mean(radar.elevation['data'][start_idx:end_idx+1]))
+        
+        phases.append({
+            'phase': phase_type,
+            'start_idx': start_idx,
+            'end_idx': end_idx,
+            'n_rays': end_idx - start_idx + 1,
+            'mean_az': mean_az,
+            'mean_el': mean_el,
+            'transition_ray_indices': []  # Empty for manual CSV structure
+        })
+    
+    # Apply the new sweep structure
+    try:
+        radar = apply_phase_sweeps_to_radar(radar, phases)
+    except Exception as e:
+        print(f"ERROR: Failed to apply sweep structure: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # Write the file
+    print("Writing updated file...")
+    try:
+        pyart.io.write_cfradial(cfradial_file, radar, format='NETCDF4')
+    except Exception as e:
+        print(f"ERROR: Failed to write file: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # Update sweep_mode variable if values were provided in CSV
+    if sweep_modes_list and len(sweep_modes_list) == nsweeps_csv:
+        with nc4.Dataset(cfradial_file, 'a') as ds:
+            if 'sweep_mode' in ds.variables:
+                sweep_mode_var = ds.variables['sweep_mode']
+                # Handle character array (old-style NetCDF3 strings)
+                if sweep_mode_var.dtype.char == 'S':
+                    # Convert list of strings to character array
+                    sweep_mode_array = np.array(sweep_modes_list, dtype='S32')
+                    char_array = nc4.stringtochar(sweep_mode_array)
+                    sweep_mode_var[:] = char_array
+                else:
+                    # Direct string assignment for NetCDF4 string types
+                    for i, mode in enumerate(sweep_modes_list):
+                        sweep_mode_var[i] = mode
+                print(f"Updated sweep_mode variable from CSV for {nsweeps_csv} sweeps")
+    
+    # Update history
+    history_msg = f"Rebuilt file with new sweep structure from CSV ({nsweeps_csv} sweeps)"
+    update_history_attribute(cfradial_file, history_msg)
+    
+    # Update last_revised_date
+    import datetime
+    with nc4.Dataset(cfradial_file, 'a') as ds:
+        current_time = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        ds.setncattr('last_revised_date', current_time)
+    
+    print(f"Successfully rebuilt {cfradial_file} with {nsweeps_csv} sweeps")
+
+
+def is_sweep_all_antenna_transition(radar: Radar, sweep_idx: int) -> bool:
+    """
+    Check if a sweep consists entirely of antenna transition rays.
+    
+    Args:
+        radar: PyART Radar object
+        sweep_idx: Sweep index to check
+        
+    Returns:
+        True if all rays in the sweep have antenna_transition=1, False otherwise
+        
+    Example:
+        >>> radar = pyart.io.read_cfradial('myfile.nc')
+        >>> is_transition = is_sweep_all_antenna_transition(radar, 3)
+        >>> if is_transition:
+        ...     print("Sweep 3 is all antenna transitions")
+    """
+    # Check if antenna_transition coordinate exists (stored as radar attribute, not field)
+    if not hasattr(radar, 'antenna_transition') or radar.antenna_transition is None:
+        return False
+    
+    if 'data' not in radar.antenna_transition:
+        return False
+    
+    # Get ray indices for this sweep
+    sweep_slice = radar.get_slice(sweep_idx)
+    antenna_transition_data = radar.antenna_transition['data'][sweep_slice]
+    
+    # Check if all values are 1 (transition)
+    return np.all(antenna_transition_data == 1)
+
+
+def get_valid_sweep_indices(
+    radar: Radar, 
+    skip_all_transition: bool = False
+) -> List[int]:
+    """
+    Get list of valid sweep indices, optionally filtering out all-transition sweeps.
+    
+    Args:
+        radar: PyART Radar object
+        skip_all_transition: If True, exclude sweeps where 100% of rays are antenna_transition=1
+        
+    Returns:
+        List of valid sweep indices
+        
+    Example:
+        >>> radar = pyart.io.read_cfradial('myfile.nc')
+        >>> # Get all sweeps
+        >>> all_sweeps = get_valid_sweep_indices(radar)
+        >>> # Get only sweeps with actual data (not pure transitions)
+        >>> data_sweeps = get_valid_sweep_indices(radar, skip_all_transition=True)
+        >>> print(f"Total sweeps: {len(all_sweeps)}, Data sweeps: {len(data_sweeps)}")
+    """
+    nsweeps = radar.nsweeps
+    
+    if not skip_all_transition:
+        return list(range(nsweeps))
+    
+    valid_indices = []
+    for sweep_idx in range(nsweeps):
+        if not is_sweep_all_antenna_transition(radar, sweep_idx):
+            valid_indices.append(sweep_idx)
+    
+    return valid_indices
