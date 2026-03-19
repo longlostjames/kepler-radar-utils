@@ -465,7 +465,13 @@ def split_radar_at_time_gaps(radar, max_gap_seconds=60):
             segment.sweep_end_ray_index['data'] = np.array([len(ray_indices) - 1])
             segment.nrays = len(ray_indices)
             segment.ngates = len(segment.range['data'])
-            
+
+            # Copy antenna_transition if present
+            if hasattr(radar, 'antenna_transition') and radar.antenna_transition is not None:
+                if 'data' in radar.antenna_transition:
+                    segment.antenna_transition = dict(radar.antenna_transition)
+                    segment.antenna_transition['data'] = radar.antenna_transition['data'][ray_indices]
+
             segments.append(segment)
         
         start_ray = gap_idx + 1
@@ -492,7 +498,13 @@ def split_radar_at_time_gaps(radar, max_gap_seconds=60):
         segment.sweep_end_ray_index['data'] = np.array([len(ray_indices) - 1])
         segment.nrays = len(ray_indices)
         segment.ngates = len(segment.range['data'])
-        
+
+        # Copy antenna_transition if present
+        if hasattr(radar, 'antenna_transition') and radar.antenna_transition is not None:
+            if 'data' in radar.antenna_transition:
+                segment.antenna_transition = dict(radar.antenna_transition)
+                segment.antenna_transition['data'] = radar.antenna_transition['data'][ray_indices]
+
         segments.append(segment)
     
     print(f"  Split radar data into {len(segments)} segments at time gaps > {max_gap_seconds}s")
@@ -1112,18 +1124,26 @@ def make_picasso_ppi_map_plot(ncfile, figpath, blflag=False, skip_all_transition
                 colorbar_mappable,
                 ax=ax[pos],
                 orientation='horizontal',
-                shrink=0.6,
+                shrink=0.7,
                 pad=0.12
             )
             cbar.set_alpha(1.0)
             
-            # Add label to colorbar
-            if var in radar.fields:
-                long_name = radar.fields[var].get('long_name', var)
+            # Add short label to colorbar
+            _short_cbar_label = {
+                'DBZ':   'Reflectivity (dBZ)',
+                'VEL':   'Velocity (m/s)',
+                'WIDTH': 'Spectrum Width (m/s)',
+                'LDR':   'LDR (dB)',
+                'SNR':   'SNR (dB)',
+            }
+            if var in _short_cbar_label:
+                cbar.set_label(_short_cbar_label[var], fontsize=12)
+            elif var in radar.fields:
                 units = radar.fields[var].get('units', '')
-                cbar.set_label(f"{long_name} ({units})", fontsize=12)
+                cbar.set_label(f"{var} ({units})" if units else var, fontsize=12)
             else:
-                cbar.set_label(f"{var}", fontsize=12)
+                cbar.set_label(var, fontsize=12)
             
             # Plot range rings
             display.plot_range_rings([10, 20, 30, 40], ax=ax[pos], lw=0.5, col='0.5')
@@ -1210,7 +1230,7 @@ def _plot_ppi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, max
     axes[0,0].set_title(dbz_title)
     if len(axes[0,0].collections) > 0:
         plt.colorbar(axes[0,0].collections[-1], ax=axes[0,0], orientation='vertical',
-                     label='Reflectivity (dBZ)', pad=0.02, aspect=20)
+                     label='Reflectivity (dBZ)', pad=0.02, aspect=20, shrink=0.7)
     
     # Velocity (VEL)  
     display.plot_ppi("VEL", ax=axes[1,0], sweep=sweep_idx, vmin=vel_min, vmax=vel_max,
@@ -1221,7 +1241,7 @@ def _plot_ppi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, max
     axes[1,0].set_title(vel_title)
     if len(axes[1,0].collections) > 0:
         plt.colorbar(axes[1,0].collections[-1], ax=axes[1,0], orientation='vertical',
-                     label='Velocity (m/s)', pad=0.02, aspect=20)
+                     label='Velocity (m/s)', pad=0.02, aspect=20, shrink=0.7)
     
     # Spectrum width (WIDTH)
     display.plot_ppi("WIDTH", ax=axes[1,1], sweep=sweep_idx,
@@ -1233,7 +1253,7 @@ def _plot_ppi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, max
     axes[1,1].set_title(width_title)
     if len(axes[1,1].collections) > 0:
         plt.colorbar(axes[1,1].collections[-1], ax=axes[1,1], orientation='vertical',
-                     label='Spectrum Width (m/s)', pad=0.02, aspect=20)
+                     label='Spectrum Width (m/s)', pad=0.02, aspect=20, shrink=0.7)
     
     # Linear depolarization ratio (LDR)
     display.plot_ppi("LDR", ax=axes[0,1], sweep=sweep_idx, vmin=-35, vmax=5,
@@ -1244,7 +1264,7 @@ def _plot_ppi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, max
     axes[0,1].set_title(ldr_title)
     if len(axes[0,1].collections) > 0:
         plt.colorbar(axes[0,1].collections[-1], ax=axes[0,1], orientation='vertical',
-                     label='LDR (dB)', pad=0.02, aspect=20)
+                     label='LDR (dB)', pad=0.02, aspect=20, shrink=0.7)
 
 def _setup_ppi_axes(ax, max_range):
     """Helper function to set up PPI plot axes."""
@@ -1837,7 +1857,7 @@ def _make_man_sweep_plots(radar_ds, gatefilter, figpath, dtime_str, version, ins
                 else:
                     print(f"    Using VPT format for {mode} phase")
                 _plot_vpt_fields_single_sweep(display, axes, sweep_idx, gatefilter, vel_min, vel_max, hmax, skip_all_transition)
-                subtitle = f'Mean Elevation: {mean_elevation:.1f}° | {time_range_str}'
+                subtitle = f'Mean Elevation: {mean_elevation:.1f}° | Mean Azimuth: {mean_azimuth:.1f}° | {time_range_str}'
             else:
                 _plot_rhi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, hmax, xmin, xmax)
                 subtitle = f'Mean Azimuth: {mean_azimuth:.1f}° | {time_range_str}'
@@ -2016,13 +2036,6 @@ def make_picasso_vpt_plot(ncfile, figpath, blflag=False, skip_all_transition=Fal
         print(f"Error reading radar file: {e}")
         return
     
-    # Check if we should skip this file based on antenna_transition filtering
-    if skip_all_transition:
-        valid_sweep_indices = get_valid_sweep_indices(radar_ds, skip_all_transition=True)
-        if len(valid_sweep_indices) == 0:
-            print(f"  Skipping VPT file - all sweeps are 100% antenna transitions")
-            return
-    
     # Get product version and phase_sequence from NetCDF file
     try:
         with nc4.Dataset(ncfile) as ds:
@@ -2050,56 +2063,78 @@ def make_picasso_vpt_plot(ncfile, figpath, blflag=False, skip_all_transition=Fal
     dtime0 = cftime.num2pydate(radar_ds.time['data'][0], radar_ds.time['units'])
     dtime0_str = dtime0.strftime("%Y%m%d-%H%M%S")
     
-    # Split radar data at large time gaps to prevent pixel stretching
-    radar_segments = split_radar_at_time_gaps(radar_ds, max_gap_seconds=600)
-    
+    # Build segments sweep-by-sweep, splitting each at time gaps, masking transitions
+    valid_sweep_indices = get_valid_sweep_indices(radar_ds, skip_all_transition=skip_all_transition)
+    if not valid_sweep_indices:
+        print(f"  Skipping VPT file - all sweeps are 100% antenna transitions")
+        return
+
     fig, axes = plt.subplots(2, 2, figsize=(16, 10))
-    
-    # Get velocity limits
+
+    # Get velocity limits and field titles from the full radar object
     vel_field = radar_ds.fields['VEL']
     vel_min = vel_field.get('field_limit_lower', -10)
     vel_max = vel_field.get('field_limit_upper', 10)
-    
-    # Plot each segment
-    for seg_idx, radar_segment in enumerate(radar_segments):
-        display = pyart.graph.RadarDisplay(radar_segment)
-        times = cftime.num2pydate(radar_segment.time['data'], radar_segment.time['units'])
-        
-        # Extract field labels from metadata
-        if seg_idx == 0:
-            dbz_long = radar_segment.fields['DBZ'].get('long_name', 'Reflectivity')
-            dbz_units = radar_segment.fields['DBZ'].get('units', 'dBZ')
-            dbz_title = f"{dbz_long} ({dbz_units})"
-            
-            vel_long = radar_segment.fields['VEL'].get('long_name', 'Velocity')
-            vel_units = radar_segment.fields['VEL'].get('units', 'm/s')
-            vel_title = f"{vel_long} ({vel_units})"
-            
-            width_long = radar_segment.fields['WIDTH'].get('long_name', 'Spectrum Width')
-            width_units = radar_segment.fields['WIDTH'].get('units', 'm/s')
-            width_title = f"{width_long} ({width_units})"
-            
-            ldr_long = radar_segment.fields['LDR'].get('long_name', 'LDR')
-            ldr_units = radar_segment.fields['LDR'].get('units', 'dB')
-            ldr_title = f"{ldr_long} ({ldr_units})"
-        
-        # First segment - create plots with colorbars
-        if seg_idx == 0:
-            _plot_vpt_field(display, axes[0,0], 'DBZ', dbz_title, 'Reflectivity (dBZ)',
-                           COLORMAPS['dbz'], -60, 40, hmax, times)
-            _plot_vpt_field(display, axes[0,1], 'VEL', vel_title, 'Velocity (m/s)',
-                           COLORMAPS['vel'], vel_min, vel_max, hmax, times)
-            _plot_vpt_field(display, axes[1,0], 'WIDTH', width_title, 'Spectrum Width (m/s)',
-                           COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True)
-            _plot_vpt_field(display, axes[1,1], 'LDR', ldr_title, 'LDR (dB)',
-                           COLORMAPS['ldr'], -35, 5, hmax, times)
-        else:
-            # Subsequent segments - overlay without colorbars
-            _plot_vpt_field_overlay(display, axes[0,0], 'DBZ', COLORMAPS['dbz'], -60, 40, hmax, times)
-            _plot_vpt_field_overlay(display, axes[0,1], 'VEL', COLORMAPS['vel'], vel_min, vel_max, hmax, times)
-            _plot_vpt_field_overlay(display, axes[1,0], 'WIDTH', COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True)
-            _plot_vpt_field_overlay(display, axes[1,1], 'LDR', COLORMAPS['ldr'], -35, 5, hmax, times)
-    
+
+    dbz_title = "{} ({})".format(
+        radar_ds.fields['DBZ'].get('long_name', 'Reflectivity'),
+        radar_ds.fields['DBZ'].get('units', 'dBZ'))
+    vel_title = "{} ({})".format(
+        radar_ds.fields['VEL'].get('long_name', 'Velocity'),
+        radar_ds.fields['VEL'].get('units', 'm/s'))
+    width_title = "{} ({})".format(
+        radar_ds.fields['WIDTH'].get('long_name', 'Spectrum Width'),
+        radar_ds.fields['WIDTH'].get('units', 'm/s'))
+    ldr_title = "{} ({})".format(
+        radar_ds.fields['LDR'].get('long_name', 'LDR'),
+        radar_ds.fields['LDR'].get('units', 'dB'))
+
+    first_plotted = False
+    all_t_start = None
+    all_t_end = None
+
+    for sweep_idx in valid_sweep_indices:
+        sweep_radar = radar_ds.extract_sweeps([sweep_idx])
+        # Split within the sweep at gaps (shorter threshold appropriate for VPT)
+        sub_segments = split_radar_at_time_gaps(sweep_radar, max_gap_seconds=60)
+
+        for seg in sub_segments:
+            if seg.nrays < 2 or seg.ngates < 2:
+                continue
+            _mask_transition_rays(seg)
+            times = cftime.num2pydate(seg.time['data'], seg.time['units'])
+            if all_t_start is None or times[0] < all_t_start:
+                all_t_start = times[0]
+            if all_t_end is None or times[-1] > all_t_end:
+                all_t_end = times[-1]
+            display = pyart.graph.RadarDisplay(seg)
+
+            if not first_plotted:
+                _plot_vpt_field(display, axes[0,0], 'DBZ', dbz_title, 'Reflectivity (dBZ)',
+                                COLORMAPS['dbz'], -60, 40, hmax, times)
+                _plot_vpt_field(display, axes[0,1], 'VEL', vel_title, 'Velocity (m/s)',
+                                COLORMAPS['vel'], vel_min, vel_max, hmax, times)
+                _plot_vpt_field(display, axes[1,0], 'WIDTH', width_title, 'Spectrum Width (m/s)',
+                                COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True)
+                _plot_vpt_field(display, axes[1,1], 'LDR', ldr_title, 'LDR (dB)',
+                                COLORMAPS['ldr'], -35, 5, hmax, times)
+                first_plotted = True
+            else:
+                _plot_vpt_field_overlay(display, axes[0,0], 'DBZ', COLORMAPS['dbz'], -60, 40, hmax, times)
+                _plot_vpt_field_overlay(display, axes[0,1], 'VEL', COLORMAPS['vel'], vel_min, vel_max, hmax, times)
+                _plot_vpt_field_overlay(display, axes[1,0], 'WIDTH', COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True)
+                _plot_vpt_field_overlay(display, axes[1,1], 'LDR', COLORMAPS['ldr'], -35, 5, hmax, times)
+
+    if not first_plotted:
+        print(f"  No valid segments to plot")
+        plt.close()
+        return
+
+    # Apply adaptive time ticks using the full span of plotted data
+    if all_t_start is not None and all_t_end is not None:
+        for ax in axes.flat:
+            _set_adaptive_time_ticks(ax, all_t_start, all_t_end)
+
     fig.suptitle(f'PICASSO VPT - {dtime0.strftime("%Y-%m-%d")}\n{instrument_name}', fontsize=14, fontweight='bold')
     
     # Save
@@ -2110,40 +2145,109 @@ def make_picasso_vpt_plot(ncfile, figpath, blflag=False, skip_all_transition=Fal
     
     print(f"VPT plot saved to: {vpt_figpath}")
 
+def _set_adaptive_time_ticks(ax, t_start, t_end):
+    """Set time axis tick intervals adaptively based on the total time span.
+
+    Uses byminute/byhour parameters so ticks always fall on calendar-aligned
+    boundaries (e.g. :00, :30) regardless of the data start time.
+    """
+    span_hours = (t_end - t_start).total_seconds() / 3600.0
+    if span_hours < 0.5:
+        major = mdates.MinuteLocator(byminute=range(0, 60, 5))
+        minor = mdates.MinuteLocator(byminute=range(0, 60, 1))
+    elif span_hours < 1:
+        major = mdates.MinuteLocator(byminute=range(0, 60, 10))
+        minor = mdates.MinuteLocator(byminute=range(0, 60, 5))
+    elif span_hours < 2:
+        major = mdates.MinuteLocator(byminute=[0, 15, 30, 45])
+        minor = mdates.MinuteLocator(byminute=range(0, 60, 5))
+    elif span_hours < 4:
+        major = mdates.MinuteLocator(byminute=[0, 30])
+        minor = mdates.MinuteLocator(byminute=range(0, 60, 10))
+    elif span_hours < 8:
+        major = mdates.HourLocator(byhour=range(0, 24, 1))
+        minor = mdates.MinuteLocator(byminute=[0, 30])
+    elif span_hours < 16:
+        major = mdates.HourLocator(byhour=range(0, 24, 2))
+        minor = mdates.HourLocator(byhour=range(0, 24, 1))
+    else:
+        major = mdates.HourLocator(byhour=range(0, 24, 3))
+        minor = mdates.HourLocator(byhour=range(0, 24, 1))
+    ax.xaxis.set_major_locator(major)
+    ax.xaxis.set_minor_locator(minor)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+def _mask_transition_rays(radar):
+    """Mask all field data for rays where antenna_transition=1.
+
+    Rays recorded while the antenna is repositioning are marked with
+    antenna_transition=1.  Masking them suppresses spurious coloured pixels
+    in time-height (VPT) plots.
+    """
+    if not (hasattr(radar, 'antenna_transition') and radar.antenna_transition is not None):
+        return
+    if 'data' not in radar.antenna_transition:
+        return
+    transition = radar.antenna_transition['data']
+    mask_rays = transition == 1
+    if not np.any(mask_rays):
+        return
+    for field_name in radar.fields:
+        field_data = radar.fields[field_name]['data']
+        if hasattr(field_data, 'mask'):
+            radar.fields[field_name]['data'].mask[mask_rays, :] = True
+        else:
+            radar.fields[field_name]['data'] = np.ma.masked_where(
+                np.broadcast_to(mask_rays[:, np.newaxis], field_data.shape),
+                field_data
+            )
+    n_transition = int(np.sum(mask_rays))
+    if n_transition > 0:
+        print(f"    Masked {n_transition} antenna transition ray(s)")
+
 def _plot_vpt_field(display, ax, field_name, title, colorbar_label, cmap, vmin, vmax, hmax, times, log_scale=False):
     """Helper function to plot VPT field."""
+    radar = display._radar
+    field_data = radar.fields[field_name]['data']
+    sweep_range = radar.range['data'] / 1000.0  # Convert to km
+
+    time_nums = mdates.date2num(times)
+    X, Y = np.meshgrid(time_nums, sweep_range)
+    field_data_plot = field_data.T  # pcolormesh expects [range, time]
+
     if log_scale:
         norm = colors.LogNorm(vmin=vmin, vmax=vmax)
+        pcm = ax.pcolormesh(X, Y, field_data_plot, cmap=cmap, norm=norm, shading='nearest')
     else:
-        norm = None
-    
-    # Plot without built-in colorbar so we can add horizontal one
-    pcm = display.plot_vpt(field_name, ax=ax, time_axis_flag=True, edges=True,
-                           vmin=vmin, vmax=vmax, cmap=cmap, 
-                           colorbar_flag=False, norm=norm, shading='auto')
-    
+        pcm = ax.pcolormesh(X, Y, field_data_plot, vmin=vmin, vmax=vmax,
+                            cmap=cmap, shading='nearest')
+
     ax.set_ylim(0, hmax)
     ax.set_xlabel('Time (UTC)')
     ax.set_ylabel('Height (km)')
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-    ax.xaxis.set_minor_locator(mdates.HourLocator(interval=1))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-    
+    _set_adaptive_time_ticks(ax, times[0], times[-1])
+
     # Add horizontal colorbar to match composite VPT style
     plt.colorbar(pcm, ax=ax, label=colorbar_label, orientation='horizontal', pad=0.15, aspect=30)
 
 def _plot_vpt_field_overlay(display, ax, field_name, cmap, vmin, vmax, hmax, times, log_scale=False):
     """Helper function to plot VPT field overlay (no colorbar)."""
+    radar = display._radar
+    field_data = radar.fields[field_name]['data']
+    sweep_range = radar.range['data'] / 1000.0
+
+    time_nums = mdates.date2num(times)
+    X, Y = np.meshgrid(time_nums, sweep_range)
+    field_data_plot = field_data.T
+
     if log_scale:
         norm = colors.LogNorm(vmin=vmin, vmax=vmax)
+        ax.pcolormesh(X, Y, field_data_plot, cmap=cmap, norm=norm, shading='nearest')
     else:
-        norm = None
-    
-    display.plot_vpt(field_name, ax=ax, time_axis_flag=True, edges=True,
-                     vmin=vmin, vmax=vmax, cmap=cmap, 
-                     colorbar_flag=False, norm=norm, shading='auto')
+        ax.pcolormesh(X, Y, field_data_plot, vmin=vmin, vmax=vmax,
+                      cmap=cmap, shading='nearest')
 
 def make_picasso_vpt_composite(datestr, inpath, figpath, blflag=False, skip_all_transition=False):
     """
@@ -2176,61 +2280,33 @@ def make_picasso_vpt_composite(datestr, inpath, figpath, blflag=False, skip_all_
     
     for ncfile in vpt_files:
         try:
-            # Just read times to identify segments, don't keep full radar data
+            # Read sweep structure to index one entry per sweep
             radar_ds = pyart.io.read_cfradial(ncfile)
-            
-            # Check if we should skip this file based on antenna_transition filtering
-            if skip_all_transition:
-                valid_sweep_indices = get_valid_sweep_indices(radar_ds, skip_all_transition=True)
-                if len(valid_sweep_indices) == 0:
-                    print(f"  Skipping VPT file (all sweeps are 100% antenna transitions): {os.path.basename(ncfile)}")
-                    del radar_ds
-                    continue
-            
-            times = cftime.num2pydate(radar_ds.time['data'], radar_ds.time['units'])
-            
-            # Find time gaps
-            time_diffs = np.diff([t.timestamp() for t in times])
-            gap_indices = np.where(time_diffs > 600)[0]
-            
-            # Store segment info
-            if len(gap_indices) == 0:
+
+            valid_sweep_indices = get_valid_sweep_indices(radar_ds, skip_all_transition=skip_all_transition)
+            if len(valid_sweep_indices) == 0:
+                print(f"  Skipping VPT file (all sweeps are 100% antenna transitions): {os.path.basename(ncfile)}")
+                del radar_ds
+                continue
+
+            n_added = 0
+            for sweep_idx in valid_sweep_indices:
+                s = int(radar_ds.sweep_start_ray_index['data'][sweep_idx])
+                start_time = cftime.num2pydate(
+                    radar_ds.time['data'][s:s + 1], radar_ds.time['units']
+                )[0]
                 vpt_segment_info.append({
                     'file': ncfile,
-                    'type': 'vpt_full',
-                    'start_time': times[0],
-                    'source': 'VPT'
+                    'type': 'vpt_sweep',
+                    'sweep_idx': sweep_idx,
+                    'start_time': start_time,
+                    'source': 'VPT',
                 })
-                print(f"  Indexed VPT file: {os.path.basename(ncfile)} (1 continuous segment)")
-            else:
-                # Multiple segments - split at time gaps
-                num_segments = len(gap_indices) + 1
-                print(f"  Indexed VPT file: {os.path.basename(ncfile)} (split into {num_segments} segments at time gaps > 10 min)")
-                start_ray = 0
-                for gap_idx in gap_indices:
-                    vpt_segment_info.append({
-                        'file': ncfile,
-                        'type': 'vpt_partial',
-                        'ray_start': start_ray,
-                        'ray_end': gap_idx,
-                        'start_time': times[start_ray],
-                        'source': 'VPT'
-                    })
-                    start_ray = gap_idx + 1
-                
-                # Final segment
-                if start_ray < len(times):
-                    vpt_segment_info.append({
-                        'file': ncfile,
-                        'type': 'vpt_partial',
-                        'ray_start': start_ray,
-                        'ray_end': len(times) - 1,
-                        'start_time': times[start_ray],
-                        'source': 'VPT'
-                    })
-            
-            del radar_ds  # Free memory immediately
-            
+                n_added += 1
+
+            print(f"  Indexed VPT file: {os.path.basename(ncfile)} ({n_added} sweep(s))")
+            del radar_ds
+
         except Exception as e:
             print(f"  Error indexing VPT file {ncfile}: {e}")
             continue
@@ -2332,128 +2408,124 @@ def make_picasso_vpt_composite(datestr, inpath, figpath, blflag=False, skip_all_
     
     # Track whether we've plotted the first valid segment
     first_plotted = False
+    all_t_start = None
+    all_t_end = None
     
     # Plot each segment - load data on demand
     for idx, seg_info in enumerate(vpt_segment_info):
         try:
-            # Load only this segment's data
-            if seg_info['type'] == 'vpt_full':
+            # Load sweep and split at 60 s gaps (VPT) or 600 s gaps (MAN dwell)
+            if seg_info['type'] == 'vpt_sweep':
                 radar_ds = pyart.io.read_cfradial(seg_info['file'])
-                radar_segment = split_radar_at_time_gaps(radar_ds, max_gap_seconds=600)[0]
-                del radar_ds
-                
-            elif seg_info['type'] == 'vpt_partial':
-                radar_ds = pyart.io.read_cfradial(seg_info['file'])
-                # Extract rays for this segment
-                ray_indices = np.arange(seg_info['ray_start'], seg_info['ray_end'] + 1)
-                radar_segment = radar_ds.extract_sweeps([0])
-                radar_segment.time['data'] = radar_ds.time['data'][ray_indices]
-                for field_name in radar_ds.fields.keys():
-                    radar_segment.fields[field_name]['data'] = radar_ds.fields[field_name]['data'][ray_indices, :]
-                radar_segment.azimuth['data'] = radar_ds.azimuth['data'][ray_indices]
-                radar_segment.elevation['data'] = radar_ds.elevation['data'][ray_indices]
-                # Update metadata to reflect actual extracted dimensions
-                radar_segment.nrays = len(ray_indices)
-                radar_segment.sweep_end_ray_index['data'][0] = len(ray_indices) - 1
-                if hasattr(radar_segment, 'antenna_transition') and radar_segment.antenna_transition is not None:
-                    if 'data' in radar_segment.antenna_transition:
-                        radar_segment.antenna_transition['data'] = radar_ds.antenna_transition['data'][ray_indices]
-                del radar_ds
-                
+                sweep = radar_ds.extract_sweeps([seg_info['sweep_idx']])
+                radar_sub_segments = split_radar_at_time_gaps(sweep, max_gap_seconds=60)
+                del radar_ds, sweep
+
             elif seg_info['type'] == 'man_dwell':
                 radar_ds = pyart.io.read_cfradial(seg_info['file'])
                 dwell_sweep = radar_ds.extract_sweeps([seg_info['sweep_idx']])
-                radar_segment = split_radar_at_time_gaps(dwell_sweep, max_gap_seconds=600)[0]
+                radar_sub_segments = split_radar_at_time_gaps(dwell_sweep, max_gap_seconds=600)
                 del radar_ds, dwell_sweep
-            
-            # Validate segment has sufficient dimensions for plotting
-            if radar_segment.nrays < 2 or radar_segment.ngates < 2:
-                print(f"  Skipping segment {idx} with insufficient dimensions: nrays={radar_segment.nrays}, ngates={radar_segment.ngates}")
-                del radar_segment
-                continue
-            
-            # Validate that data dimensions match coordinate dimensions
-            try:
-                field_data = radar_segment.fields['DBZ']['data']
-                time_len = len(radar_segment.time['data'])
-                range_len = len(radar_segment.range['data'])
-                
-                if field_data.shape[0] != time_len or field_data.shape[1] != range_len:
-                    print(f"  Skipping segment {idx} with mismatched field dimensions: field shape={field_data.shape}, time={time_len}, range={range_len}")
+
+            for radar_segment in radar_sub_segments:
+                # Validate segment has sufficient dimensions for plotting
+                if radar_segment.nrays < 2 or radar_segment.ngates < 2:
+                    print(f"  Skipping segment {idx} with insufficient dimensions: nrays={radar_segment.nrays}, ngates={radar_segment.ngates}")
                     del radar_segment
                     continue
-                
-                if time_len < 2 or range_len < 2:
-                    print(f"  Skipping segment {idx} with insufficient coordinate length: time={time_len}, range={range_len}")
+
+                # Validate that data dimensions match coordinate dimensions
+                try:
+                    field_data = radar_segment.fields['DBZ']['data']
+                    time_len = len(radar_segment.time['data'])
+                    range_len = len(radar_segment.range['data'])
+
+                    if field_data.shape[0] != time_len or field_data.shape[1] != range_len:
+                        print(f"  Skipping segment {idx} with mismatched field dimensions: field shape={field_data.shape}, time={time_len}, range={range_len}")
+                        del radar_segment
+                        continue
+
+                    if time_len < 2 or range_len < 2:
+                        print(f"  Skipping segment {idx} with insufficient coordinate length: time={time_len}, range={range_len}")
+                        del radar_segment
+                        continue
+                except Exception as e:
+                    print(f"  Skipping segment {idx}: could not validate dimensions - {e}")
                     del radar_segment
                     continue
-            except Exception as e:
-                print(f"  Skipping segment {idx}: could not validate dimensions - {e}")
-                del radar_segment
-                continue
-            
-            times = cftime.num2pydate(radar_segment.time['data'], radar_segment.time['units'])
-            display = pyart.graph.RadarDisplay(radar_segment)
-            
-            # Extract field labels from metadata
-            dbz_long = radar_segment.fields['DBZ'].get('long_name', 'Reflectivity')
-            dbz_units = radar_segment.fields['DBZ'].get('units', 'dBZ')
-            dbz_title = f"{dbz_long} ({dbz_units})"
-            
-            vel_long = radar_segment.fields['VEL'].get('long_name', 'Velocity')
-            vel_units = radar_segment.fields['VEL'].get('units', 'm/s')
-            vel_title = f"{vel_long} ({vel_units})"
-            
-            width_long = radar_segment.fields['WIDTH'].get('long_name', 'Spectrum Width')
-            width_units = radar_segment.fields['WIDTH'].get('units', 'm/s')
-            width_title = f"{width_long} ({width_units})"
-            
-            ldr_long = radar_segment.fields['LDR'].get('long_name', 'LDR')
-            ldr_units = radar_segment.fields['LDR'].get('units', 'dB')
-            ldr_title = f"{ldr_long} ({ldr_units})"
-            
-            if not first_plotted:
-                # First valid segment - create plots with colorbars
-                _plot_vpt_field_composite(display, axes[0,0], 'DBZ', dbz_title, 'Reflectivity (dBZ)',
-                               COLORMAPS['dbz'], -60, 40, hmax, times, first=True)
-                
-                vel_field = radar_segment.fields['VEL']
-                vel_min = vel_field.get('field_limit_lower', -10)
-                vel_max = vel_field.get('field_limit_upper', 10)
-                _plot_vpt_field_composite(display, axes[0,1], 'VEL', vel_title, 'Velocity (m/s)',
-                               COLORMAPS['vel'], vel_min, vel_max, hmax, times, first=True)
-                
-                _plot_vpt_field_composite(display, axes[1,0], 'WIDTH', width_title, 'Spectrum Width (m/s)',
-                               COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True, first=True)
-                
-                _plot_vpt_field_composite(display, axes[1,1], 'LDR', ldr_title, 'LDR (dB)',
-                               COLORMAPS['ldr'], -35, 5, hmax, times, first=True)
-                
-                first_plotted = True
-            else:
-                # Subsequent segments - overlay without colorbars
-                _plot_vpt_field_composite(display, axes[0,0], 'DBZ', dbz_title, 'Reflectivity (dBZ)',
-                               COLORMAPS['dbz'], -60, 40, hmax, times, first=False)
-                
-                vel_field = radar_segment.fields['VEL']
-                vel_min = vel_field.get('field_limit_lower', -10)
-                vel_max = vel_field.get('field_limit_upper', 10)
-                _plot_vpt_field_composite(display, axes[0,1], 'VEL', vel_title, 'Velocity (m/s)',
-                               COLORMAPS['vel'], vel_min, vel_max, hmax, times, first=False)
-                
-                _plot_vpt_field_composite(display, axes[1,0], 'WIDTH', width_title, 'Spectrum Width (m/s)',
-                               COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True, first=False)
-                
-                _plot_vpt_field_composite(display, axes[1,1], 'LDR', ldr_title, 'LDR (dB)',
-                               COLORMAPS['ldr'], -35, 5, hmax, times, first=False)
-            
-            # Free memory immediately after plotting
-            del radar_segment, display, times
+
+                times = cftime.num2pydate(radar_segment.time['data'], radar_segment.time['units'])
+                if all_t_start is None or times[0] < all_t_start:
+                    all_t_start = times[0]
+                if all_t_end is None or times[-1] > all_t_end:
+                    all_t_end = times[-1]
+                _mask_transition_rays(radar_segment)
+                display = pyart.graph.RadarDisplay(radar_segment)
+
+                # Extract field labels from metadata
+                dbz_long = radar_segment.fields['DBZ'].get('long_name', 'Reflectivity')
+                dbz_units = radar_segment.fields['DBZ'].get('units', 'dBZ')
+                dbz_title = f"{dbz_long} ({dbz_units})"
+
+                vel_long = radar_segment.fields['VEL'].get('long_name', 'Velocity')
+                vel_units = radar_segment.fields['VEL'].get('units', 'm/s')
+                vel_title = f"{vel_long} ({vel_units})"
+
+                width_long = radar_segment.fields['WIDTH'].get('long_name', 'Spectrum Width')
+                width_units = radar_segment.fields['WIDTH'].get('units', 'm/s')
+                width_title = f"{width_long} ({width_units})"
+
+                ldr_long = radar_segment.fields['LDR'].get('long_name', 'LDR')
+                ldr_units = radar_segment.fields['LDR'].get('units', 'dB')
+                ldr_title = f"{ldr_long} ({ldr_units})"
+
+                if not first_plotted:
+                    # First valid segment - create plots with colorbars
+                    _plot_vpt_field_composite(display, axes[0,0], 'DBZ', dbz_title, 'Reflectivity (dBZ)',
+                                   COLORMAPS['dbz'], -60, 40, hmax, times, first=True)
+
+                    vel_field = radar_segment.fields['VEL']
+                    vel_min = vel_field.get('field_limit_lower', -10)
+                    vel_max = vel_field.get('field_limit_upper', 10)
+                    _plot_vpt_field_composite(display, axes[0,1], 'VEL', vel_title, 'Velocity (m/s)',
+                                   COLORMAPS['vel'], vel_min, vel_max, hmax, times, first=True)
+
+                    _plot_vpt_field_composite(display, axes[1,0], 'WIDTH', width_title, 'Spectrum Width (m/s)',
+                                   COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True, first=True)
+
+                    _plot_vpt_field_composite(display, axes[1,1], 'LDR', ldr_title, 'LDR (dB)',
+                                   COLORMAPS['ldr'], -35, 5, hmax, times, first=True)
+
+                    first_plotted = True
+                else:
+                    # Subsequent segments - overlay without colorbars
+                    _plot_vpt_field_composite(display, axes[0,0], 'DBZ', dbz_title, 'Reflectivity (dBZ)',
+                                   COLORMAPS['dbz'], -60, 40, hmax, times, first=False)
+
+                    vel_field = radar_segment.fields['VEL']
+                    vel_min = vel_field.get('field_limit_lower', -10)
+                    vel_max = vel_field.get('field_limit_upper', 10)
+                    _plot_vpt_field_composite(display, axes[0,1], 'VEL', vel_title, 'Velocity (m/s)',
+                                   COLORMAPS['vel'], vel_min, vel_max, hmax, times, first=False)
+
+                    _plot_vpt_field_composite(display, axes[1,0], 'WIDTH', width_title, 'Spectrum Width (m/s)',
+                                   COLORMAPS['width'], 0.01, 3, hmax, times, log_scale=True, first=False)
+
+                    _plot_vpt_field_composite(display, axes[1,1], 'LDR', ldr_title, 'LDR (dB)',
+                                   COLORMAPS['ldr'], -35, 5, hmax, times, first=False)
+
+                # Free memory immediately after plotting this sub-segment
+                del radar_segment, display, times
             
         except Exception as e:
             print(f"  Error plotting segment {idx}: {e}")
             continue
     
+    # Apply adaptive time ticks based on the full time span of plotted data
+    if first_plotted and all_t_start is not None and all_t_end is not None:
+        for ax in axes.flat:
+            _set_adaptive_time_ticks(ax, all_t_start, all_t_end)
+
     # Count sources
     vpt_count = sum(1 for s in vpt_segment_info if s['source'] == 'VPT')
     man_count = sum(1 for s in vpt_segment_info if s['source'].startswith('MAN_'))
@@ -2648,6 +2720,7 @@ def make_picasso_man_dwell_composite(datestr, inpath, figpath, blflag=False, ski
             continue
         
         try:
+            _mask_transition_rays(radar)
             display = pyart.graph.RadarDisplay(radar)
             
             # Extract field labels from metadata (once per dwell, they should be the same)
@@ -2705,6 +2778,11 @@ def make_picasso_man_dwell_composite(datestr, inpath, figpath, blflag=False, ski
             print(f"  Error plotting segment {idx}: {e}")
             continue
     
+    # Apply adaptive time ticks based on the full time span of plotted data
+    if dwell_data:
+        for ax in axes.flat:
+            _set_adaptive_time_ticks(ax, dwell_data[0]['start_time'], dwell_data[-1]['times'][-1])
+
     # Set title
     date_obj = datetime.datetime.strptime(datestr, '%Y%m%d')
     fig.suptitle(f'PICASSO MAN Vertical Pointing Dwell Composite VPT - {date_obj.strftime("%Y-%m-%d")}\n'

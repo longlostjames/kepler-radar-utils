@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Apply edited CSV files to MAN NetCDF files for a given date.
+Apply edited CSV files to NetCDF files for a given date.
+
+The script discovers which NetCDF files to update by scanning the CSV directory
+for files ending in '_sweeps.csv' or '_antenna_transition.csv'. The corresponding
+NetCDF filename is derived by stripping that suffix and appending '.nc'. This
+means any scan type (vpt, man, ppi, ...) can be edited.
 
 Usage:
-    python apply_csv_edits.py -d YYYYMMDD -i /path/to/data [-c csv_dir] [-p pattern] [--no-backup]
+    python apply_csv_edits.py -d YYYYMMDD -i /path/to/data [-c csv_dir] [--no-backup]
 
 Example:
-    python apply_csv_edits.py -d 20250305 -i /gws/nopw/j04/ncas_obs_vol2/cao/processing/picasso
+    python apply_csv_edits.py -d 20171216 -i /gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/picasso/L1_v1.0.0
     python apply_csv_edits.py -d 20250305 -i /path/to/data -c /path/to/csv_edits
-    python apply_csv_edits.py -d 20250305 -i /path/to/data -p '*_man_*.nc'
     python apply_csv_edits.py -d 20250305 -i /path/to/data --no-backup
 """
 
@@ -20,7 +24,7 @@ from kepler_utils import apply_csv_edits_for_date
 def parse_command_line():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Apply edited CSV files to MAN NetCDF files for a given date'
+        description='Apply edited CSV files to NetCDF files for a given date'
     )
     
     parser.add_argument(
@@ -39,12 +43,6 @@ def parse_command_line():
         '-c', '--csv-dir',
         default=None,
         help='Directory containing CSV files in YYYYMMDD subdirectories (default: same as input-dir)'
-    )
-    
-    parser.add_argument(
-        '-p', '--pattern',
-        default='*_man_*.nc',
-        help='Filename pattern to match (default: *_man_*.nc)'
     )
     
     parser.add_argument(
@@ -71,12 +69,11 @@ def main():
     args = parse_command_line()
     
     print("="*70)
-    print("Apply CSV Edits to MAN Files")
+    print("Apply CSV Edits to NetCDF Files")
     print("="*70)
     print(f"Date:        {args.date}")
     print(f"Data dir:    {args.input_dir}")
     print(f"CSV dir:     {args.csv_dir if args.csv_dir else args.input_dir + ' (same as data dir)'}")
-    print(f"Pattern:     {args.pattern}")
     print(f"Backup:      {'No' if args.no_backup else 'Yes'}")
     print("="*70)
     print()
@@ -87,7 +84,6 @@ def main():
             data_dir=args.input_dir,
             csv_dir=args.csv_dir,
             backup=not args.no_backup,
-            pattern=args.pattern
         )
     except Exception as e:
         print(f"\nERROR: {e}")
