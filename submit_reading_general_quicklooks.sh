@@ -27,12 +27,15 @@ PYTHON_SCRIPT="$SCRIPT_DIR/make_reading_general_quicklooks.py"
 BASE_ARGS="-i $DEFAULT_INPATH -o $DEFAULT_OUTPATH"
 
 echo "Choose option:"
-echo "  1) Single date"
-echo "  2) Date range"
-echo "  3) Custom date range"
+echo "  1) Single date (VPT + PPI)"
+echo "  2) Date range (VPT + PPI)"
+echo "  3) Custom date range (VPT + PPI)"
 echo "  4) Boundary layer mode (single date, 4 km height limit)"
+echo "  5) Single date — VPT only"
+echo "  6) Single date — PPI only"
+echo "  7) Single date — PPI with day-outermost map extent"
 echo ""
-read -p "Enter choice [1-4]: " choice
+read -p "Enter choice [1-7]: " choice
 
 case $choice in
     1)
@@ -74,6 +77,21 @@ case $choice in
         read -p "Enter date (YYYYMMDD): " single_date
         echo "Generating BL quicklooks for $single_date..."
         python $PYTHON_SCRIPT -d $single_date $BASE_ARGS -b
+        ;;
+    5)
+        read -p "Enter date (YYYYMMDD): " single_date
+        echo "Generating VPT-only quicklooks for $single_date..."
+        python $PYTHON_SCRIPT -d $single_date $BASE_ARGS --vpt-only
+        ;;
+    6)
+        read -p "Enter date (YYYYMMDD): " single_date
+        echo "Generating PPI-only quicklooks for $single_date..."
+        python $PYTHON_SCRIPT -d $single_date $BASE_ARGS --ppi-only
+        ;;
+    7)
+        read -p "Enter date (YYYYMMDD): " single_date
+        echo "Generating PPI-only quicklooks (day-outermost extent) for $single_date..."
+        python $PYTHON_SCRIPT -d $single_date $BASE_ARGS --ppi-only --ppi-map-day-extent
         ;;
     *)
         echo "Invalid choice"
