@@ -1036,6 +1036,7 @@ def process_ppi_file_with_sweep_detection(
             
             # Get location for NCAS filename
             location = campaign
+            radar_name_key = 'ncas-mobile-ka-band-radar-1'  # default
             try:
                 with open(yaml_project_file, 'r') as file:
                     projects = yaml.safe_load(file)
@@ -1052,9 +1053,10 @@ def process_ppi_file_with_sweep_detection(
                                         location = radar_info['platform']['location'].lower()
                                         break
                         break
+            
             except:
                 pass
-            
+
             # Extract actual start time
             time_str = sweep_radar.time['units'].split()[-1]
             start_time_dt = datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
@@ -1068,7 +1070,7 @@ def process_ppi_file_with_sweep_detection(
                 sweep_radar.sweep_mode['data'][0] = 'pointing'
                 
                 # Build NCAS filename
-                filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_pointing_l1_v{data_version}.nc"
+                filename = f"{radar_name_key}_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_pointing_l1_v{data_version}.nc"
                 output_path = os.path.join(outdir, filename)
                 
                 # Write file
@@ -1134,7 +1136,7 @@ def process_ppi_file_with_sweep_detection(
                             phase_first_ray_time = phase_start_dt + datetime.timedelta(seconds=float(phase_radar.time['data'][0]))
                             
                             # Build filename
-                            filename = f"ncas-mobile-ka-band-radar-1_{location}_{phase_first_ray_time.strftime('%Y%m%d-%H%M%S')}_{phase_type}_l1_v{data_version}.nc"
+                            filename = f"{radar_name_key}_{location}_{phase_first_ray_time.strftime('%Y%m%d-%H%M%S')}_{phase_type}_l1_v{data_version}.nc"
                             output_path = os.path.join(outdir, filename)
                             
                             # Write file
@@ -1156,7 +1158,7 @@ def process_ppi_file_with_sweep_detection(
                         # Single phase scanning sweep - write as PPI
                         sweep_radar.sweep_mode['data'][0] = 'ppi'
                         
-                        filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
+                        filename = f"{radar_name_key}_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
                         output_path = os.path.join(outdir, filename)
                         
                         pyart.io.write_cfradial(output_path, sweep_radar, format='NETCDF4')
@@ -1176,7 +1178,7 @@ def process_ppi_file_with_sweep_detection(
                     # No pointing period splitting - write as single PPI
                     sweep_radar.sweep_mode['data'][0] = 'ppi'
                     
-                    filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
+                    filename = f"{radar_name_key}_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
                     output_path = os.path.join(outdir, filename)
                     
                     pyart.io.write_cfradial(output_path, sweep_radar, format='NETCDF4')
@@ -1211,7 +1213,7 @@ def process_ppi_file_with_sweep_detection(
         first_ray_time = start_time_dt + datetime.timedelta(seconds=float(radar.time['data'][0]))
         
         # Create output filename
-        filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
+        filename = f"{radar_name_key}_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_ppi_l1_v{data_version}.nc"
         output_path = os.path.join(outdir, filename)
         
         # Write file
@@ -2932,6 +2934,7 @@ def process_kepler_picasso_day_step1(
         if len(man_files) > 0:
             # Get platform location from YAML file for filename construction
             location = 'unknown'  # default
+            radar_name_key = 'ncas-mobile-ka-band-radar-1'  # default
             try:
                 with open(yaml_project_file, 'r') as file:
                     projects = yaml.safe_load(file)
@@ -3002,7 +3005,7 @@ def process_kepler_picasso_day_step1(
                         start_time = datetime.datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
                         first_ray_time = start_time + datetime.timedelta(seconds=float(radar_obj.time['data'][0]))
                         
-                        filename = f"ncas-mobile-ka-band-radar-1_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_man_l1_v{data_version}.nc"
+                        filename = f"{radar_name_key}_{location}_{first_ray_time.strftime('%Y%m%d-%H%M%S')}_man_l1_v{data_version}.nc"
                         filepath = os.path.join(outdir, filename)
                         
                         # Verify radar object has required position fields

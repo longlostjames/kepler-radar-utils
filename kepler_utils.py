@@ -2648,6 +2648,7 @@ def multi_mmclx2cfrad(
     
     # Determine location from project YAML file
     location = 'unknown'  # default
+    radar_name_key = 'ncas-mobile-ka-band-radar-1'  # default
     try:
         with open(yaml_project_file, 'r') as f:
             projects = yaml.safe_load(f)
@@ -2695,7 +2696,7 @@ def multi_mmclx2cfrad(
                 # Simple filename with correct data version
                 outfile = os.path.join(
                     outdir,
-                    f'ncas-mobile-ka-band-radar-1_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
+                    f'{radar_name_key}_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
                 )
                 
                 print(f"Creating output file: {outfile}")
@@ -2765,7 +2766,7 @@ def multi_mmclx2cfrad(
         
         outfile = os.path.join(
             outdir,
-            f'ncas-mobile-ka-band-radar-1_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
+            f'{radar_name_key}_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
         )
         
         print(f"Creating multi-sweep output file: {outfile}")
