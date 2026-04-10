@@ -44,7 +44,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 from matplotlib import colors
-import cmocean
 
 from kepler_utils import get_valid_sweep_indices
 
