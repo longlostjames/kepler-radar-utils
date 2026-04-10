@@ -2158,7 +2158,7 @@ def _add_ncas_metadata_manually(
                 pass
             ds.setncattr('references', 'www.metek.de')
             
-            # Override source, title, references from YAML if available
+            # Override source, title, institution, references from YAML if available
             # Check project_instrument_info first (from project YAML)
             if project_instrument_info:
                 if 'source' in project_instrument_info:
@@ -2167,6 +2167,18 @@ def _add_ncas_metadata_manually(
                 if 'title' in project_instrument_info:
                     ds.setncattr('title', project_instrument_info['title'])
                     print(f"Set title from project YAML: {project_instrument_info['title']}")
+                if 'data_creator' in project_instrument_info:
+                    dc = project_instrument_info['data_creator']
+                    if isinstance(dc, dict):
+                        if 'institution' in dc:
+                            ds.setncattr('institution', dc['institution'])
+                            print(f"Set institution from project YAML: {dc['institution']}")
+                        if 'name' in dc:
+                            ds.setncattr('creator_name', dc['name'])
+                        if 'email' in dc:
+                            ds.setncattr('creator_email', dc['email'])
+                        if 'pid' in dc:
+                            ds.setncattr('creator_url', dc['pid'])
                 if 'comment' in project_instrument_info:
                     _yaml_comment = project_instrument_info['comment'].rstrip()
                     # Extract any extra content (e.g. logp reconstruction note) from the
@@ -2210,10 +2222,13 @@ def _add_ncas_metadata_manually(
             ds.setncattr('processing_level', '1')
             ds.setncattr('licence', 'This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).')
             
-            # Add creator information
-            ds.setncattr('creator_name', 'Chris Walden')
-            ds.setncattr('creator_email', 'chris.walden@ncas.ac.uk')
-            ds.setncattr('creator_url', 'https://orcid.org/0000-0002-5718-466X')
+            # Add creator information - defaults, overridden above from data_creator if present
+            if not hasattr(ds, 'creator_name') or not ds.getncattr('creator_name'):
+                ds.setncattr('creator_name', 'Chris Walden')
+            if not hasattr(ds, 'creator_email') or not ds.getncattr('creator_email'):
+                ds.setncattr('creator_email', 'chris.walden@ncas.ac.uk')
+            if not hasattr(ds, 'creator_url') or not ds.getncattr('creator_url'):
+                ds.setncattr('creator_url', 'https://orcid.org/0000-0002-5718-466X')
             
             # Add instrument metadata - always set defaults, then override from YAML if available
             ds.setncattr('instrument_manufacturer', 'Meteorologische Messtechnik (Metek) GmbH')
