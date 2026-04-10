@@ -231,7 +231,7 @@ def make_cobalt_rhi_plot(ncfile,figpath,blflag=False):
             print(f"sweep {s}/{nsweeps}");
             rhi_az = RadarDS.get_azimuth(s)[0];
             fig, ax = plt.subplots(2,2,figsize=(15,15),constrained_layout=True);
-            fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.2,wspace=0.2)
+            fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.4,wspace=0.2)
             display.plot_rhi("DBZ", ax=ax[0,0], sweep=s, vmin=-40, vmax=40, norm=None, gatefilter=gatefilter,
                              cmap=dbz_cmap, colorbar_orient='horizontal',filter_transitions=True);         
             ax[0,0].set_ylim(0,hmax)
@@ -270,7 +270,7 @@ def make_cobalt_rhi_plot(ncfile,figpath,blflag=False):
             plt.close();
     else:
         fig, ax = plt.subplots(4,1,figsize=(12,20),constrained_layout=True)
-        fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.2,wspace=0.2)
+        fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.4,wspace=0.2)
         display.plot_rhi("DBZ", ax=ax[0], sweep=0, vmin=-40, vmax=40, 
                          norm=None, cmap=dbz_cmap, colorbar_orient='horizontal')
         ax[0].set_ylim(0,hmax)
@@ -390,7 +390,7 @@ def make_cobalt_vpt_plot_day(datestr,inpath,figpath,blflag=False):
         pass
     
     fig, ax = plt.subplots(4,1,figsize=(12,18),constrained_layout=True)
-    fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.2,wspace=0.2)
+    fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.4,wspace=0.2)
 
     
     #pyart.correct.despeckle_field(RadarDS, "SNR", size=3, threshold=-20, gatefilter=gatefilter, delta=5.0)

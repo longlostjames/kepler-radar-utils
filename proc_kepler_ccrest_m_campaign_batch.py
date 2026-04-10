@@ -140,6 +140,28 @@ def main():
     parser.add_argument('--no-vpt', action='store_true', help='Disable vertical profiling')
     parser.add_argument('--max-age', type=int, default=6,
                         help='Maximum age of input files in hours (default: 6 hours)')
+    parser.add_argument('--stationary-threshold', type=float, default=0.5,
+                        help='Per-ray |d_az| threshold (deg) for stationary ray classification')
+    parser.add_argument('--stationary-std-threshold', type=float, default=1.0,
+                        help='Maximum azimuth std (deg) for a stationary segment')
+    parser.add_argument('--stationary-range-threshold', type=float, default=2.0,
+                        help='Maximum azimuth range (deg) for a stationary segment')
+    parser.add_argument('--stationary-total-change-threshold', type=float, default=3.0,
+                        help='Maximum total unwrapped azimuth excursion (deg) for stationary segments')
+    parser.add_argument('--stationary-scan-rate-threshold', type=float, default=0.2,
+                        help='Median |scan_rate| threshold (deg/s) above which a segment is treated as scanning')
+    parser.add_argument('--direction-rate-threshold', type=float, default=0.1,
+                        help='Median per-ray d_az threshold (deg/ray) for scan direction')
+    parser.add_argument('--pointing-window-size', type=int, default=10,
+                        help='Rolling window size (rays) for pointing split detection')
+    parser.add_argument('--pointing-az-std-threshold', type=float, default=1.0,
+                        help='Rolling-window azimuth std threshold (deg) for pointing split')
+    parser.add_argument('--min-pointing-rays', type=int, default=10,
+                        help='Minimum contiguous rays to keep a pointing phase')
+    parser.add_argument('--pointing-total-change-threshold', type=float, default=3.0,
+                        help='Maximum total unwrapped azimuth excursion (deg) for pointing phases')
+    parser.add_argument('--pointing-scan-rate-threshold', type=float, default=0.2,
+                        help='Median |scan_rate| threshold (deg/s) above which pointing phases are reclassified as ppi')
 
     args = parser.parse_args()
 
@@ -205,6 +227,17 @@ def main():
         print(f"  North angle correction: {args.north_angle}°")
         print(f"  Gzip input: {args.gzip}")
         print(f"  Use latest subdirectory: {args.latest}")
+        print(f"  Stationary threshold: {args.stationary_threshold} deg/ray")
+        print(f"  Stationary std threshold: {args.stationary_std_threshold} deg")
+        print(f"  Stationary range threshold: {args.stationary_range_threshold} deg")
+        print(f"  Stationary total change threshold: {args.stationary_total_change_threshold} deg")
+        print(f"  Stationary scan rate threshold: {args.stationary_scan_rate_threshold} deg/s")
+        print(f"  Direction rate threshold: {args.direction_rate_threshold} deg/ray")
+        print(f"  Pointing window size: {args.pointing_window_size} rays")
+        print(f"  Pointing az std threshold: {args.pointing_az_std_threshold} deg")
+        print(f"  Minimum pointing rays: {args.min_pointing_rays}")
+        print(f"  Pointing total change threshold: {args.pointing_total_change_threshold} deg")
+        print(f"  Pointing scan rate threshold: {args.pointing_scan_rate_threshold} deg/s")
         sys.exit(0)
 
     # Process each date
@@ -253,7 +286,18 @@ def main():
                 single_sweep=args.single_sweep,
                 revised_northangle=args.north_angle,
                 no_vpt=args.no_vpt,
-                max_age=args.max_age
+                max_age=args.max_age,
+                stationary_threshold=args.stationary_threshold,
+                stationary_std_threshold=args.stationary_std_threshold,
+                stationary_range_threshold=args.stationary_range_threshold,
+                stationary_total_change_threshold=args.stationary_total_change_threshold,
+                stationary_scan_rate_threshold=args.stationary_scan_rate_threshold,
+                direction_rate_threshold=args.direction_rate_threshold,
+                pointing_window_size=args.pointing_window_size,
+                pointing_az_std_threshold=args.pointing_az_std_threshold,
+                min_pointing_rays=args.min_pointing_rays,
+                pointing_total_change_threshold=args.pointing_total_change_threshold,
+                pointing_scan_rate_threshold=args.pointing_scan_rate_threshold,
             )
 
             duration = datetime.datetime.now() - start_time

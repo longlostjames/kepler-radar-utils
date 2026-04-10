@@ -19,35 +19,35 @@
       programme: Jet Zero
 
       abstract: |-
-      	Clouds formed by aircraft (contrails) are the most easily visible human forcing of the climate system. Trapping energy in the Earth
-	system, they contribute more than half of the total climate impact of aviation. This makes reducing contrails an important goal to
-	achieve the UK's climate commitments. Theoretical considerations indicate two pathways for reducing contrails. First, improving engine
-	design to emit fewer particulates may reduce contrail lifetimes and so their climate impact. Second, rerouting aircraft to avoid contrail
-	forming regions. Assessing these pathways requires accurate models of contrail formation, evaluated at the level of an individual
-	aircraft. This evaluation requires observations of contrails across their lifetime, coupled to details of the generating aircraft. Even
-	where they are matched to specific aircraft, existing observations typically view a contrail once, (limiting their use for measuring
-	contrail lifecycles) or cannot provide the detail on the contrail microphysical properties (such as ice crystal number or shape)
-	necessary to assess the efficacy of different pathways to contrail reduction. Improving confidence in our contrail models urgently
-	requires novel observations of contrail properties and lifecycles from individual aircraft. The impact of aircraft on clouds is not
-	limited to contrails forming in clear air. Over half of contrails form embedded in existing clouds and the particulates emitted by
-	aircraft can affect cloud formation several days after they were released. These effects produce a cooling, potentially large enough to
-	offset all other warming effects of aviation, but are not represented in aircraft-level models used for planning contrail avoidance
-	strategies. There are few observational constraints of these effects, targeted observations of the impact of individual aircraft on cloud
-	microphysics are required to assess them and to improve future model simulations. To address these uncertainties and around contrail
-	formation, persistance and climate impact as well as aerosol-cloud interactions, COBALT has three core components: 1. A measurement
-	campaign in the southern UK, combining an array of ground-based cameras with a steerable cloud radar, to make high resolution observations
-	of contrail formation from individual aircraft. Guided by aircraft transponder information, these observations will be focused on
-	contrails and clouds modified by aircraft, characterising contrail formation and perturbed cloud properties within the first few hours of
-	their lifecycle. 2. Counterpart satellite observations, using novel techniques to characterise contrail and cloud development from an
-	hour to several days behind the aircraft. Building on techniques for studying natural cirrus, this will produce a complete
-	characterisation of the contrail lifecycle, along with the first estimate of the aviation aerosol impact on existing cirrus clouds at a
-	global scale. 3. The complete lifecycle characterisation will be combined with flight data from aircraft operators to produce a unique
-	dataset designed specifically for the evaluation of aircraft-level models of contrail formation. An initial focus will be placed on
-	evaluating aircraft-scale models, as these are currently being used to plan aircraft diversions. A comparison of climate model
-	parametrisations of contrail formation will assess the ability of the parametrisations to reproduce the wide-area (>1000km2) contrail
-	observations taken by the camera array. Led by an inter-disciplinary team of scientists and engineers, with partners in key international
-	research centres and industry groups, COBALT will provide the tools necessary to evaluate our current models and ability to avoid
-	contrails, guiding future modelling and operational trials of sustainable fuels and contrail avoidance.
+        Clouds formed by aircraft (contrails) are the most easily visible human forcing of the climate system. Trapping energy in the Earth
+        system, they contribute more than half of the total climate impact of aviation. This makes reducing contrails an important goal to
+        achieve the UK's climate commitments. Theoretical considerations indicate two pathways for reducing contrails. First, improving engine
+        design to emit fewer particulates may reduce contrail lifetimes and so their climate impact. Second, rerouting aircraft to avoid contrail
+        forming regions. Assessing these pathways requires accurate models of contrail formation, evaluated at the level of an individual
+        aircraft. This evaluation requires observations of contrails across their lifetime, coupled to details of the generating aircraft. Even
+        where they are matched to specific aircraft, existing observations typically view a contrail once, (limiting their use for measuring
+        contrail lifecycles) or cannot provide the detail on the contrail microphysical properties (such as ice crystal number or shape)
+        necessary to assess the efficacy of different pathways to contrail reduction. Improving confidence in our contrail models urgently
+        requires novel observations of contrail properties and lifecycles from individual aircraft. The impact of aircraft on clouds is not
+        limited to contrails forming in clear air. Over half of contrails form embedded in existing clouds and the particulates emitted by
+        aircraft can affect cloud formation several days after they were released. These effects produce a cooling, potentially large enough to
+        offset all other warming effects of aviation, but are not represented in aircraft-level models used for planning contrail avoidance
+        strategies. There are few observational constraints of these effects, targeted observations of the impact of individual aircraft on cloud
+        microphysics are required to assess them and to improve future model simulations. To address these uncertainties and around contrail
+        formation, persistance and climate impact as well as aerosol-cloud interactions, COBALT has three core components: 1. A measurement
+        campaign in the southern UK, combining an array of ground-based cameras with a steerable cloud radar, to make high resolution observations
+        of contrail formation from individual aircraft. Guided by aircraft transponder information, these observations will be focused on
+        contrails and clouds modified by aircraft, characterising contrail formation and perturbed cloud properties within the first few hours of
+        their lifecycle. 2. Counterpart satellite observations, using novel techniques to characterise contrail and cloud development from an
+        hour to several days behind the aircraft. Building on techniques for studying natural cirrus, this will produce a complete
+        characterisation of the contrail lifecycle, along with the first estimate of the aviation aerosol impact on existing cirrus clouds at a
+        global scale. 3. The complete lifecycle characterisation will be combined with flight data from aircraft operators to produce a unique
+        dataset designed specifically for the evaluation of aircraft-level models of contrail formation. An initial focus will be placed on
+        evaluating aircraft-scale models, as these are currently being used to plan aircraft diversions. A comparison of climate model
+        parametrisations of contrail formation will assess the ability of the parametrisations to reproduce the wide-area (>1000km2) contrail
+        observations taken by the camera array. Led by an inter-disciplinary team of scientists and engineers, with partners in key international
+        research centres and industry groups, COBALT will provide the tools necessary to evaluate our current models and ability to avoid
+        contrails, guiding future modelling and operational trials of sustainable fuels and contrail avoidance.
 
       scientific_area:
         - Atmospheric: 100%
@@ -74,9 +74,9 @@
 
     co-investigators:
       - Ryan R Neely:
-      	  institution: University of Leeds
+          institution: University of Leeds
           pid: https://orcid.org/0000-0003-4560-4812
-      - Marc E J Stettler
+      - Marc E J Stettler:
           institution: Imperial College London
           pid: https://orcid.org/0000-0002-2066-9380
       - Christopher J Walden:
@@ -87,7 +87,7 @@
     project_partners:
 
     ncas_instruments:
-      - ncas-radar-mobile-ka-band-1:
+      - ncas-mobile-ka-band-radar-1:
           title: Moment data from NCAS Mobile Ka-band Radar (Kepler)
           source: NCAS Ka-Band Mobile Cloud Radar unit 1
           platform:
@@ -107,6 +107,10 @@
             url:  https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.1.0
             version: v1.1.0
           data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+          comment: |
+            Note that vertically pointing radar data may be affected by attenuation due to water collection in the antenna. 
+            This was due to blockage of the antenna drainage system. This is particularly likely during and following precipitation events.
+            Flags to identify this have not been implemented in this L1 dataset. Users should check the radar data for evidence of attenuation.
           acknowledgement: |-
             This dataset was developed as part of the activity "Contrail Observations and Lifecycle Tracking (COBALT)", funded by
             Natural Environment Research Council (NERC) Grant NE/Z503794/1.

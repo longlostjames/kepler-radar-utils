@@ -37,7 +37,7 @@
     project_partners:
 
     ncas_instruments:
-      - ncas-radar-mobile-ka-band-1:
+      - ncas-mobile-ka-band-radar-1:
           title: Moment data from NCAS Mobile Ka-band Radar (Kepler)
           source: NCAS Ka-Band Mobile Cloud Radar unit 1
           platform:

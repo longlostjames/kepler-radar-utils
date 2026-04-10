@@ -33,6 +33,7 @@ def select_picasso_yaml_for_date(datestr):
     - Period 1: 2017-12-12 to 2018-04-08 (winter/spring deployment, north_angle: 96.1)
     - Period 2: 2018-04-09 to 2018-04-24 (winter/spring deployment, north_angle: 100.5)
     - Period 3: 2019-05-07 to 2019-05-23 (spring deployment, north_angle: 93.6)
+    - Period 4: 2021-05-06 to 2021-06-07 (PICASSO-B spring deployment, north_angle: 9.6)
     
     Args:
         datestr: Date string in YYYYMMDD format
@@ -49,6 +50,8 @@ def select_picasso_yaml_for_date(datestr):
     period2_end = datetime.datetime(2018, 4, 24)
     period3_start = datetime.datetime(2019, 5, 7)
     period3_end = datetime.datetime(2019, 5, 23)
+    period4_start = datetime.datetime(2021, 5, 6)
+    period4_end = datetime.datetime(2021, 6, 7)
     
     if period1_start <= date_obj <= period1_end:
         yaml_file = 'picasso_project_period1.yml'
@@ -59,6 +62,9 @@ def select_picasso_yaml_for_date(datestr):
     elif period3_start <= date_obj <= period3_end:
         yaml_file = 'picasso_project_period3.yml'
         print(f"Date {datestr} in Period 3 (2019-05-07 to 2019-05-23) - using {yaml_file}")
+    elif period4_start <= date_obj <= period4_end:
+        yaml_file = 'picasso_project_period4.yml'
+        print(f"Date {datestr} in Period 4 (2021-05-06 to 2021-06-07) - using {yaml_file}")
     else:
         # Fallback for dates outside known periods
         yaml_file = 'picasso_project.yml'
@@ -79,8 +85,17 @@ def setup_picasso_paths(datestr=None, outpath=None, data_version='1.0.0'):
         Dictionary of paths
     """
     
-    # Base PICASSO campaign paths
-    base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/picasso/mom'
+    # Base PICASSO campaign paths — period 4 (PICASSO-B) uses a different raw data directory
+    period4_start = datetime.datetime(2021, 5, 6)
+    period4_end = datetime.datetime(2021, 6, 7)
+    if datestr is not None:
+        date_obj = datetime.datetime.strptime(datestr, '%Y%m%d')
+        if period4_start <= date_obj <= period4_end:
+            base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/picasso-b/mom'
+        else:
+            base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/picasso/mom'
+    else:
+        base_inpath = '/gws/pw/j07/ncas_obs_vol2/cao/raw_data/ncas-mobile-ka-band-radar-1/data/campaign/picasso/mom'
     
     # Default output path if not specified
     if outpath is None:

@@ -1,14 +1,17 @@
 #!/bin/bash
 # Helper script to automatically calculate array range and submit
 
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 START_DATE END_DATE"
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+    echo "Usage: $0 START_DATE END_DATE [--rhi-only|--vpt-only]"
     echo "Example: $0 20241210 20251201"
+    echo "         $0 20241210 20251201 --rhi-only"
+    echo "         $0 20241210 20251201 --vpt-only"
     exit 1
 fi
 
 START_DATE=$1
 END_DATE=$2
+PLOT_TYPE="${3:-}"  # Optional: --rhi-only or --vpt-only
 
 # Name of the actual SLURM submit script
 SUBMIT_SCRIPT="make_kepler_cobalt_quicklooks.sh"
@@ -63,6 +66,7 @@ cp "$SUBMIT_SCRIPT" "${SUBMIT_SCRIPT}.backup.$(date +%Y%m%d_%H%M%S)"
 echo "Updating $SUBMIT_SCRIPT with new dates..."
 sed -i "s/START_DATE=\".*\"/START_DATE=\"$START_DATE\"/" "$SUBMIT_SCRIPT"
 sed -i "s/END_DATE=\".*\"/END_DATE=\"$END_DATE\"/" "$SUBMIT_SCRIPT"
+sed -i "s/PLOT_TYPE=\".*\"/PLOT_TYPE=\"$PLOT_TYPE\"/" "$SUBMIT_SCRIPT"
 
 # Verify the updates worked
 if grep -q "START_DATE=\"$START_DATE\"" "$SUBMIT_SCRIPT" && grep -q "END_DATE=\"$END_DATE\"" "$SUBMIT_SCRIPT"; then

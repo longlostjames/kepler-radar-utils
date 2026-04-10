@@ -25,7 +25,7 @@ sys.path.insert(0, str(script_dir))
 
 from campaign_processing import process_campaign_day, get_campaign_info
 
-def setup_cobalt_paths(use_latest=False):
+def setup_cobalt_paths(use_latest=False, data_version='1.0.3'):
     """Set up file and directory paths for COBALT campaign."""
     home_path = Path.home()
     
@@ -38,7 +38,7 @@ def setup_cobalt_paths(use_latest=False):
     
     paths = {
         'inpath': base_inpath,
-        'outpath': '/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/cobalt/L1_v1.0.2',
+        'outpath': f'/gws/pw/j07/ncas_obs_vol2/cao/processing/ncas-mobile-ka-band-radar-1/cobalt/L1_v{data_version}',
         'yaml_project_file': str(script_dir / 'campaigns' / 'cobalt_project.yml'),
         'yaml_instrument_file': str(script_dir / 'instrument_metadata.yml'),
         'use_latest': use_latest
@@ -169,7 +169,7 @@ def main():
     
     parser.add_argument(
         '--data-version', 
-        default='1.0.2',
+        default='1.0.3',
         help='Data version string'
     )
     
@@ -222,7 +222,7 @@ def main():
     print(f"Arguments: {args}")
     # Set up paths
     try:
-        paths = setup_cobalt_paths(use_latest=args.latest)
+        paths = setup_cobalt_paths(use_latest=args.latest, data_version=args.data_version)
         print(f"COBALT Campaign Processing")
         if args.latest:
             print(f"Mode: Processing from 'latest' subdirectories")

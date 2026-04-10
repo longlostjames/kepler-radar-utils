@@ -18,6 +18,7 @@ END_DATE="20251201"    # YYYYMMDD format
 # Optional flags
 BOUNDARY_LAYER_FLAG=""  # Set to "-b" to limit plots to 4km height
 LATEST_FLAG=""          # Set to "-l" for latest data processing
+PLOT_TYPE="--vpt-only"            # Set to --rhi-only or --vpt-only, or leave empty for both
 
 # Input/Output paths (optional - leave empty to use defaults)
 INPUT_PATH=""   # Override default input path if needed
@@ -52,6 +53,10 @@ fi
 
 if [ -n "$LATEST_FLAG" ]; then
     cmd_args="$cmd_args $LATEST_FLAG"
+fi
+
+if [ -n "$PLOT_TYPE" ]; then
+    cmd_args="$cmd_args $PLOT_TYPE"
 fi
 
 if [ -n "$INPUT_PATH" ]; then

@@ -31,6 +31,7 @@ from pyart.core.radar import Radar
 from pyart.io.common import _test_arguments, make_time_unit_str
 import yaml
 import os
+import glob
 import fnmatch
 import re
 import gzip
@@ -78,9 +79,10 @@ def read_mira35_mmclx_vpt_multi(mmclxfiles: List[str], **kwargs) -> Radar:
     pass
 
 def read_mira35_mmclx(
-    filename: str, 
-    gzip_flag: bool = False, 
-    revised_northangle: float = 55.9, 
+    filename: str,
+    gzip_flag: bool = False,
+    revised_northangle: float = 55.9,
+    logp_dir: str = None,
     **kwargs
 ) -> Radar:
     """
@@ -93,6 +95,9 @@ def read_mira35_mmclx(
         filename: Path to the mmclx netCDF file
         gzip_flag: If True, treat file as gzip-compressed
         revised_northangle: North angle correction in degrees (default: 55.7)
+        logp_dir: Path to directory of axis-log files (*.axis.gz). When provided,
+            used to reconstruct azimuth/elevation for scans where the mmclx angle
+            variables contain fill values (e.g. axis controller offline).
         **kwargs: Additional keyword arguments passed to PyART
         
     Returns:
@@ -146,7 +151,7 @@ def read_mira35_mmclx(
         
         # Extract angle information
         angle_info = _extract_angle_info(
-            ncobj, scan_name, time, revised_northangle, filemetadata
+            ncobj, scan_name, time, revised_northangle, filemetadata, logp_dir=logp_dir
         )
         azimuth = angle_info['azimuth']
         elevation = angle_info['elevation']
@@ -155,6 +160,28 @@ def read_mira35_mmclx(
         target_scan_rate = angle_info.get('target_scan_rate')
         elevation_scan_rate = angle_info.get('elevation_scan_rate')
         azimuth_scan_rate = angle_info.get('azimuth_scan_rate')
+
+        # Append provenance notes to global metadata comment when angles or scan
+        # rates were reconstructed from logp axis files or corrected from fill values.
+        existing_comment = metadata.get('comment', '') or ''
+        extra_comments = []
+        if angle_info.get('logp_reconstructed'):
+            extra_comments.append(
+                "Azimuth, elevation, and scan_rate were reconstructed from the MIRA "
+                "axis-controller log (logp *.axis.gz files) because the mmclx angle "
+                "variables (azi, elv, elvv, aziv) contained fill values indicating "
+                "the axis controller was not communicating with the radar software."
+            )
+        if angle_info.get('vpt_fill_corrected'):
+            extra_comments.append(
+                "VPT elevation fill values (< -900\u00b0) were replaced with 90.0\u00b0 and "
+                "azimuth fill values were replaced with 0.0\u00b0 (undefined for vertical "
+                "pointing). The axis controller was not communicating with the radar "
+                "software; logp axis files confirm the antenna was at vertical pointing."
+            )
+        if extra_comments:
+            joined = ' '.join(extra_comments)
+            metadata['comment'] = (existing_comment.strip() + ' ' + joined).strip() if existing_comment.strip() else joined
         
         # Create sweep information
         sweep_info = _create_sweep_info(nrays, filemetadata)
@@ -302,6 +329,7 @@ def _extract_range_info(ncobj: nc4.Dataset, filemetadata: FileMetadata) -> Dict:
     _range = filemetadata('range')
     _range['data'] = ncobj.variables['range'][:]
     _range['units'] = 'metres'
+    _range.pop('standard_name', None)
     _range['proposed_standard_name'] = "projection_range_coordinate"
     _range['long_name'] = "distance to centre of each range gate"
     
@@ -341,6 +369,25 @@ def _determine_scan_type(filename: str, ncobj: nc4.Dataset, revised_northangle: 
             break
     
     if scan_name is None:
+        # No keyword matched in the filename (e.g. plain YYYYMMDD_HHMMSS.mmclx[.gz] files).
+        # Fall back to elevation: if mean elevation ≥ 80° treat as VPT.
+        if 'elv' in ncobj.variables:
+            mean_elv = float(ncobj.variables['elv'][:].mean())
+            if mean_elv >= 80.0:
+                print(
+                    f"No scan-type keyword in filename; mean elevation={mean_elv:.1f}° "
+                    f"→ treating as vertical_pointing"
+                )
+                scan_name = 'vertical_pointing'
+                sweep_mode["data"] = np.array(['vertical_pointing'])
+                fixed_angle["data"] = np.array([90.0], dtype='f')
+                print(f"Detected scan type: {scan_name}, fixed angle: 90.0")
+                return scan_name, sweep_mode, fixed_angle
+            else:
+                print(
+                    f"No scan-type keyword in filename; mean elevation={mean_elv:.1f}° "
+                    f"→ scan type unknown (manual classification required)"
+                )
         sweep_mode["data"] = np.array([None])
         fixed_angle["data"] = np.array([None])
         return scan_name, sweep_mode, fixed_angle
@@ -355,8 +402,12 @@ def _determine_scan_type(filename: str, ncobj: nc4.Dataset, revised_northangle: 
         # For RHI, fixed angle is the azimuth
         fixed_angle_value = np.round((ncvars['azi'][i4fixed_angle] + revised_northangle) % 360, 2)
         fixed_angle["data"] = np.array([fixed_angle_value], dtype='f')
-    elif scan_name in ['ppi', 'vertical_pointing']:
-        # For PPI/VPT, fixed angle is the elevation
+    elif scan_name == 'vertical_pointing':
+        # For VPT, fixed angle is always 90° regardless of the stored elevation value
+        # (elevation may contain fill values such as -1000 when the mmclx was missing data)
+        fixed_angle["data"] = np.array([90.0], dtype='f')
+    elif scan_name == 'ppi':
+        # For PPI, fixed angle is the elevation
         fixed_angle_value = np.round(ncvars['elv'][i4fixed_angle], 2)
         fixed_angle["data"] = np.array([fixed_angle_value], dtype='f')
     
@@ -364,12 +415,93 @@ def _determine_scan_type(filename: str, ncobj: nc4.Dataset, revised_northangle: 
     
     return scan_name, sweep_mode, fixed_angle
 
+
+def _load_logp_angles(
+    t_mmclx: np.ndarray,
+    logp_dir: str
+) -> tuple:
+    """
+    Load axis-controller angle data from logp files and interpolate onto mmclx timestamps.
+
+    Logp files are named YYYYMMDDHHMI.axis.gz and record antenna azimuth and elevation
+    at ~2 Hz. This function finds all logp files covering the mmclx time window, loads
+    them, and linearly interpolates azimuth and elevation onto each mmclx ray timestamp.
+
+    Args:
+        t_mmclx: 1-D array of mmclx ray timestamps (Unix seconds, float/int)
+        logp_dir: Path to the directory containing *.axis.gz files
+
+    Returns:
+        Tuple (azi_interp, elv_interp) of float32 arrays the same length as t_mmclx,
+        or (None, None) if no usable logp data is found.
+    """
+    import datetime as _dt
+
+    t0 = float(t_mmclx[0])
+    t1 = float(t_mmclx[-1])
+
+    # Collect candidate logp files: check the date of t0 and also the previous and
+    # next days to handle midnight crossings.
+    candidate_dates = set()
+    for ts in (t0 - 86400, t0, t1):
+        d = _dt.datetime.utcfromtimestamp(ts)
+        candidate_dates.add(d.strftime('%Y%m%d'))
+
+    logp_ts_all = []
+    logp_azi_all = []
+    logp_elv_all = []
+
+    for datestr in sorted(candidate_dates):
+        pattern = os.path.join(logp_dir, f'{datestr}*.axis.gz')
+        for fpath in sorted(glob.glob(pattern)):
+            with gzip.open(fpath, 'rt') as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) < 3:
+                        continue
+                    try:
+                        ts = float(parts[0])
+                    except ValueError:
+                        continue
+                    # Only keep rows within a generous window around the mmclx sweep
+                    if ts < t0 - 60 or ts > t1 + 60:
+                        continue
+                    if parts[1] == 'nan' or parts[2] == 'nan':
+                        continue
+                    try:
+                        logp_ts_all.append(ts)
+                        logp_azi_all.append(float(parts[1]))
+                        logp_elv_all.append(float(parts[2]))
+                    except ValueError:
+                        continue
+
+    if len(logp_ts_all) < 2:
+        return None, None
+
+    logp_ts = np.array(logp_ts_all, dtype=np.float64)
+    logp_azi = np.array(logp_azi_all, dtype=np.float64)
+    logp_elv = np.array(logp_elv_all, dtype=np.float64)
+
+    # Sort in case files were not chronological
+    sort_idx = np.argsort(logp_ts)
+    logp_ts = logp_ts[sort_idx]
+    logp_azi = logp_azi[sort_idx]
+    logp_elv = logp_elv[sort_idx]
+
+    t_query = np.array(t_mmclx, dtype=np.float64)
+    azi_interp = np.interp(t_query, logp_ts, logp_azi).astype(np.float32)
+    elv_interp = np.interp(t_query, logp_ts, logp_elv).astype(np.float32)
+
+    return azi_interp, elv_interp
+
+
 def _extract_angle_info(
-    ncobj: nc4.Dataset, 
-    scan_name: str, 
-    time: Dict, 
+    ncobj: nc4.Dataset,
+    scan_name: str,
+    time: Dict,
     revised_northangle: float,
-    filemetadata: FileMetadata
+    filemetadata: FileMetadata,
+    logp_dir: str = None
 ) -> Dict:
     """
     Extract azimuth, elevation and scan rate information.
@@ -391,9 +523,14 @@ def _extract_angle_info(
     elevation = filemetadata('elevation')
     
     # Basic angle assignments - explicitly cast to float32 for NCAS compliance
-    azimuth['data'] = ((ncvars['azi'][:] + revised_northangle) % 360).astype(np.float32)
+    raw_azi = ncvars['azi'][:]
+    azimuth['data'] = ((raw_azi + revised_northangle) % 360).astype(np.float32)
     elevation['data'] = ncvars['elv'][:].astype(np.float32)
-    
+
+    # Detect MIRA axis-controller fill values (known values: -1000, -1001; use
+    # threshold < -900 to be robust against any similar fill).
+    angles_are_fill = (elevation['data'] < -900.0).all()
+
     # Calculate ray durations for scan rate correction
     ray_duration = np.diff(time['data'])
     
@@ -403,6 +540,32 @@ def _extract_angle_info(
     }
     
     if scan_name in ['ppi', 'rhi', 'manual_rhi']:
+        # If the mmclx angle variables contain fill values and a logp directory is
+        # available, reconstruct azimuth and elevation by interpolating the axis-log.
+        logp_reconstructed = False
+        if angles_are_fill and logp_dir is not None and os.path.isdir(logp_dir):
+            print(f"  [logp] Angle fill detected for {scan_name.upper()} — attempting logp reconstruction")
+            # Use the raw mmclx timestamps (Unix seconds) not time['data'] which is
+            # in "seconds since" PyART format and would not match the logp Unix times.
+            azi_logp, elv_logp = _load_logp_angles(ncvars['time'][:], logp_dir)
+            if azi_logp is not None:
+                # Apply north-angle correction to logp azimuth (same reference frame as mmclx)
+                azimuth['data'] = ((azi_logp + revised_northangle) % 360).astype(np.float32)
+                elevation['data'] = elv_logp
+                logp_reconstructed = True
+                _logp_comment = (
+                    "Values reconstructed by interpolating the MIRA axis-controller log "
+                    "(logp *.axis.gz) onto mmclx ray timestamps. "
+                    "The mmclx elvv/aziv scan-rate variables contained fill values "
+                    "(axis controller offline) and were not used."
+                )
+                azimuth['comment'] = _logp_comment
+                elevation['comment'] = _logp_comment
+                print(f"  [logp] Reconstructed: az range [{azimuth['data'].min():.2f}, {azimuth['data'].max():.2f}], "
+                      f"el range [{elevation['data'].min():.2f}, {elevation['data'].max():.2f}]")
+            else:
+                print(f"  [logp] No usable logp data found — angles remain as fill values")
+
         # For scanning modes, calculate scan rates and antenna transitions
         antenna_transition = filemetadata("antenna_transition") 
         target_scan_rate = filemetadata("target_scan_rate")
@@ -412,12 +575,19 @@ def _extract_angle_info(
             elevation_scan_rate = filemetadata("elevation_scan_rate")
             azimuth_scan_rate = filemetadata("azimuth_scan_rate")
             
-            elevation_scan_rate['data'] = ncvars['elvv'][:]
+            if logp_reconstructed:
+                # elvv/aziv are fill values — derive rates from logp-reconstructed angles
+                elevation_scan_rate['data'] = np.gradient(
+                    elevation['data'].astype(np.float64), time['data']).astype(np.float32)
+                # Azimuth is nominally fixed for MAN RHI; any variation is noise
+                azimuth_scan_rate['data'] = np.zeros(len(elevation['data']), dtype=np.float32)
+            else:
+                elevation_scan_rate['data'] = ncvars['elvv'][:]
+                azimuth_scan_rate['data'] = ncvars['aziv'][:]
             elevation_scan_rate['units'] = 'degrees_per_second'
             elevation_scan_rate['long_name'] = 'antenna elevation angle scan rate'
             elevation_scan_rate['standard_name'] = 'platform_elevation_scan_rate'
             
-            azimuth_scan_rate['data'] = ncvars['aziv'][:]
             azimuth_scan_rate['units'] = 'degrees_per_second'
             azimuth_scan_rate['long_name'] = 'antenna azimuth angle scan rate'
             azimuth_scan_rate['standard_name'] = 'platform_azimuth_scan_rate'
@@ -443,6 +613,17 @@ def _extract_angle_info(
             scan_rate['data'] = elevation_scan_rate['data']
             scan_rate['units'] = 'degrees_per_second'
             scan_rate['long_name'] = 'antenna angle scan rate (elevation for MAN scans)'
+            if logp_reconstructed:
+                _sr_comment = (
+                    "Derived from np.gradient of logp-reconstructed elevation angles "
+                    "over mmclx ray timestamps; mmclx elvv/aziv contained fill values."
+                )
+                scan_rate['comment'] = _sr_comment
+                elevation_scan_rate['comment'] = _sr_comment
+                azimuth_scan_rate['comment'] = (
+                    "Set to zero: azimuth is nominally fixed for MAN RHI scans; "
+                    "mmclx aziv contained fill values."
+                )
             
             result.update({
                 'scan_rate': scan_rate,
@@ -455,7 +636,16 @@ def _extract_angle_info(
         elif scan_name == 'ppi':
             # PPI: azimuth scanning only
             scan_rate = filemetadata("scan_rate")
-            scan_rate['data'] = ncvars['aziv'][:]
+            if logp_reconstructed:
+                # aziv is a fill value — derive azimuth scan rate from logp-reconstructed angles
+                scan_rate['data'] = np.gradient(
+                    azimuth['data'].astype(np.float64), time['data']).astype(np.float32)
+                scan_rate['comment'] = (
+                    "Derived from np.gradient of logp-reconstructed azimuth angles "
+                    "over mmclx ray timestamps; mmclx aziv contained fill values."
+                )
+            else:
+                scan_rate['data'] = ncvars['aziv'][:]
             scan_rate['units'] = 'degrees_per_second'
             scan_rate['long_name'] = 'antenna angle scan rate'
             
@@ -503,7 +693,16 @@ def _extract_angle_info(
         else:  # rhi
             # RHI: elevation scanning only
             scan_rate = filemetadata("scan_rate")
-            scan_rate['data'] = ncvars['elvv'][:]
+            if logp_reconstructed:
+                # elvv is a fill value — derive elevation scan rate from logp-reconstructed angles
+                scan_rate['data'] = np.gradient(
+                    elevation['data'].astype(np.float64), time['data']).astype(np.float32)
+                scan_rate['comment'] = (
+                    "Derived from np.gradient of logp-reconstructed elevation angles "
+                    "over mmclx ray timestamps; mmclx elvv contained fill values."
+                )
+            else:
+                scan_rate['data'] = ncvars['elvv'][:]
             scan_rate['units'] = 'degrees_per_second'
             scan_rate['long_name'] = 'antenna angle scan rate'
             
@@ -528,12 +727,44 @@ def _extract_angle_info(
                 'target_scan_rate': target_scan_rate
             })
         
+        # Propagate the reconstruction flag so callers can annotate global metadata.
+        result['logp_reconstructed'] = logp_reconstructed
+
         # Apply timing corrections to angles (pass antenna_transition for RHI and MAN)
-        _apply_timing_corrections(azimuth, elevation, ncvars, ray_duration, 
-                                 revised_northangle, antenna_transition['data'])
+        # Skip if logp reconstruction was used — the scan rates (elvv/aziv) are also
+        # fill values when the axis controller is offline, so timing corrections would
+        # corrupt the reconstructed angles.
+        if not logp_reconstructed:
+            _apply_timing_corrections(azimuth, elevation, ncvars, ray_duration,
+                                      revised_northangle, antenna_transition['data'])
 
     elif scan_name in ['vpt', 'vertical_pointing']:
-        # VPT: elevation should be ~90°. Mark any ray below 85° as antenna_transition=1
+        # VPT: elevation should be ~90°. MIRA uses fill values around -1000 when
+        # the axis controller data is not available (observed values: -1000 when
+        # the controller is completely offline, -1001 when it is logging but not
+        # communicating with the radar software). Both are caught by the < -900
+        # threshold. Logp axis files confirm these scans were genuinely at 90°.
+        fill_mask = elevation['data'] < -900.0
+        if fill_mask.any():
+            elevation['data'] = np.where(fill_mask, np.float32(90.0), elevation['data'])
+            _vpt_comment = (
+                "Fill values (< -900°) replaced with 90.0°: the MIRA axis controller "
+                "was not communicating with the radar software but logp axis files "
+                "confirm the antenna was at vertical pointing."
+            )
+            elevation['comment'] = _vpt_comment
+            # Azimuth is undefined for VPT; the fill value produces a spurious
+            # wrapped angle — set to 0.0 (north) for affected rays.
+            azi_fill_mask = raw_azi < -900.0
+            if azi_fill_mask.any():
+                azimuth['data'] = np.where(azi_fill_mask, np.float32(0.0), azimuth['data'])
+                azimuth['comment'] = (
+                    "Fill values (< -900°) replaced with 0.0° (north): azimuth is "
+                    "undefined for vertical pointing; the MIRA axis controller was "
+                    "not communicating with the radar software."
+                )
+            result['vpt_fill_corrected'] = True
+        # Mark any ray below 85° as antenna_transition=1
         # (radar was not yet pointing vertically).
         antenna_transition = filemetadata("antenna_transition")
         antenna_transition['data'] = np.where(
@@ -544,6 +775,21 @@ def _extract_angle_info(
             "1 if elevation < 85° (antenna not yet at vertical pointing position), 0 otherwise"
         )
         result['antenna_transition'] = antenna_transition
+
+    # Normalise azimuth/elevation metadata for all scan types:
+    # PyART's FileMetadata('mmclx') seeds azimuth with standard_name='beam_azimuth_angle'
+    # and elevation with standard_name='beam_elevation_angle'.  These are not the NCAS
+    # names and must not appear in the output file.  Overwrite with proposed_standard_name
+    # here so the PyART write step never emits a stray standard_name.
+    azimuth.pop('standard_name', None)
+    azimuth['proposed_standard_name'] = 'ray_azimuth_angle'
+    azimuth['units'] = 'degrees'
+    azimuth['long_name'] = 'azimuth_angle_from_true_north'
+
+    elevation.pop('standard_name', None)
+    elevation['proposed_standard_name'] = 'ray_elevation_angle'
+    elevation['units'] = 'degrees'
+    elevation['long_name'] = 'elevation_angle_from_horizontal_plane'
 
     return result
 
@@ -603,7 +849,7 @@ def _apply_timing_corrections(
     # Apply corrections for azimuth
     azimuth['data'] -= 0.5 * ray_duration_extended * ncvars['aziv'][:]
     azimuth['units'] = "degrees"
-    azimuth['proposed_standard_name'] = "sensor_to_target_azimuth_angle"
+    azimuth['proposed_standard_name'] = "ray_azimuth_angle"
     azimuth['long_name'] = "azimuth_angle_from_true_north"
     
     # Special handling for long-duration rays and antenna transitions
@@ -620,7 +866,7 @@ def _apply_timing_corrections(
     # Apply corrections for elevation
     elevation['data'] -= 0.5 * ray_duration_extended * ncvars['elvv'][:]
     elevation['units'] = "degrees"
-    elevation['proposed_standard_name'] = "sensor_to_target_elevation_angle" 
+    elevation['proposed_standard_name'] = "ray_elevation_angle"
     elevation['long_name'] = "elevation_angle_from_horizontal_plane"
     
     # Special handling for long-duration rays and antenna transitions
@@ -698,8 +944,9 @@ def _extract_radar_fields(ncobj: nc4.Dataset, scan_name: str, time: Dict, fileme
             
             # Handle different field types
             if mmclx_name in ["Zg", "LDRg", "SNRg"]:
-                # Convert linear to log scale
-                field_dict['data'] = 10.0 * np.log10(ncvars[mmclx_name][:])
+                # Convert linear to log scale.  Use np.float32(10) to avoid
+                # the Python float (float64) silently upcasting the result.
+                field_dict['data'] = (np.float32(10) * np.log10(ncvars[mmclx_name][:])).astype(np.float32)
                 field_dict['units'] = 'dBZ' if mmclx_name == "Zg" else 'dB'
             else:
                 # Keep in original units
@@ -1392,17 +1639,18 @@ def find_mmclx_rhi_files(
     # Get the date string from start time to look in the right subdirectory
     date_str = start_datetime.strftime('%Y%m%d')
     
-    # Check if inpath already exists (WOEST case: path already includes date/scantype)
-    # or needs date subdirectory added (standard campaigns)
+    # Try date subdirectory first (standard campaigns); fall back to inpath directly (WOEST)
     inpath_obj = Path(inpath)
-    if inpath_obj.exists():
-        # Path already exists, use directly (WOEST: /mom/20230614/hsrhi/)
-        search_path = inpath_obj
-        print(f"Using existing path directly: {search_path}")
-    else:
-        # Standard case: add date subdirectory
-        search_path = inpath_obj / date_str
+    date_subdir = inpath_obj / date_str
+    if date_subdir.exists():
+        search_path = date_subdir
         print(f"Looking in date directory: {search_path}")
+    elif inpath_obj.exists():
+        search_path = inpath_obj
+        print(f"Using existing path directly (no date subdir): {search_path}")
+    else:
+        print(f"Path does not exist: {inpath_obj} (with or without date {date_str})")
+        return []
     
     if not search_path.exists():
         print(f"Search path does not exist: {search_path}")
@@ -1536,17 +1784,18 @@ def find_mmclx_ppi_files(
     # Get the date string from start time
     date_str = start_datetime.strftime('%Y%m%d')
     
-    # Check if inpath already exists (e.g., for WOEST with scan-type subdirs)
-    # or if we need to add the date subdirectory
+    # Try date subdirectory first (standard campaigns); fall back to inpath directly (WOEST)
     inpath_obj = Path(inpath)
-    if inpath_obj.exists():
-        # Path already exists, use it directly (WOEST case)
-        search_path = inpath_obj
-        print(f"Using existing path directly: {search_path}")
-    else:
-        # Add date subdirectory (standard case)
-        search_path = inpath_obj / date_str
+    date_subdir = inpath_obj / date_str
+    if date_subdir.exists():
+        search_path = date_subdir
         print(f"Looking in date directory: {search_path}")
+    elif inpath_obj.exists():
+        search_path = inpath_obj
+        print(f"Using existing path directly (no date subdir): {search_path}")
+    else:
+        print(f"Path does not exist: {inpath_obj} (with or without date {date_str})")
+        return []
     
     if not search_path.exists():
         print(f"Date directory does not exist: {search_path}")
@@ -1879,12 +2128,31 @@ def _add_ncas_metadata_manually(
             
             # Update Conventions
             ds.setncattr('Conventions', 'NCAS-Radar-1.0 CfRadial-1.4 instrument_parameters radar_parameters geometry_correction')
-            
+
+            # Set CF featureType for vertical-pointing files
+            _is_vpt = False
+            if 'sweep_mode' in ds.variables:
+                _sm = ds.variables['sweep_mode'][:]
+                _sm_str = b''.join(_sm.flatten()).decode('ascii', errors='ignore').strip('\x00 ')
+                if 'vertical_pointing' in _sm_str:
+                    _is_vpt = True
+            if _is_vpt:
+                ds.setncattr('featureType', 'timeSeriesProfile')
+                print("Set featureType = 'timeSeriesProfile' (VPT file)")
+
             # Update core attributes - set defaults first
             ds.setncattr('title', 'Moment data from NCAS Mobile Ka-band Radar (Kepler)')
             ds.setncattr('institution', 'National Centre for Atmospheric Science (NCAS) and Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)')
             ds.setncattr('source', 'NCAS Ka-Band Mobile Cloud Radar unit 1')
-            ds.setncattr('comment', ' ')
+            # Save any comment already written by the reader (e.g. logp reconstruction note)
+            # so we can append it after the YAML project comment is applied.
+            _reader_comment = ''
+            try:
+                _existing = ds.getncattr('comment')
+                if _existing and _existing.strip():
+                    _reader_comment = _existing.strip()
+            except AttributeError:
+                pass
             ds.setncattr('references', 'www.metek.de')
             
             # Override source, title, references from YAML if available
@@ -1896,6 +2164,36 @@ def _add_ncas_metadata_manually(
                 if 'title' in project_instrument_info:
                     ds.setncattr('title', project_instrument_info['title'])
                     print(f"Set title from project YAML: {project_instrument_info['title']}")
+                if 'comment' in project_instrument_info:
+                    _yaml_comment = project_instrument_info['comment'].rstrip()
+                    # Extract any extra content (e.g. logp reconstruction note) from the
+                    # existing file comment that goes beyond the YAML comment.
+                    # This is idempotent: if cfradial_add_ncas_metadata has already been
+                    # called once (e.g. inside multi_mmclx2cfrad), _reader_comment will
+                    # start with the YAML comment followed by the extra note; strip the
+                    # YAML prefix to avoid duplicating it.
+                    _extra = ''
+                    if _reader_comment:
+                        _stripped_reader = _reader_comment.strip()
+                        _stripped_yaml = _yaml_comment.strip()
+                        if _stripped_reader.startswith(_stripped_yaml):
+                            _extra = _stripped_reader[len(_stripped_yaml):].strip()
+                        elif _stripped_reader != _stripped_yaml:
+                            _extra = _stripped_reader
+                    if _extra:
+                        ds.setncattr('comment', (_yaml_comment + '\n' + _extra).encode('utf-8'))
+                    else:
+                        ds.setncattr('comment', _yaml_comment.encode('utf-8'))
+                    print(f"Set comment from project YAML")
+                else:
+                    # project_instrument_info present but no 'comment' key — preserve
+                    # any reader comment (e.g. logp note) or fall back to a blank.
+                    _fb = _reader_comment if _reader_comment else ' '
+                    ds.setncattr('comment', _fb.encode('utf-8'))
+            else:
+                # No project_instrument_info — preserve any reader comment or fall back.
+                _fb = _reader_comment if _reader_comment else ' '
+                ds.setncattr('comment', _fb.encode('utf-8'))
             
             # Check instrument_info (from instrument YAML) as fallback
             if instrument_info:
@@ -2103,7 +2401,21 @@ def _add_ncas_metadata_manually(
             current_time = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
             ds.setncattr('last_revised_date', current_time)
             ds.setncattr('date_created', current_time)
-            
+
+            # Write history attribute (required by NCAS checker; must be non-empty)
+            existing_history = ''
+            if hasattr(ds, 'history'):
+                existing_history = ds.getncattr('history') or ''
+            if not existing_history.strip():
+                timestamp = datetime.utcnow().strftime('%a %b %d %H:%M:%S %Y')
+                username = os.environ.get('USER', 'unknown')
+                hostname = os.environ.get('HOSTNAME', socket.gethostname())
+                new_entry = (
+                    f"{timestamp} - user:{username} machine:{hostname} "
+                    f"Convert mmclx to CF-Radial with NCAS metadata"
+                )
+                ds.setncattr('history', new_entry)
+
             # Update variable attributes for NCAS compliance
             _update_variable_attributes_for_ncas(ds, revised_northangle)
         
@@ -2124,36 +2436,68 @@ def _update_variable_attributes_for_ncas(ds, revised_northangle: float = 55.9):
         ds: NetCDF4 Dataset object
         revised_northangle: North angle correction in degrees (default: 55.9 for COBALT)
     """
-    
+
+    def _s(val):
+        """Encode str as bytes so netCDF4 writes NC_CHAR, not NC_STRING."""
+        return val.encode('utf-8') if isinstance(val, str) else val
+
     # Update time variable
     if 'time' in ds.variables:
         time_var = ds.variables['time']
-        time_var.setncattr('comment', ' ')
-        time_var.setncattr('long_name', 'time_since_time_reference')
+        time_var.setncattr('comment', _s(' '))
+        time_var.setncattr('long_name', _s('time_since_time_reference'))
     
     # Update range variable  
     if 'range' in ds.variables:
         range_var = ds.variables['range']
-        range_var.setncattr('comment', 'Range to centre of each bin')
+        range_var.setncattr('comment', _s('Range to centre of each bin'))
+        # projection_range_coordinate is not a CF standard name — use proposed_standard_name.
+        if hasattr(range_var, 'standard_name'):
+            range_var.delncattr('standard_name')
+        range_var.setncattr('proposed_standard_name', _s('projection_range_coordinate'))
         if hasattr(range_var, 'meters_to_center_of_first_gate'):
             # Keep existing value
             pass
         else:
             range_var.setncattr('meters_to_center_of_first_gate', range_var[0])
     
-    # Update azimuth variable - fix standard_name
+    # Update azimuth variable
     if 'azimuth' in ds.variables:
         azim_var = ds.variables['azimuth']
-        azim_var.setncattr('comment', 'Azimuth of antenna relative to true north')
-        azim_var.setncattr('standard_name', 'ray_azimuth_angle')
-        # PyART automatically sets type based on variable dtype (float32 -> 'float')
+        _default_azi_comment = 'Azimuth of antenna relative to true north'
+        # Preserve any reconstruction/correction comment already written by the reader.
+        # Guard against double-prefixing when this function is called more than once.
+        _existing_azi = getattr(azim_var, 'comment', '')
+        if _existing_azi.startswith(_default_azi_comment):
+            pass  # Already prefixed — leave as is
+        elif _existing_azi and _existing_azi != _default_azi_comment:
+            azim_var.setncattr('comment', _s(_default_azi_comment + '. ' + _existing_azi))
+        else:
+            azim_var.setncattr('comment', _s(_default_azi_comment))
+        # Remove any standard_name written by PyART (e.g. 'beam_azimuth_angle');
+        # ray_azimuth_angle is an NCAS proposed name, not a CF standard name.
+        if hasattr(azim_var, 'standard_name'):
+            azim_var.delncattr('standard_name')
+        azim_var.setncattr('proposed_standard_name', _s('ray_azimuth_angle'))
     
-    # Update elevation variable - fix standard_name
+    # Update elevation variable
     if 'elevation' in ds.variables:
         elev_var = ds.variables['elevation']
-        elev_var.setncattr('comment', 'Elevation of antenna relative to the horizontal plane')
-        elev_var.setncattr('standard_name', 'ray_elevation_angle')
-        # PyART automatically sets type based on variable dtype (float32 -> 'float')
+        _default_elev_comment = 'Elevation of antenna relative to the horizontal plane'
+        # Preserve any reconstruction/correction comment already written by the reader.
+        # Guard against double-prefixing when this function is called more than once.
+        _existing_elev = getattr(elev_var, 'comment', '')
+        if _existing_elev.startswith(_default_elev_comment):
+            pass  # Already prefixed — leave as is
+        elif _existing_elev and _existing_elev != _default_elev_comment:
+            elev_var.setncattr('comment', _s(_default_elev_comment + '. ' + _existing_elev))
+        else:
+            elev_var.setncattr('comment', _s(_default_elev_comment))
+        # Remove any standard_name written by PyART (e.g. 'beam_elevation_angle');
+        # ray_elevation_angle is an NCAS proposed name, not a CF standard name.
+        if hasattr(elev_var, 'standard_name'):
+            elev_var.delncattr('standard_name')
+        elev_var.setncattr('proposed_standard_name', _s('ray_elevation_angle'))
     
     # Update latitude variable
     if 'latitude' in ds.variables:
@@ -2168,8 +2512,8 @@ def _update_variable_attributes_for_ncas(ds, revised_northangle: float = 55.9):
     # Update altitude variable
     if 'altitude' in ds.variables:
         alt_var = ds.variables['altitude']
-        alt_var.setncattr('comment', 'Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model')
-        alt_var.setncattr('units', 'metres')
+        alt_var.setncattr('comment', _s('Altitude of the centre of rotation of the antenna above the geoid using the WGS84 ellipsoid and EGM2008 geoid model'))
+        alt_var.setncattr('units', _s('metres'))
         # PyART automatically sets type based on variable dtype (float64 -> 'double')
     
     # Update prt variable
@@ -2181,39 +2525,39 @@ def _update_variable_attributes_for_ncas(ds, revised_northangle: float = 55.9):
     if 'radar_measured_transmit_power_h' in ds.variables:
         power_var = ds.variables['radar_measured_transmit_power_h']
         if not hasattr(power_var, 'units'):
-            power_var.setncattr('units', 'dBm')
+            power_var.setncattr('units', _s('dBm'))
         # PyART automatically sets type based on variable dtype
     
     # Update sweep_mode variable
     if 'sweep_mode' in ds.variables:
         sweep_var = ds.variables['sweep_mode']
-        sweep_var.setncattr('comment', 'Options are: "sector", "coplane", "rhi", "vertical_pointing", "idle", "azimuth_surveillance", "elevation_surveillance", "sunscan", "pointing", "manual_ppi", "manual_rhi"')
-        sweep_var.setncattr('units', '')
+        sweep_var.setncattr('comment', _s('Options are: "sector", "coplane", "rhi", "vertical_pointing", "idle", "azimuth_surveillance", "elevation_surveillance", "sunscan", "pointing", "manual_ppi", "manual_rhi"'))
+        sweep_var.setncattr('units', _s(''))
     
     # Update antenna_transition variable
     if 'antenna_transition' in ds.variables:
         ant_var = ds.variables['antenna_transition']
-        ant_var.setncattr('comment', '1 if antenna is in transition, 0 otherwise')
-        ant_var.setncattr('units', '')
+        ant_var.setncattr('comment', _s('1 if antenna is in transition, 0 otherwise'))
+        ant_var.setncattr('units', _s(''))
     
     # Add frequency variable if missing
     if 'frequency' not in ds.variables and 'frequency' not in ds.dimensions:
         # Add frequency dimension and variable
         ds.createDimension('frequency', 1)
         freq_var = ds.createVariable('frequency', 'f4', ('frequency',))
-        freq_var.setncattr('standard_name', 'radiation_frequency')
-        freq_var.setncattr('long_name', 'frequency of transmitted radiation')
-        freq_var.setncattr('units', 's-1')
-        freq_var.setncattr('meta_group', 'instrument_parameters')
+        freq_var.setncattr('standard_name', _s('radiation_frequency'))
+        freq_var.setncattr('long_name', _s('frequency of transmitted radiation'))
+        freq_var.setncattr('units', _s('s-1'))
+        freq_var.setncattr('meta_group', _s('instrument_parameters'))
         freq_var[:] = [35.5e9]  # 35.5 GHz for Ka-band
     
     # Add azimuth_correction variable if missing
     if 'azimuth_correction' not in ds.variables:
         azim_corr_var = ds.createVariable('azimuth_correction', 'f4')
-        azim_corr_var.setncattr('long_name', 'azimuth correction applied')
-        azim_corr_var.setncattr('units', 'degrees')
-        azim_corr_var.setncattr('meta_group', 'geometry_correction')
-        azim_corr_var.setncattr('comment', 'Azimuth correction applied. North angle relative to instrument home azimuth.')
+        azim_corr_var.setncattr('long_name', _s('azimuth correction applied'))
+        azim_corr_var.setncattr('units', _s('degrees'))
+        azim_corr_var.setncattr('meta_group', _s('geometry_correction'))
+        azim_corr_var.setncattr('comment', _s('Azimuth correction applied. North angle relative to instrument home azimuth.'))
         azim_corr_var[:] = revised_northangle
 
 def multi_mmclx2cfrad(
@@ -2229,7 +2573,8 @@ def multi_mmclx2cfrad(
     data_version: str = "1.0.0",
     single_sweep: bool = False,
     yaml_project_file: str = None,
-    yaml_instrument_file: str = None
+    yaml_instrument_file: str = None,
+    logp_dir: str = None
 ) -> Optional[Radar]:
     """
     Convert multiple mmclx files to CF-Radial file(s).
@@ -2247,6 +2592,8 @@ def multi_mmclx2cfrad(
         single_sweep: If True, create separate files for each sweep
         yaml_project_file: Path to project YAML file (required)
         yaml_instrument_file: Path to instrument YAML file (required)
+        logp_dir: Optional path to axis-log directory (*.axis.gz). When provided,
+            used to reconstruct angles for scans where mmclx angle data is missing.
         
     Returns:
         Combined radar object or None if processing fails
@@ -2283,8 +2630,9 @@ def multi_mmclx2cfrad(
     for mmclx_file in mmclxfiles:
         try:
             radar = read_mira35_mmclx(
-                mmclx_file, gzip_flag=gzip_flag, 
-                revised_northangle=revised_northangle
+                mmclx_file, gzip_flag=gzip_flag,
+                revised_northangle=revised_northangle,
+                logp_dir=logp_dir
             )
             radars.append(radar)
         except Exception as e:
@@ -2899,17 +3247,18 @@ def find_mmclx_vad_files(
     # Get the date string from start time
     date_str = start_datetime.strftime('%Y%m%d')
     
-    # Check if inpath already exists (e.g., for WOEST with scan-type subdirs)
-    # or if we need to add the date subdirectory
+    # Try date subdirectory first (standard campaigns); fall back to inpath directly (WOEST)
     inpath_obj = Path(inpath)
-    if inpath_obj.exists():
-        # Path already exists, use it directly (WOEST case)
-        search_path = inpath_obj
-        print(f"Using existing path directly: {search_path}")
-    else:
-        # Add date subdirectory (standard case)
-        search_path = inpath_obj / date_str
+    date_subdir = inpath_obj / date_str
+    if date_subdir.exists():
+        search_path = date_subdir
         print(f"Looking in date directory: {search_path}")
+    elif inpath_obj.exists():
+        search_path = inpath_obj
+        print(f"Using existing path directly (no date subdir): {search_path}")
+    else:
+        print(f"Path does not exist: {inpath_obj} (with or without date {date_str})")
+        return []
     
     if not search_path.exists():
         print(f"Date directory does not exist: {search_path}")
@@ -3120,7 +3469,8 @@ def import_sweep_metadata_from_csv(
     cfradial_file: str,
     sweep_csv: str = None,
     antenna_transition_csv: str = None,
-    backup: bool = True
+    backup: bool = True,
+    write_phase_sequence: bool = True
 ) -> None:
     """
     Import edited sweep metadata and antenna_transition flags from CSV into CF-Radial file.
@@ -3137,6 +3487,9 @@ def import_sweep_metadata_from_csv(
         sweep_csv: Input path for sweep metadata CSV (default: <file>_sweeps.csv)
         antenna_transition_csv: Input path for antenna transition CSV (default: <file>_antenna_transition.csv)
         backup: Create backup file before modifying (default: True)
+        write_phase_sequence: Write phase_sequence global attribute from the phase column
+            of the sweep CSV (default: True). Set to False for campaigns that do not use
+            phase_sequence metadata (e.g. COBALT).
         
     Example:
         >>> import_sweep_metadata_from_csv('myfile.nc')
@@ -3242,8 +3595,8 @@ def import_sweep_metadata_from_csv(
                         sweep_mode_var[i] = mode
                 print(f"Updated sweep_mode variable for {nsweeps_csv} sweeps")
             
-            # Update phase_sequence metadata if phases were provided
-            if phases and len(phases) == nsweeps_csv:
+            # Update phase_sequence metadata if phases were provided and requested
+            if write_phase_sequence and phases and len(phases) == nsweeps_csv:
                 phase_sequence_str = ', '.join(phases)
                 ds.setncattr('phase_sequence', phase_sequence_str)
                 print(f"Updated phase_sequence metadata: {phase_sequence_str}")
@@ -3403,6 +3756,7 @@ def apply_csv_edits_for_date(
     data_dir: str,
     csv_dir: str = None,
     backup: bool = True,
+    write_phase_sequence: bool = True,
 ) -> None:
     """
     Apply CSV edits to NetCDF files for a given date.
@@ -3419,6 +3773,9 @@ def apply_csv_edits_for_date(
         csv_dir: Directory containing CSV files in YYYYMMDD subdirectories
                  (default: same as data_dir)
         backup: Create backup files before modifying (default: True)
+        write_phase_sequence: Write phase_sequence global attribute from the phase column
+            of the sweep CSV (default: True). Set to False for campaigns that do not use
+            phase_sequence metadata (e.g. COBALT).
 
     Example:
         >>> apply_csv_edits_for_date('20171216', '/path/to/picasso/output')
@@ -3536,7 +3893,8 @@ def apply_csv_edits_for_date(
                         cfradial_file=nc_file,
                         sweep_csv=None,  # Don't update sweeps again
                         antenna_transition_csv=antenna_csv,
-                        backup=False  # Already backed up
+                        backup=False,  # Already backed up
+                        write_phase_sequence=write_phase_sequence
                     )
             else:
                 # Just update existing file (same sweep count)
@@ -3544,7 +3902,8 @@ def apply_csv_edits_for_date(
                     cfradial_file=nc_file,
                     sweep_csv=sweep_csv,
                     antenna_transition_csv=antenna_csv,
-                    backup=backup
+                    backup=backup,
+                    write_phase_sequence=write_phase_sequence
                 )
             processed += 1
         except Exception as e:

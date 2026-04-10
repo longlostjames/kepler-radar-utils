@@ -50,6 +50,13 @@ def parse_command_line():
         action='store_true',
         help='Do not create backup files'
     )
+
+    parser.add_argument(
+        '--no-phase-sequence',
+        action='store_true',
+        help='Do not write phase_sequence global attribute from the phase column '
+             '(use for campaigns that do not need phase_sequence, e.g. COBALT)'
+    )
     
     args = parser.parse_args()
     
@@ -71,10 +78,11 @@ def main():
     print("="*70)
     print("Apply CSV Edits to NetCDF Files")
     print("="*70)
-    print(f"Date:        {args.date}")
-    print(f"Data dir:    {args.input_dir}")
-    print(f"CSV dir:     {args.csv_dir if args.csv_dir else args.input_dir + ' (same as data dir)'}")
-    print(f"Backup:      {'No' if args.no_backup else 'Yes'}")
+    print(f"Date:          {args.date}")
+    print(f"Data dir:      {args.input_dir}")
+    print(f"CSV dir:       {args.csv_dir if args.csv_dir else args.input_dir + ' (same as data dir)'}")
+    print(f"Backup:        {'No' if args.no_backup else 'Yes'}")
+    print(f"phase_sequence: {'No' if args.no_phase_sequence else 'Yes'}")
     print("="*70)
     print()
     
@@ -84,6 +92,7 @@ def main():
             data_dir=args.input_dir,
             csv_dir=args.csv_dir,
             backup=not args.no_backup,
+            write_phase_sequence=not args.no_phase_sequence,
         )
     except Exception as e:
         print(f"\nERROR: {e}")

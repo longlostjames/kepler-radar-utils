@@ -64,6 +64,91 @@ def get_file_elevation(filepath: str, gzip_flag: bool = True) -> Optional[float]
         print(f"Warning: Could not read elevation from {filepath}: {e}")
     return None
 
+
+def _get_file_elevation_stats(filepath: str, gzip_flag: bool = True) -> Optional[dict]:
+    """
+    Get mean, min, and max elevation angle from an mmclx file.
+
+    Returns a dict with keys 'mean', 'min', 'max' (degrees), or None on failure.
+    Useful for detecting embedded non-VPT scans inside a file assumed to be
+    vertically pointing.
+    """
+    try:
+        if gzip_flag:
+            with gzip.open(filepath, 'rb') as gz:
+                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                    if 'elv' in nc.variables:
+                        elv = nc.variables['elv'][:]
+                        return {
+                            'mean': float(elv.mean()),
+                            'min': float(elv.min()),
+                            'max': float(elv.max()),
+                        }
+        else:
+            with nc4.Dataset(filepath, 'r') as nc:
+                if 'elv' in nc.variables:
+                    elv = nc.variables['elv'][:]
+                    return {
+                        'mean': float(elv.mean()),
+                        'min': float(elv.min()),
+                        'max': float(elv.max()),
+                    }
+    except Exception as e:
+        print(f"Warning: Could not read elevation from {filepath}: {e}")
+    return None
+
+
+def _find_plain_mmclx_files(datestr: str, inpath: str, gzip_flag: bool = True) -> list:
+    """
+    Find mmclx files whose names contain only a datetime — no scan-type keyword.
+
+    Files like ``20240202_143853.mmclx.gz`` carry no type indicator ('vert',
+    'ppi', 'rhi', 'vad', 'man', …) and are therefore invisible to the standard
+    ``find_mmclx*`` helpers.  This function locates them so they can be
+    processed explicitly.
+
+    Args:
+        datestr:   Date string in YYYYMMDD format.
+        inpath:    Directory that *may* contain a ``datestr`` subdirectory, or
+                   already points directly at the file directory.
+        gzip_flag: True → search for ``*.mmclx.gz``; False → ``*.mmclx``.
+
+    Returns:
+        Sorted list of matching file paths.
+    """
+    import re
+    from pathlib import Path as _Path
+
+    inpath_obj = _Path(inpath)
+    date_subdir = inpath_obj / datestr
+    search_dir = date_subdir if date_subdir.exists() else inpath_obj
+
+    if not search_dir.exists():
+        return []
+
+    ext = '.mmclx.gz' if gzip_flag else '.mmclx'
+    type_keywords = {'vert', 'ppi', 'rhi', 'vad', 'man', 'hsrhi', 'blppi'}
+
+    # Strict datetime-only pattern: YYYYMMDD_HHMMSS.mmclx[.gz]
+    datetime_re = re.compile(r'^\d{8}_\d{6}\.mmclx(\.gz)?$', re.IGNORECASE)
+
+    plain_files = []
+    for f in search_dir.iterdir():
+        if not f.is_file():
+            continue
+        name = f.name
+        if not name.lower().endswith(ext.lower()):
+            continue
+        # Exclude files that already carry a scan-type keyword
+        if any(kw in name.lower() for kw in type_keywords):
+            continue
+        # Require the strict date-time-only filename pattern
+        if datetime_re.match(name):
+            plain_files.append(str(f))
+
+    return sorted(plain_files)
+
+
 def apply_phase_sweeps_to_radar(radar: pyart.core.Radar, phases: List[Dict[str, Any]]) -> pyart.core.Radar:
     """
     Modify a radar object to split rays into sweeps based on detected phases.
@@ -206,7 +291,15 @@ def apply_phase_sweeps_to_radar(radar: pyart.core.Radar, phases: List[Dict[str, 
 
 def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray, 
                                    time: np.ndarray,
-                                   min_sweep_rays: int = 5) -> List[Dict[str, Any]]:
+                                   scan_rate: Optional[np.ndarray] = None,
+                                   min_sweep_rays: int = 5,
+                                   stationary_threshold: float = 0.5,
+                                   stationary_std_threshold: float = 1.0,
+                                   stationary_range_threshold: float = 2.0,
+                                   stationary_total_change_threshold: float = 3.0,
+                                   stationary_scan_rate_threshold: float = 0.2,
+                                   stationary_max_scanning_fraction: float = 0.15,
+                                   direction_rate_threshold: float = 0.1) -> List[Dict[str, Any]]:
     """
     Detect separate sweeps in PPI scan based on direction changes and stationary periods.
     
@@ -221,7 +314,21 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
         azimuth: Array of azimuth angles (degrees)
         elevation: Array of elevation angles (degrees)
         time: Array of time values
+        scan_rate: Optional per-ray scan_rate array (deg/s)
         min_sweep_rays: Minimum rays required for a valid sweep (default: 5)
+        stationary_threshold: Per-ray |d_az| threshold (deg) for stationary ray classification
+        stationary_std_threshold: Maximum azimuth std (deg) for a stationary segment
+        stationary_range_threshold: Maximum azimuth range (deg) for a stationary segment
+        stationary_total_change_threshold: Maximum total unwrapped azimuth excursion (deg)
+            for a segment to be considered stationary
+        stationary_scan_rate_threshold: Per-ray |scan_rate| threshold (deg/s) used to
+            identify actively-scanning rays within a segment
+        stationary_max_scanning_fraction: If the fraction of valid rays with
+            |scan_rate| >= stationary_scan_rate_threshold exceeds this value,
+            treat the segment as scanning rather than stationary (default: 0.15).
+            Prevents deceleration tails (e.g. half the rays still at full scan
+            speed) from being labelled as stationary/pointing.
+        direction_rate_threshold: Median per-ray d_az threshold (deg/ray) for direction
         
     Returns:
         List of sweep dictionaries with keys:
@@ -232,7 +339,7 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
             - 'n_rays': Number of rays in sweep
     """
     n_rays = len(azimuth)
-    
+
     if n_rays < 2:
         return [{
             'start_idx': 0,
@@ -272,8 +379,7 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
                 large_jumps.append(boundary_idx)
                 print(f"  Window-based reset detected at ray {boundary_idx}: {window_sum:.1f}° over {window_size} rays")
     
-    # Classify rays as stationary (|d_az| < 0.5°) or scanning
-    stationary_threshold = 0.5
+    # Classify rays as stationary or scanning
     is_stationary = np.abs(d_az) < stationary_threshold
     
     # Apply median filter to smooth classification
@@ -332,9 +438,34 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
         sweep_az = azimuth[start:end + 1]
         az_std = np.std(sweep_az)
         az_range = np.ptp(sweep_az)
-        
+        sweep_az_unwrapped = np.rad2deg(np.unwrap(np.deg2rad(sweep_az)))
+        net_az_change = float(abs(sweep_az_unwrapped[-1] - sweep_az_unwrapped[0]))
+
+        scanning_fraction = None
+        if scan_rate is not None:
+            sweep_scan_rate = np.asarray(scan_rate[start:end + 1], dtype=float)
+            valid_scan_rate = np.isfinite(sweep_scan_rate)
+            if np.any(valid_scan_rate):
+                scanning_fraction = float(
+                    np.mean(np.abs(sweep_scan_rate[valid_scan_rate]) >= stationary_scan_rate_threshold)
+                )
+
         # Check if stationary (low variation)
-        if az_std < 1.0 and az_range < 2.0:
+        stationary_candidate = (
+            az_std < stationary_std_threshold
+            and az_range < stationary_range_threshold
+            and net_az_change < stationary_total_change_threshold
+        )
+
+        # Guard against deceleration tails and other cases where a significant
+        # fraction of rays are still actively scanning: if more than
+        # stationary_max_scanning_fraction of valid rays have |scan_rate| at or
+        # above the threshold, do not classify as stationary.
+        if stationary_candidate and scanning_fraction is not None:
+            if scanning_fraction >= stationary_max_scanning_fraction:
+                stationary_candidate = False
+
+        if stationary_candidate:
             sweep['direction'] = 'stationary'
         else:
             # Determine scanning direction from mean d_az
@@ -345,12 +476,20 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
             
             if len(sweep_d_az) > 0:
                 mean_rate = np.median(sweep_d_az)
-                if mean_rate > 0.1:
+                signed_change = float(np.sum(sweep_d_az))
+                if mean_rate > direction_rate_threshold:
                     sweep['direction'] = 'clockwise'
-                elif mean_rate < -0.1:
+                elif mean_rate < -direction_rate_threshold:
                     sweep['direction'] = 'counter-clockwise'
                 else:
-                    sweep['direction'] = 'stationary'
+                    # Very slow but persistent drift should still count as scanning.
+                    if abs(signed_change) >= stationary_total_change_threshold:
+                        sweep['direction'] = 'clockwise' if signed_change > 0 else 'counter-clockwise'
+                    elif scan_rate_median_abs is not None and scan_rate_median_abs >= stationary_scan_rate_threshold:
+                        # scan_rate indicates active scanning even when d_az is nearly balanced
+                        sweep['direction'] = 'clockwise' if signed_change >= 0 else 'counter-clockwise'
+                    else:
+                        sweep['direction'] = 'stationary'
             else:
                 sweep['direction'] = 'unknown'
     
@@ -380,7 +519,14 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
 
 
 def detect_ppi_pointing_periods(azimuth: np.ndarray, elevation: np.ndarray, 
-                                time: np.ndarray) -> List[Dict[str, Any]]:
+                                time: np.ndarray,
+                                scan_rate: Optional[np.ndarray] = None,
+                                window_size: int = 10,
+                                az_std_threshold: float = 1.0,
+                                min_pointing_rays: int = 10,
+                                pointing_total_change_threshold: float = 3.0,
+                                pointing_scan_rate_threshold: float = 0.2,
+                                pointing_max_scanning_fraction: float = 0.15) -> List[Dict[str, Any]]:
     """
     Detect distinct phases in PPI scan: scanning vs extended pointing periods.
     
@@ -392,6 +538,19 @@ def detect_ppi_pointing_periods(azimuth: np.ndarray, elevation: np.ndarray,
         azimuth: Array of azimuth angles (degrees)
         elevation: Array of elevation angles (degrees)
         time: Array of time values
+        scan_rate: Optional per-ray scan_rate array (deg/s)
+        window_size: Rolling window size in rays for local azimuth variability
+        az_std_threshold: Rolling-window azimuth std threshold (deg) for pointing rays
+        min_pointing_rays: Minimum contiguous rays to keep a pointing phase
+        pointing_total_change_threshold: Maximum total unwrapped azimuth excursion (deg)
+            for a phase to remain classified as pointing
+        pointing_scan_rate_threshold: Per-ray |scan_rate| threshold (deg/s) used to
+            identify actively-scanning rays within a phase
+        pointing_max_scanning_fraction: If the fraction of valid rays with
+            |scan_rate| >= pointing_scan_rate_threshold exceeds this value,
+            reclassify the phase as ppi (default: 0.15). Prevents deceleration
+            tails from being labelled as pointing when half the rays are still
+            at full scan speed.
         
     Returns:
         List of phase dictionaries with keys:
@@ -406,9 +565,6 @@ def detect_ppi_pointing_periods(azimuth: np.ndarray, elevation: np.ndarray,
         return [{'start_idx': 0, 'end_idx': n_rays - 1, 'phase': 'ppi', 'n_rays': n_rays}]
     
     # Calculate azimuth variation using rolling window
-    window_size = 10
-    az_std_threshold = 1.0
-    min_pointing_rays = 10
     
     # Calculate rolling standard deviation
     is_pointing = np.zeros(n_rays, dtype=bool)
@@ -479,7 +635,42 @@ def detect_ppi_pointing_periods(azimuth: np.ndarray, elevation: np.ndarray,
             'n_rays': n_phase_rays
         })
     
-    return phases
+    # Guard against slow-but-continuous scanning: if a nominal pointing phase has
+    # large total azimuth excursion, reclassify it as ppi.
+    for phase in phases:
+        if phase['phase'] != 'pointing':
+            continue
+        start_idx = phase['start_idx']
+        end_idx = phase['end_idx']
+        phase_az = azimuth[start_idx:end_idx + 1]
+        if len(phase_az) < 2:
+            continue
+        phase_az_unwrapped = np.rad2deg(np.unwrap(np.deg2rad(phase_az)))
+        phase_change = float(abs(phase_az_unwrapped[-1] - phase_az_unwrapped[0]))
+        phase_scanning_fraction = None
+        if scan_rate is not None:
+            phase_scan_rate = np.asarray(scan_rate[start_idx:end_idx + 1], dtype=float)
+            valid_scan_rate = np.isfinite(phase_scan_rate)
+            if np.any(valid_scan_rate):
+                phase_scanning_fraction = float(
+                    np.mean(np.abs(phase_scan_rate[valid_scan_rate]) >= pointing_scan_rate_threshold)
+                )
+
+        if phase_change >= pointing_total_change_threshold:
+            phase['phase'] = 'ppi'
+        elif phase_scanning_fraction is not None and phase_scanning_fraction >= pointing_max_scanning_fraction:
+            phase['phase'] = 'ppi'
+
+    # Merge adjacent phases of the same type after reclassification.
+    merged_phases = []
+    for phase in phases:
+        if not merged_phases or merged_phases[-1]['phase'] != phase['phase']:
+            merged_phases.append(phase.copy())
+        else:
+            merged_phases[-1]['end_idx'] = phase['end_idx']
+            merged_phases[-1]['n_rays'] = merged_phases[-1]['end_idx'] - merged_phases[-1]['start_idx'] + 1
+
+    return merged_phases
 
 
 def _extract_rays_from_radar(radar: pyart.core.Radar, ray_indices: List[int]) -> pyart.core.Radar:
@@ -623,7 +814,20 @@ def process_ppi_file_with_sweep_detection(
     yaml_project_file: str,
     yaml_instrument_file: str,
     split_ppi_by_direction: bool = True,
-    split_ppi_pointing: bool = True
+    split_ppi_pointing: bool = True,
+    stationary_threshold: float = 0.5,
+    stationary_std_threshold: float = 1.0,
+    stationary_range_threshold: float = 2.0,
+    stationary_total_change_threshold: float = 3.0,
+    stationary_scan_rate_threshold: float = 0.2,
+    direction_rate_threshold: float = 0.1,
+    pointing_window_size: int = 10,
+    pointing_az_std_threshold: float = 1.0,
+    min_pointing_rays: int = 10,
+    pointing_total_change_threshold: float = 3.0,
+    pointing_scan_rate_threshold: float = 0.2,
+    stationary_max_scanning_fraction: float = 0.15,
+    pointing_max_scanning_fraction: float = 0.15
 ) -> List[str]:
     """
     Process a single PPI file with sweep detection and splitting.
@@ -648,6 +852,27 @@ def process_ppi_file_with_sweep_detection(
         yaml_instrument_file: Path to instrument YAML
         split_ppi_by_direction: If True, detect and split by direction changes
         split_ppi_pointing: If True, split scanning sweeps by pointing periods
+        stationary_threshold: Per-ray |d_az| threshold (deg) for stationary ray classification
+        stationary_std_threshold: Maximum azimuth std (deg) for a stationary segment
+        stationary_range_threshold: Maximum azimuth range (deg) for a stationary segment
+        stationary_total_change_threshold: Maximum total unwrapped azimuth excursion (deg)
+            for a segment to be considered stationary
+        stationary_scan_rate_threshold: Per-ray |scan_rate| threshold (deg/s) for
+            identifying actively-scanning rays in stationary detection
+        stationary_max_scanning_fraction: Fraction threshold for stationary detection;
+            if more than this fraction of rays are actively scanning, treat as scanning
+            (prevents deceleration tails from becoming pointing files, default: 0.15)
+        direction_rate_threshold: Median per-ray d_az threshold (deg/ray) for direction
+        pointing_window_size: Rolling window size in rays for pointing split
+        pointing_az_std_threshold: Rolling azimuth std threshold (deg) for pointing split
+        min_pointing_rays: Minimum rays for a pointing phase in pointing split
+        pointing_total_change_threshold: Maximum unwrapped azimuth excursion (deg)
+            for a phase to remain pointing in pointing split
+        pointing_scan_rate_threshold: Per-ray |scan_rate| threshold (deg/s) for
+            identifying actively-scanning rays in pointing detection
+        pointing_max_scanning_fraction: Fraction threshold for pointing detection;
+            if more than this fraction of rays are actively scanning, reclassify
+            as ppi (default: 0.15)
         
     Returns:
         List of output file paths created
@@ -772,9 +997,24 @@ def process_ppi_file_with_sweep_detection(
         azimuth = radar.azimuth['data']
         elevation = radar.elevation['data']
         time = radar.time['data']
+        scan_rate = None
+        if hasattr(radar, 'scan_rate') and radar.scan_rate is not None and isinstance(radar.scan_rate, dict):
+            scan_rate = radar.scan_rate.get('data', None)
         
         # Detect sweeps by direction changes
-        sweeps = detect_ppi_sweeps_by_direction(azimuth, elevation, time)
+        sweeps = detect_ppi_sweeps_by_direction(
+            azimuth,
+            elevation,
+            time,
+            scan_rate=scan_rate,
+            stationary_threshold=stationary_threshold,
+            stationary_std_threshold=stationary_std_threshold,
+            stationary_range_threshold=stationary_range_threshold,
+            stationary_total_change_threshold=stationary_total_change_threshold,
+            stationary_scan_rate_threshold=stationary_scan_rate_threshold,
+            stationary_max_scanning_fraction=stationary_max_scanning_fraction,
+            direction_rate_threshold=direction_rate_threshold,
+        )
         
         if len(sweeps) > 1:
             print(f"  Found {len(sweeps)} sweeps (direction changes):")
@@ -851,8 +1091,22 @@ def process_ppi_file_with_sweep_detection(
                     azimuth_sweep = sweep_radar.azimuth['data']
                     elevation_sweep = sweep_radar.elevation['data']
                     time_sweep = sweep_radar.time['data']
+                    scan_rate_sweep = None
+                    if hasattr(sweep_radar, 'scan_rate') and sweep_radar.scan_rate is not None and isinstance(sweep_radar.scan_rate, dict):
+                        scan_rate_sweep = sweep_radar.scan_rate.get('data', None)
                     
-                    phases = detect_ppi_pointing_periods(azimuth_sweep, elevation_sweep, time_sweep)
+                    phases = detect_ppi_pointing_periods(
+                        azimuth_sweep,
+                        elevation_sweep,
+                        time_sweep,
+                        scan_rate=scan_rate_sweep,
+                        window_size=pointing_window_size,
+                        az_std_threshold=pointing_az_std_threshold,
+                        min_pointing_rays=min_pointing_rays,
+                        pointing_total_change_threshold=pointing_total_change_threshold,
+                        pointing_scan_rate_threshold=pointing_scan_rate_threshold,
+                        pointing_max_scanning_fraction=pointing_max_scanning_fraction,
+                    )
                     
                     if len(phases) > 1:
                         print(f"  Found {len(phases)} phases in scanning sweep:")
@@ -2147,7 +2401,7 @@ def process_kepler_general_day_step1(
     yaml_instrument_file: str,
     azimuth_offset: float = 0.0,
     revised_northangle: float = 55.7,
-    gzip_flag: bool = False,
+    gzip_flag: bool = True,
     data_version: str = "1.0.0",
     single_sweep: bool = True,
     tracking_tag: str = 'AMOF_20230401000000',
@@ -2360,7 +2614,65 @@ def process_kepler_general_day_step1(
                 print(f"Error processing VAD files at {elv}°: {e}")
                 import traceback
                 traceback.print_exc()
-    
+
+    # Process plain mmclx files (named YYYYMMDD_HHMMSS.mmclx[.gz] with no scan-type keyword).
+    # Such files are assumed to be vertically pointing.  Elevation is checked to
+    # confirm: files with mean elevation ≥ 80° are routed to VPT processing;
+    # lower elevations (or large within-file variation) trigger a warning so
+    # the operator can classify them manually.
+    print("Checking for plain (type-less) mmclx files...")
+    try:
+        plain_files = _find_plain_mmclx_files(datestr, inpath, gzip_flag=gzip_flag)
+        if plain_files:
+            print(f"Found {len(plain_files)} plain mmclx file(s) with no scan-type keyword")
+            vpt_plain = []
+            for f in plain_files:
+                elv_stats = _get_file_elevation_stats(f, gzip_flag=gzip_flag)
+                fname = os.path.basename(f)
+                if elv_stats is None:
+                    print(f"  {fname}: cannot read elevation — skipping")
+                    continue
+                mean_elv = elv_stats['mean']
+                min_elv = elv_stats['min']
+                max_elv = elv_stats['max']
+                print(
+                    f"  {fname}: elv mean={mean_elv:.1f}°  min={min_elv:.1f}°  max={max_elv:.1f}°"
+                )
+                if mean_elv >= 80.0:
+                    if min_elv < 80.0:
+                        print(
+                            f"    WARNING: embedded non-VPT rays detected "
+                            f"(min elv={min_elv:.1f}°) — processing file as VPT anyway"
+                        )
+                    vpt_plain.append(f)
+                    print(f"    -> VPT")
+                else:
+                    print(
+                        f"    WARNING: mean elevation {mean_elv:.1f}° is below VPT threshold (80°)"
+                        f" — skipping (manual classification required)"
+                    )
+
+            if vpt_plain:
+                print(f"Processing {len(vpt_plain)} plain file(s) as VPT...")
+                RadarDS_VPT = multi_mmclx2cfrad(
+                    vpt_plain, outdir, scan_name='VPT', gzip_flag=gzip_flag,
+                    azimuth_offset=azimuth_offset,
+                    tracking_tag=tracking_tag,
+                    campaign=campaign,
+                    revised_northangle=revised_northangle,
+                    data_version=data_version,
+                    single_sweep=False,
+                    yaml_project_file=yaml_project_file,
+                    yaml_instrument_file=yaml_instrument_file,
+                )
+                print(f"Processed {len(vpt_plain)} plain VPT file(s)")
+        else:
+            print("No plain mmclx files found")
+    except Exception as e:
+        print(f"Plain mmclx file processing problem: {e}")
+        import traceback
+        traceback.print_exc()
+
     print(f"Completed {campaign.upper()} processing for {datestr}")
 
 def process_kepler_picasso_day_step1(
@@ -2794,6 +3106,72 @@ def process_kepler_picasso_day_step1(
     
     print(f"Completed {campaign.upper()} processing for {datestr}")
 
+
+def _group_mmclx_by_ngates(mmclx_files: list, gzip_flag: bool = True) -> list:
+    """
+    Partition a sorted list of mmclx files into contiguous groups that share
+    the same number of range gates.  Each gate-count change starts a new group.
+
+    This prevents multi_mmclx2cfrad from failing when the operator changes the
+    MIRA range setting part-way through a day.
+
+    Parameters
+    ----------
+    mmclx_files : list of str
+        Sorted list of mmclx file paths.
+    gzip_flag : bool
+        Whether the files are gzip-compressed.
+
+    Returns
+    -------
+    list of list of str
+        Contiguous sublists, each with a uniform ngates value.
+    """
+    import gzip as _gzip
+    import tempfile as _tempfile
+
+    def _get_ngates(filepath):
+        if gzip_flag:
+            with _gzip.open(filepath, 'rb') as gz:
+                with _tempfile.NamedTemporaryFile(suffix='.nc', delete=False) as tmp:
+                    tmp.write(gz.read())
+                    tmpname = tmp.name
+        else:
+            tmpname = filepath
+        try:
+            import netCDF4 as _nc4
+            with _nc4.Dataset(tmpname) as ds:
+                return ds.dimensions['range'].size if 'range' in ds.dimensions else None
+        finally:
+            if gzip_flag:
+                os.unlink(tmpname)
+
+    groups = []
+    current_group = []
+    current_ngates = None
+
+    for f in mmclx_files:
+        try:
+            ng = _get_ngates(f)
+        except Exception as e:
+            print(f"  Warning: could not read ngates from {os.path.basename(f)}: {e} — skipping")
+            continue
+        if ng != current_ngates:
+            if current_group:
+                groups.append(current_group)
+            current_group = [f]
+            current_ngates = ng
+            if groups:  # log only when a change actually happens
+                print(f"  ngates change: {list(groups[-1][0])} -> {ng} at {os.path.basename(f)}")
+        else:
+            current_group.append(f)
+
+    if current_group:
+        groups.append(current_group)
+
+    return groups
+
+
 def process_kepler_cobalt_day_step1(
     datestr: str,
     inpath: str,
@@ -2823,6 +3201,16 @@ def process_kepler_cobalt_day_step1(
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     
+    # Derive logp directory from inpath: inpath is .../campaign/cobalt/mom,
+    # logp files live at .../campaign/logp/
+    from pathlib import Path as _Path
+    _logp_dir = str(_Path(inpath).parent.parent / 'logp')
+    logp_dir = _logp_dir if os.path.isdir(_logp_dir) else None
+    if logp_dir:
+        print(f"Axis-log directory: {logp_dir}")
+    else:
+        print(f"Axis-log directory not found at {_logp_dir} — logp reconstruction disabled")
+
     # Define the start and end times for the loop
     start_date = datetime.datetime.strptime(datestr, '%Y%m%d')
     end_date = start_date + datetime.timedelta(days=1)
@@ -2847,18 +3235,29 @@ def process_kepler_cobalt_day_step1(
             
             if len(vpt_files) > 0:
                 print("VPT files will always create multi-sweep output (ignoring single_sweep flag)")
-                RadarDS_VPT = multi_mmclx2cfrad(
-                    vpt_files, outdir, scan_name='VPT', gzip_flag=gzip_flag,
-                    azimuth_offset=azimuth_offset, 
-                    tracking_tag=tracking_tag,
-                    campaign=campaign,  # Use campaign parameter instead of hardcoded 'cobalt'
-                    revised_northangle=revised_northangle,
-                    data_version=data_version,
-                    single_sweep=False,  # ALWAYS FALSE FOR VPT
-                    yaml_project_file=yaml_project_file,
-                    yaml_instrument_file=yaml_instrument_file
-                )
-                print(f"Processed {len(vpt_files)} VPT files into multi-sweep dataset")
+
+                # Group VPT files by gate count so that a mid-day range change
+                # (e.g. MIRA operator switches range) produces separate L1 files
+                # rather than crashing multi_mmclx2cfrad with a dimension mismatch.
+                vpt_groups = _group_mmclx_by_ngates(vpt_files, gzip_flag=gzip_flag)
+                if len(vpt_groups) > 1:
+                    print(f"Gate-count change detected — splitting into {len(vpt_groups)} VPT output file(s)")
+
+                for grp_idx, grp_files in enumerate(vpt_groups):
+                    print(f"VPT group {grp_idx+1}/{len(vpt_groups)}: {len(grp_files)} files")
+                    RadarDS_VPT = multi_mmclx2cfrad(
+                        grp_files, outdir, scan_name='VPT', gzip_flag=gzip_flag,
+                        azimuth_offset=azimuth_offset,
+                        tracking_tag=tracking_tag,
+                        campaign=campaign,
+                        revised_northangle=revised_northangle,
+                        data_version=data_version,
+                        single_sweep=False,  # ALWAYS FALSE FOR VPT
+                        yaml_project_file=yaml_project_file,
+                        yaml_instrument_file=yaml_instrument_file,
+                        logp_dir=logp_dir
+                    )
+                print(f"Processed {len(vpt_files)} VPT files into {len(vpt_groups)} multi-sweep dataset(s)")
         except Exception as e:
             print(f"VPT problem: {e}")
             pass
@@ -2892,7 +3291,8 @@ def process_kepler_cobalt_day_step1(
                         data_version=data_version,
                         single_sweep=True,
                         yaml_project_file=yaml_project_file,
-                        yaml_instrument_file=yaml_instrument_file
+                        yaml_instrument_file=yaml_instrument_file,
+                        logp_dir=logp_dir
                     )
                     print(f"Processed single RHI file: {f}")
                 except Exception as e:
@@ -2909,7 +3309,8 @@ def process_kepler_cobalt_day_step1(
                     data_version=data_version,
                     single_sweep=False,
                     yaml_project_file=yaml_project_file,
-                    yaml_instrument_file=yaml_instrument_file
+                    yaml_instrument_file=yaml_instrument_file,
+                    logp_dir=logp_dir
                 )
                 print(f"Processed {len(rhi_files)} RHI files into combined dataset")
             except Exception as e:
@@ -2939,13 +3340,82 @@ def process_kepler_cobalt_day_step1(
                 data_version=data_version,
                 single_sweep=False,  # ALWAYS FALSE FOR VAD
                 yaml_project_file=yaml_project_file,
-                yaml_instrument_file=yaml_instrument_file
+                yaml_instrument_file=yaml_instrument_file,
+                logp_dir=logp_dir
             )
             print(f"Processed {len(vad_files)} VAD files into multi-sweep dataset")
     except Exception as e:
         print(f"VAD problem: {e}")
         pass
-    
+
+    # Process plain mmclx files (named YYYYMMDD_HHMMSS.mmclx[.gz] with no scan-type keyword).
+    # Such files are assumed to be vertically pointing.  Elevation is checked to
+    # confirm: files with mean elevation ≥ 80° are routed to VPT processing;
+    # lower elevations (or large within-file variation) trigger a warning so
+    # the operator can classify them manually.
+    print("Checking for plain (type-less) mmclx files...")
+    try:
+        plain_files = _find_plain_mmclx_files(datestr, inpath, gzip_flag=gzip_flag)
+        if plain_files:
+            print(f"Found {len(plain_files)} plain mmclx file(s) with no scan-type keyword")
+            vpt_plain = []
+            for f in plain_files:
+                elv_stats = _get_file_elevation_stats(f, gzip_flag=gzip_flag)
+                fname = os.path.basename(f)
+                if elv_stats is None:
+                    print(f"  {fname}: cannot read elevation — skipping")
+                    continue
+                mean_elv = elv_stats['mean']
+                min_elv = elv_stats['min']
+                max_elv = elv_stats['max']
+                print(
+                    f"  {fname}: elv mean={mean_elv:.1f}°  min={min_elv:.1f}°  max={max_elv:.1f}°"
+                )
+                if mean_elv >= 80.0:
+                    if min_elv < 80.0:
+                        print(
+                            f"    WARNING: embedded non-VPT rays detected "
+                            f"(min elv={min_elv:.1f}°) — processing file as VPT anyway"
+                        )
+                    vpt_plain.append(f)
+                    print(f"    -> VPT")
+                else:
+                    print(
+                        f"    WARNING: mean elevation {mean_elv:.1f}° is below VPT threshold (80°)"
+                        f" — skipping (manual classification required)"
+                    )
+
+            if vpt_plain:
+                print(f"Processing {len(vpt_plain)} plain file(s) as VPT...")
+                vpt_groups = _group_mmclx_by_ngates(vpt_plain, gzip_flag=gzip_flag)
+                if len(vpt_groups) > 1:
+                    print(
+                        f"Gate-count change detected — splitting into {len(vpt_groups)} VPT output file(s)"
+                    )
+                for grp_idx, grp_files in enumerate(vpt_groups):
+                    print(f"VPT (plain) group {grp_idx + 1}/{len(vpt_groups)}: {len(grp_files)} files")
+                    multi_mmclx2cfrad(
+                        grp_files, outdir, scan_name='VPT', gzip_flag=gzip_flag,
+                        azimuth_offset=azimuth_offset,
+                        tracking_tag=tracking_tag,
+                        campaign=campaign,
+                        revised_northangle=revised_northangle,
+                        data_version=data_version,
+                        single_sweep=False,
+                        yaml_project_file=yaml_project_file,
+                        yaml_instrument_file=yaml_instrument_file,
+                        logp_dir=logp_dir,
+                    )
+                print(
+                    f"Processed {len(vpt_plain)} plain VPT file(s) into {len(vpt_groups)} output file(s)"
+                )
+        else:
+            print("No plain mmclx files found")
+    except Exception as e:
+        print(f"Plain mmclx file processing problem: {e}")
+        import traceback
+        traceback.print_exc()
+
     print(f"Completed {campaign.upper()} processing for {datestr}")
 
 def process_kepler_kasbex_day_step1(

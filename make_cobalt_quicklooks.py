@@ -82,10 +82,11 @@ def parse_command_line():
     """
     try:
         opts, args = getopt.getopt(sys.argv[1:], "d:i:o:bl", 
-                                   ["date=", "inpath=", "outpath=", "no-aircraft", "skip-all-transition"])
+                                   ["date=", "inpath=", "outpath=", "no-aircraft", "skip-all-transition",
+                                    "rhi-only", "vpt-only"])
     except getopt.GetoptError as err:
         print(f"Error: {err}")
-        print("Usage: python make_cobalt_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [-l] [--no-aircraft] [--skip-all-transition]")
+        print("Usage: python make_cobalt_quicklooks.py -d YYYYMMDD -i input_path -o output_path [-b] [-l] [--no-aircraft] [--skip-all-transition] [--rhi-only] [--vpt-only]")
         sys.exit(2)
 
     # Default values
@@ -97,6 +98,8 @@ def parse_command_line():
     latest = False
     no_aircraft = False
     skip_all_transition = False
+    rhi_only = False
+    vpt_only = False
 
     for option, argument in opts:
         if option in ("-d", "--date"):
@@ -113,11 +116,15 @@ def parse_command_line():
             no_aircraft = True
         elif option == "--skip-all-transition":
             skip_all_transition = True
+        elif option == "--rhi-only":
+            rhi_only = True
+        elif option == "--vpt-only":
+            vpt_only = True
         else:
             print(f"Unhandled option: {option}")
             sys.exit(2)
 
-    return datestr, inpath, outpath, blflag, latest, no_aircraft, skip_all_transition
+    return datestr, inpath, outpath, blflag, latest, no_aircraft, skip_all_transition, rhi_only, vpt_only
 
 def setup_paths(datestr):
     """
@@ -133,7 +140,8 @@ def setup_paths(datestr):
     
     # Input path for processed radar data
     #inpath = os.path.join(NCAS_OBS_PROC_PATH, CAMPAIGN, 'L1_v1.0.1')
-    inpath = os.path.join(NCAS_OBS_PROC_PATH, CAMPAIGN, 'L1c')
+    #inpath = os.path.join(NCAS_OBS_PROC_PATH, CAMPAIGN, 'L1c')
+    inpath = os.path.join(NCAS_OBS_PROC_PATH, CAMPAIGN, 'L1_v1.0.3')
 
     # Output path for figures
     figpath = os.path.join(inpath, 'quicklooks')
@@ -444,8 +452,8 @@ def make_cobalt_rhi_plot(ncfile, figpath, cobalt_cmd_path, blflag=False, no_airc
             # Add logos to figure (in reserved space)
             add_logos_to_figure(fig)
             
-            # Adjust layout with padding for logos before adding them
-            plt.tight_layout(pad=3.0, rect=[0.08, 0.08, 0.95, 0.90])
+            # Adjust layout - h_pad gives vertical breathing room between colorbars and next row
+            plt.tight_layout(pad=2.0, h_pad=6.0, w_pad=2.0, rect=[0.08, 0.08, 0.95, 0.90])
             
             # Save individual sweep plot
             sweep_start_index = radar_ds.get_start(sweep_idx)
@@ -496,30 +504,25 @@ def _plot_rhi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max,
                     hmax, xmin, xmax):
     """Helper function to plot RHI fields on axes."""
     
-    # Reflectivity (DBZ)
-    display.plot_rhi("DBZ", ax=axes[0,0], sweep=sweep_idx, vmin=-60, vmax=40,
-                     cmap=COLORMAPS['dbz'], colorbar_orient='horizontal',
-                     gatefilter=gatefilter, filter_transitions=True)
-    _setup_rhi_axes(axes[0,0], hmax, xmin, xmax)
+    field_specs = [
+        ("DBZ",   axes[0,0], dict(vmin=-60, vmax=40, cmap=COLORMAPS['dbz'])),
+        ("LDR",   axes[0,1], dict(vmin=-35, vmax=5,  cmap=COLORMAPS['ldr'])),
+        ("VEL",   axes[1,0], dict(vmin=vel_min, vmax=vel_max, cmap=COLORMAPS['vel'])),
+        ("WIDTH", axes[1,1], dict(norm=colors.LogNorm(vmin=0.1*np.sqrt(0.1), vmax=np.sqrt(10)),
+                                  cmap=COLORMAPS['width'])),
+    ]
     
-    # Velocity (VEL)  
-    display.plot_rhi("VEL", ax=axes[1,0], sweep=sweep_idx, vmin=vel_min, vmax=vel_max,
-                     cmap=COLORMAPS['vel'], colorbar_orient='horizontal',
-                     gatefilter=gatefilter, filter_transitions=True)
-    _setup_rhi_axes(axes[1,0], hmax, xmin, xmax)
-    
-    # Spectrum width (WIDTH)
-    display.plot_rhi("WIDTH", ax=axes[1,1], sweep=sweep_idx,
-                     norm=colors.LogNorm(vmin=0.1*np.sqrt(0.1), vmax=np.sqrt(10)),
-                     cmap=COLORMAPS['width'], colorbar_orient='horizontal',
-                     gatefilter=gatefilter, filter_transitions=True)
-    _setup_rhi_axes(axes[1,1], hmax, xmin, xmax)
-    
-    # Linear depolarization ratio (LDR)
-    display.plot_rhi("LDR", ax=axes[0,1], sweep=sweep_idx, vmin=-35, vmax=5,
-                     cmap=COLORMAPS['ldr'], colorbar_orient='horizontal',
-                     gatefilter=gatefilter, filter_transitions=True)
-    _setup_rhi_axes(axes[0,1], hmax, xmin, xmax)
+    for field, ax, kwargs in field_specs:
+        display.plot_rhi(field, ax=ax, sweep=sweep_idx, colorbar_flag=False,
+                         gatefilter=gatefilter, filter_transitions=True, **kwargs)
+        _setup_rhi_axes(ax, hmax, xmin, xmax)
+        # Add colorbar manually so we can control pad (space between axes and bar)
+        mappable = display.plots[-1]
+        fld_meta = display.fields[field]
+        label = f"{fld_meta.get('long_name', field)} ({fld_meta.get('units', '')})"
+        cb = ax.get_figure().colorbar(mappable, ax=ax, orientation='horizontal',
+                                      shrink=0.9, pad=0.22)
+        cb.set_label(label)
 
 def _setup_rhi_axes(ax, hmax, xmin, xmax):
     """Helper function to set up RHI plot axes."""
@@ -603,179 +606,177 @@ def make_cobalt_vpt_plot_day(datestr, inpath, figpath, blflag=False):
     # Set height limits
     hmax = 4 if blflag else 12
     
-    # Find VPT file
+    # Find all VPT files for this day (sorted so they are in time order)
     inpath_date = os.path.join(inpath, datestr)
     os.chdir(inpath_date)
     
     try:
-        vpt_files = glob.glob(f'*{datestr}*vpt*.nc')
+        vpt_files = sorted(glob.glob(f'*{datestr}*vpt*.nc'))
         if not vpt_files:
             print(f"No VPT files found for {datestr}")
             return
-            
-        vpt_file = os.path.join(inpath_date, vpt_files[0])
-        print(f"Processing VPT file: {vpt_file}")
-        
+        print(f"Found {len(vpt_files)} VPT file(s) for {datestr}")
     except Exception as e:
-        print(f"Error finding VPT file: {e}")
+        print(f"Error finding VPT files: {e}")
         return
-    
-    # Read data
+
+    # Read the first file to get product version and velocity limits
     try:
-        with nc4.Dataset(vpt_file) as ds:
+        with nc4.Dataset(os.path.join(inpath_date, vpt_files[0])) as ds:
             product_version = ds.product_version
-            
-        radar_ds = pyart.io.read_cfradial(vpt_file)
-        
+        radar_ds_first = pyart.io.read_cfradial(os.path.join(inpath_date, vpt_files[0]))
     except Exception as e:
         print(f"Error reading VPT file: {e}")
         return
-    
-    # Get velocity limits
-    vel_field = radar_ds.fields['VEL']
-    vel_limit_lower = vel_field['field_limit_lower'] 
+
+    vel_field = radar_ds_first.fields['VEL']
+    vel_limit_lower = vel_field['field_limit_lower']
     vel_limit_upper = vel_field['field_limit_upper']
-    
-    # Try to load previous day's data for continuity
+
+    # Try to load the last sweep from the previous day for midnight continuity
     nsweeps_prev = 0
     radar_ds_prev = None
-    
+
     try:
         prev_date = datetime.datetime.strptime(datestr, '%Y%m%d') - datetime.timedelta(days=1)
         prevstr = prev_date.strftime('%Y%m%d')
         inpath_prev = os.path.join(inpath, prevstr)
-        
         os.chdir(inpath_prev)
-        vpt_files_prev = glob.glob(f'*{prevstr}*vpt*.nc')
-        
+        vpt_files_prev = sorted(glob.glob(f'*{prevstr}*vpt*.nc'))
         if vpt_files_prev:
-            vpt_file_prev = os.path.join(inpath_prev, vpt_files_prev[0])
+            # Use the last file of the previous day (latest in time)
+            vpt_file_prev = os.path.join(inpath_prev, vpt_files_prev[-1])
             radar_ds_prev = pyart.io.read_cfradial(vpt_file_prev)
             nsweeps_prev = radar_ds_prev.nsweeps
-            print(f"Loaded previous day data: {nsweeps_prev} sweeps")
-            
+            print(f"Loaded previous day data: {nsweeps_prev} sweeps from {vpt_files_prev[-1]}")
     except Exception as e:
         print(f"Could not load previous day data: {e}")
-    
-    # Create figure with more space
-    fig, axes = plt.subplots(4, 1, figsize=(12, 18), constrained_layout=False)
-    
-    # Reserve space for logos - more bottom space for AMOF, less top space for NCAS
-    fig.subplots_adjust(left=0.10, right=0.95, top=0.88, bottom=0.12, hspace=0.3)
-    
+
+    # Create figure
+    fig, axes = plt.subplots(4, 1, figsize=(12, 22), constrained_layout=False)
+    fig.subplots_adjust(left=0.10, right=0.95, top=0.92, bottom=0.08, hspace=0.55)
+
     # Set up time limits for full day
-    dtime = cftime.num2pydate(radar_ds.time['data'], radar_ds.time['units'])
+    dtime = cftime.num2pydate(radar_ds_first.time['data'], radar_ds_first.time['units'])
     dt_min = dtime[0].replace(hour=0, minute=0, second=0)
     dt_max = dt_min + datetime.timedelta(days=1)
     time_str = dtime[0].strftime("%Y-%m-%d")
-    
-    # Plot first sweep to establish colorbars and titles
-    radar_sweep_ds = radar_ds.extract_sweeps([0])
-    gatefilter = pyart.correct.GateFilter(radar_sweep_ds)
-    gatefilter.exclude_below('SNR', -20)
-    display = pyart.graph.RadarDisplay(radar_sweep_ds)
-    
-    _plot_vpt_fields(display, axes, radar_sweep_ds, gatefilter, time_str, hmax,
-                    vel_limit_lower, vel_limit_upper)
-    
-    # Plot remaining sweeps from current day
-    nsweeps = radar_ds.nsweeps
-    for sweep_idx in range(1, nsweeps):
-        print(f"Processing sweep {sweep_idx}/{nsweeps}")
-        
-        radar_sweep_ds = radar_ds.extract_sweeps([sweep_idx])
-        gatefilter = pyart.correct.GateFilter(radar_sweep_ds)
-        gatefilter.exclude_below('SNR', -20)
-        display = pyart.graph.RadarDisplay(radar_sweep_ds)
-        
-        _plot_vpt_fields_overlay(display, axes, gatefilter, vel_limit_lower, vel_limit_upper)
-    
-    # Plot last sweep from previous day if available
+
+    colorbars_done = False
+
+    # Previous day tail
     if radar_ds_prev and nsweeps_prev > 0:
         print("Adding previous day data")
         radar_sweep_ds = radar_ds_prev.extract_sweeps([nsweeps_prev - 1])
-        gatefilter = pyart.correct.GateFilter(radar_sweep_ds)
-        gatefilter.exclude_below('SNR', -20)
-        display = pyart.graph.RadarDisplay(radar_sweep_ds)
-        
-        _plot_vpt_fields_overlay(display, axes, gatefilter, vel_limit_lower, vel_limit_upper)
-    
+        # Skip if all rays are antenna transitions
+        trans = radar_sweep_ds.antenna_transition['data']
+        if not np.all(trans == 1):
+            gatefilter = pyart.correct.GateFilter(radar_sweep_ds)
+            gatefilter.exclude_below('SNR', -20)
+            gatefilter.exclude_transition()
+            display = pyart.graph.RadarDisplay(radar_sweep_ds)
+            if not colorbars_done:
+                _plot_vpt_fields(display, axes, radar_sweep_ds, gatefilter, time_str, hmax,
+                                 vel_limit_lower, vel_limit_upper)
+                colorbars_done = True
+            else:
+                _plot_vpt_fields_overlay(display, axes, gatefilter, vel_limit_lower, vel_limit_upper)
+
+    # Plot all VPT files for the day
+    for vpt_fname in vpt_files:
+        vpt_file = os.path.join(inpath_date, vpt_fname)
+        try:
+            radar_ds = pyart.io.read_cfradial(vpt_file)
+        except Exception as e:
+            print(f"Error reading {vpt_fname}: {e}")
+            continue
+
+        nsweeps = radar_ds.nsweeps
+        print(f"Plotting {nsweeps} sweeps from {vpt_fname}")
+
+        for sweep_idx in range(nsweeps):
+            radar_sweep_ds = radar_ds.extract_sweeps([sweep_idx])
+            # Skip sweeps where every ray is an antenna transition
+            trans = radar_sweep_ds.antenna_transition['data']
+            if np.all(trans == 1):
+                continue
+            gatefilter = pyart.correct.GateFilter(radar_sweep_ds)
+            gatefilter.exclude_below('SNR', -20)
+            gatefilter.exclude_transition()
+            display = pyart.graph.RadarDisplay(radar_sweep_ds)
+
+            if not colorbars_done:
+                _plot_vpt_fields(display, axes, radar_sweep_ds, gatefilter, time_str, hmax,
+                                 vel_limit_lower, vel_limit_upper)
+                colorbars_done = True
+            else:
+                _plot_vpt_fields_overlay(display, axes, gatefilter, vel_limit_lower, vel_limit_upper)
+
     # Final plot setup
     for ax in axes:
         ax.set_xlim(dt_min, dt_max)
         ax.grid(True)
         ax.set_xlabel('Time (UTC)')
-    
-    # Add logos to figure
+
     add_logos_to_figure(fig)
-    
-    # Save figure
+
     figname = f'ncas-mobile-ka-band-radar-1_cao_cobalt_{datestr}_vpt_l1_{product_version}.png'
     if blflag:
         figname = figname.replace('.png', '_bl.png')
-    
+
     vpt_figpath = os.path.join(figpath, 'vpt')
     os.makedirs(vpt_figpath, exist_ok=True)
-    
+
     plt.savefig(os.path.join(vpt_figpath, figname), dpi=300)
     plt.close()
-    
+
     print(f"VPT plot saved to: {vpt_figpath}")
 
 def _plot_vpt_fields(display, axes, radar_ds, gatefilter, time_str, hmax, 
                     vel_min, vel_max):
     """Plot VPT fields with titles and colorbars."""
     
-    # DBZ
-    field_name = pyart.graph.common.generate_field_name(radar_ds, "DBZ")
-    title = f"{pyart.graph.common.generate_radar_name(radar_ds)} {time_str}\n{field_name}"
-    display.plot_vpt("DBZ", ax=axes[0], time_axis_flag=True, title=title, edges=False,
-                     gatefilter=gatefilter, vmin=-60, vmax=40, cmap=COLORMAPS['dbz'],
-                     colorbar_orient='horizontal', filter_transitions=True)
-    axes[0].set_ylim(0, hmax)
-    
-    # VEL  
-    field_name = pyart.graph.common.generate_field_name(radar_ds, "VEL")
-    title = f"{pyart.graph.common.generate_radar_name(radar_ds)} {time_str}\n{field_name}"
-    display.plot_vpt("VEL", ax=axes[1], time_axis_flag=True, title=title, edges=False,
-                     gatefilter=gatefilter, vmin=vel_min, vmax=vel_max, 
-                     cmap=COLORMAPS['vel'], colorbar_orient='horizontal')
-    axes[1].set_ylim(0, hmax)
-    
-    # WIDTH
-    field_name = pyart.graph.common.generate_field_name(radar_ds, "WIDTH")
-    title = f"{pyart.graph.common.generate_radar_name(radar_ds)} {time_str}\n{field_name}"
-    display.plot_vpt("WIDTH", ax=axes[2], time_axis_flag=True, title=title, edges=False,
-                     gatefilter=gatefilter, norm=colors.LogNorm(vmin=0.1*np.sqrt(0.1), vmax=np.sqrt(10)),
-                     cmap=COLORMAPS['width'], colorbar_orient='horizontal')
-    axes[2].set_ylim(0, hmax)
-    
-    # LDR
-    field_name = pyart.graph.common.generate_field_name(radar_ds, "LDR")
-    title = f"{pyart.graph.common.generate_radar_name(radar_ds)} {time_str}\n{field_name}"
-    display.plot_vpt("LDR", ax=axes[3], time_axis_flag=True, title=title, edges=False,
-                     gatefilter=gatefilter, vmin=-35, vmax=5, cmap=COLORMAPS['ldr'],
-                     colorbar_orient='horizontal')
-    axes[3].set_ylim(0, hmax)
+    vpt_specs = [
+        ("DBZ",   axes[0], dict(vmin=-60, vmax=40, cmap=COLORMAPS['dbz'])),
+        ("VEL",   axes[1], dict(vmin=vel_min, vmax=vel_max, cmap=COLORMAPS['vel'])),
+        ("WIDTH", axes[2], dict(norm=colors.LogNorm(vmin=0.1*np.sqrt(0.1), vmax=np.sqrt(10)),
+                                cmap=COLORMAPS['width'])),
+        ("LDR",   axes[3], dict(vmin=-35, vmax=5, cmap=COLORMAPS['ldr'])),
+    ]
+
+    for field, ax, kwargs in vpt_specs:
+        field_name = pyart.graph.common.generate_field_name(radar_ds, field)
+        title = f"{pyart.graph.common.generate_radar_name(radar_ds)} {time_str}\n{field_name}"
+        display.plot_vpt(field, ax=ax, time_axis_flag=True, title=title, edges=False,
+                         gatefilter=gatefilter, colorbar_flag=False, title_flag=True,
+                         filter_transitions=False, **kwargs)
+        ax.set_ylim(0, hmax)
+        # Add colorbar manually with enough pad to clear the x-axis label
+        mappable = display.plots[-1]
+        fld_meta = display.fields[field]
+        label = f"{fld_meta.get('long_name', field)} ({fld_meta.get('units', '')})"
+        cb = ax.get_figure().colorbar(mappable, ax=ax, orientation='horizontal',
+                                      shrink=0.9, pad=0.18)
+        cb.set_label(label)
 
 def _plot_vpt_fields_overlay(display, axes, gatefilter, vel_min, vel_max):
     """Plot VPT fields as overlay (no titles or colorbars)."""
     
     display.plot_vpt("DBZ", ax=axes[0], time_axis_flag=True, edges=False,
                      gatefilter=gatefilter, vmin=-60, vmax=40, cmap=COLORMAPS['dbz'],
-                     colorbar_flag=False, title_flag=False, filter_transitions=True)
+                     colorbar_flag=False, title_flag=False, filter_transitions=False)
     
     display.plot_vpt("VEL", ax=axes[1], time_axis_flag=True, edges=False,
                      gatefilter=gatefilter, vmin=vel_min, vmax=vel_max, 
-                     cmap=COLORMAPS['vel'], colorbar_flag=False, title_flag=False)
+                     cmap=COLORMAPS['vel'], colorbar_flag=False, title_flag=False, filter_transitions=False)
     
     display.plot_vpt("WIDTH", ax=axes[2], time_axis_flag=True, edges=False,
                      gatefilter=gatefilter, norm=colors.LogNorm(vmin=0.1*np.sqrt(0.1), vmax=np.sqrt(10)),
-                     cmap=COLORMAPS['width'], colorbar_flag=False, title_flag=False)
+                     cmap=COLORMAPS['width'], colorbar_flag=False, title_flag=False, filter_transitions=False)
     
     display.plot_vpt("LDR", ax=axes[3], time_axis_flag=True, edges=False,
                      gatefilter=gatefilter, vmin=-35, vmax=5, cmap=COLORMAPS['ldr'],
-                     colorbar_flag=False, title_flag=False)
+                     colorbar_flag=False, title_flag=False, filter_transitions=False)
 
 def make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=False, no_aircraft=False, skip_all_transition=False):
     """
@@ -901,7 +902,7 @@ def main():
     print("=" * 50)
     
     # Parse command line arguments
-    datestr, inpath_arg, outpath_arg, blflag, latest, no_aircraft, skip_all_transition = parse_command_line()
+    datestr, inpath_arg, outpath_arg, blflag, latest, no_aircraft, skip_all_transition, rhi_only, vpt_only = parse_command_line()
     
     # Set up paths
     inpath, figpath, _ = setup_paths(datestr)
@@ -918,14 +919,17 @@ def main():
     print(f"Boundary layer mode: {blflag}")
     print(f"Aircraft markers: {'disabled' if no_aircraft else 'enabled'}")
     print(f"Skip all-transition sweeps: {'enabled' if skip_all_transition else 'disabled'}")
+    print(f"Plot types: {'RHI only' if rhi_only else 'VPT only' if vpt_only else 'RHI + VPT'}")
     
     # Create quicklook plots
     try:
-        # RHI plots - ADD no_aircraft parameter
-        make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=blflag, no_aircraft=no_aircraft, skip_all_transition=skip_all_transition)
+        # RHI plots
+        if not vpt_only:
+            make_cobalt_rhi_plots_day(datestr, inpath, figpath, blflag=blflag, no_aircraft=no_aircraft, skip_all_transition=skip_all_transition)
         
-        # VPT plots  
-        make_cobalt_vpt_plot_day(datestr, inpath, figpath, blflag=blflag)
+        # VPT plots
+        if not rhi_only:
+            make_cobalt_vpt_plot_day(datestr, inpath, figpath, blflag=blflag)
         
         print("Quicklook generation completed successfully!")
         

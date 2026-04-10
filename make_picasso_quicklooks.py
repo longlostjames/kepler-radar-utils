@@ -1216,6 +1216,365 @@ def make_picasso_ppi_map_plot(ncfile, figpath, blflag=False, skip_all_transition
     
     print(f"PPI map plots saved to: {ppi_map_figpath}")
 
+def make_picasso_man_turning_ppi_map_plot(ncfile, figpath, blflag=False, skip_all_transition=False,
+                                           azimuth_offset=0.0, zoom_km=None, zoom_level=None):
+    """
+    Create PPI map plots (with geographic basemap) for turning phases in MAN scan files.
+
+    For each sweep identified as a 'turning' phase in the file's phase_sequence metadata,
+    a 2x2 map-based PPI figure is produced (DBZ, VEL, WIDTH, LDR) and saved alongside
+    the other MAN quicklook plots.
+
+    Args:
+        ncfile: Path to CF-Radial NetCDF file (MAN scan)
+        figpath: Root output directory for figures
+        blflag: Boundary layer flag (currently unused for map plots)
+        skip_all_transition: If True, skip sweeps where 100% of rays are antenna_transition=1
+        azimuth_offset: Additional azimuth offset to apply in degrees (default: 0.0)
+        zoom_km: Optional zoom distance in km from radar (if None, uses ~40 km range)
+        zoom_level: Optional basemap tile zoom level (8-17, overrides auto-calculation)
+    """
+    print(f"Creating PPI map plots for MAN turning phases: {ncfile}")
+
+    # Get scan information
+    time_coverage_start = get_time_coverage_start(ncfile)
+    if not time_coverage_start:
+        print(f"  Could not get time coverage from {ncfile}")
+        return
+
+    netcdf_time = datetime.datetime.strptime(time_coverage_start, "%Y-%m-%dT%H:%M:%SZ")
+
+    # Read radar data
+    try:
+        radar = pyart.io.read_cfradial(ncfile)
+    except Exception as e:
+        print(f"  Error reading radar file: {e}")
+        return
+
+    # Read metadata
+    geospatial_bounds_str = None
+    try:
+        with nc4.Dataset(ncfile) as ds:
+            product_version = ds.product_version if 'product_version' in ds.ncattrs() else VERSION
+            instrument_name = ds.source if 'source' in ds.ncattrs() else 'ncas-mobile-ka-band-radar-1'
+            phase_sequence_str = ds.getncattr('phase_sequence') if 'phase_sequence' in ds.ncattrs() else None
+            if 'geospatial_bounds' in ds.ncattrs():
+                geospatial_bounds_str = ds.getncattr('geospatial_bounds')
+    except Exception:
+        product_version = VERSION
+        instrument_name = 'ncas-mobile-ka-band-radar-1'
+        phase_sequence_str = None
+
+    # Build per-sweep phase list
+    nsweeps = radar.nsweeps
+    phase_sequence = None
+    if phase_sequence_str is not None:
+        phase_list = phase_sequence_str.split(', ')
+        if len(phase_list) == nsweeps:
+            phase_sequence = phase_list
+
+    # Apply azimuth offset if specified
+    if azimuth_offset != 0.0:
+        radar.azimuth['data'] = (radar.azimuth['data'] + azimuth_offset) % 360
+        print(f"  Applying azimuth offset: {azimuth_offset}°")
+        for attr in ['gate_x', 'gate_y', 'gate_z', 'gate_altitude', 'gate_latitude', 'gate_longitude']:
+            if hasattr(radar, attr):
+                delattr(radar, attr)
+
+    # Radar location
+    radar_lat = radar.latitude['data'][0]
+    radar_lon = radar.longitude['data'][0]
+
+    # Cartopy projection centred on radar
+    projection = ccrs.AzimuthalEquidistant(central_longitude=radar_lon, central_latitude=radar_lat)
+
+    # Gate filter
+    gatefilter = pyart.filters.GateFilter(radar)
+    gatefilter.exclude_below('SNR', -20)
+    if hasattr(radar, 'antenna_transition') and radar.antenna_transition is not None:
+        if 'data' in radar.antenna_transition:
+            transition_indices = np.where(radar.antenna_transition['data'] == 1)[0]
+            for ray_idx in transition_indices:
+                if hasattr(gatefilter, 'gate_excluded'):
+                    gatefilter.gate_excluded[ray_idx, :] = True
+                elif hasattr(gatefilter, '_gate_excluded'):
+                    gatefilter._gate_excluded[ray_idx, :] = True
+
+    display = pyart.graph.RadarMapDisplay(radar)
+
+    # Output directory — save in man_ppi_map tree
+    ppi_map_figpath = os.path.join(figpath, 'man_ppi_map', netcdf_time.strftime('%Y%m%d'))
+    os.makedirs(ppi_map_figpath, exist_ok=True)
+
+    # Ray duration string for subplot titles
+    avg_ray_duration = get_average_ray_duration(radar)
+    ray_duration_str = f"{avg_ray_duration:.1f}ms" if avg_ray_duration is not None else "unknown"
+
+    # Velocity limits
+    vel_field = radar.fields['VEL']
+    vel_limit_lower = vel_field.get('field_limit_lower', -10)
+    vel_limit_upper = vel_field.get('field_limit_upper', 10)
+
+    colormaps = {
+        "DBZ": "HomeyerRainbow",
+        "VEL": "balance",
+        "WIDTH": "viridis",
+        "LDR": "viridis",
+    }
+    default_vmin_vmax = {
+        "DBZ": (-20, 50),
+        "VEL": (vel_limit_lower, vel_limit_upper),
+        "WIDTH": (1e-1 * np.sqrt(1e-1), np.sqrt(1e1)),
+        "LDR": (-35, 5),
+    }
+    _short_cbar_label = {
+        "DBZ": "Reflectivity (dBZ)",
+        "VEL": "Velocity (m/s)",
+        "WIDTH": "Spectrum Width (m/s)",
+        "LDR": "LDR (dB)",
+    }
+
+    # Map extent — priority: zoom_km > geospatial_bounds from NetCDF > calculated fallback
+    if zoom_km is not None:
+        lat_offset = zoom_km / 111.32
+        lon_offset = zoom_km / (111.32 * np.cos(np.radians(radar_lat)))
+        lat_min = radar_lat - lat_offset
+        lat_max = radar_lat + lat_offset
+        lon_min = radar_lon - lon_offset
+        lon_max = radar_lon + lon_offset
+        print(f"  Using zoom bounds: +/- {zoom_km} km from radar")
+    elif geospatial_bounds_str is not None:
+        bounds = parse_geospatial_bounds(geospatial_bounds_str)
+        if bounds is not None:
+            lat_min, lat_max, lon_min, lon_max = bounds
+            print(f"  Using geospatial_bounds from NetCDF file: {geospatial_bounds_str}")
+        else:
+            print(f"  Could not parse geospatial_bounds, using calculated bounds")
+            lat_min, lat_max = radar_lat - 0.4, radar_lat + 0.4
+            lon_offset = 0.4 / np.cos(np.radians(radar_lat))
+            lon_min, lon_max = radar_lon - lon_offset, radar_lon + lon_offset
+    else:
+        print(f"  No geospatial_bounds in NetCDF file, using calculated bounds")
+        lat_min, lat_max = radar_lat - 0.4, radar_lat + 0.4
+        lon_offset = 0.4 / np.cos(np.radians(radar_lat))
+        lon_min, lon_max = radar_lon - lon_offset, radar_lon + lon_offset
+
+    print(f"  Map bounds: lat [{lat_min:.3f}, {lat_max:.3f}], lon [{lon_min:.3f}, {lon_max:.3f}]")
+    zoom_level_used = calculate_zoom_level(lat_min, lat_max, lon_min, lon_max, override_zoom=zoom_level)
+
+    # Valid sweep indices
+    valid_sweep_indices = get_valid_sweep_indices(radar, skip_all_transition=skip_all_transition)
+
+    turning_found = False
+    for sweep_idx in valid_sweep_indices:
+        # Determine phase mode for this sweep
+        if phase_sequence is not None:
+            mode = phase_sequence[sweep_idx]
+        else:
+            try:
+                mode_raw = radar.sweep_mode['data'][sweep_idx]
+                if isinstance(mode_raw, bytes):
+                    mode = mode_raw.decode('utf-8').strip()
+                else:
+                    mode = str(mode_raw).strip()
+                mode = mode.replace('\x00', '')
+            except Exception:
+                mode = 'unknown'
+        mode = mode.lower().strip()
+
+        if mode != 'turning':
+            continue
+
+        turning_found = True
+
+        # Sweep timing and geometry
+        start_ray_idx = radar.sweep_start_ray_index['data'][sweep_idx]
+        end_ray_idx = radar.sweep_end_ray_index['data'][sweep_idx]
+        ppi_el = np.mean(radar.elevation['data'][start_ray_idx:end_ray_idx+1])
+        dtime_sweep = cftime.num2pydate(radar.time['data'][radar.get_start(sweep_idx)],
+                                        radar.time['units'])
+        dtime_sweep_str = dtime_sweep.strftime("%Y%m%d-%H%M%S")
+
+        print(f"  Turning sweep {sweep_idx+1}/{nsweeps}: elevation {ppi_el:.1f}°, "
+              f"{dtime_sweep.strftime('%H:%M:%S')} UTC")
+
+        if ppi_el > 85.0:
+            # Near-vertical turning phase — plot as VPT-style time-height figure
+            print(f"    Elevation {ppi_el:.1f}° > 85°, using VPT-style time-height plot")
+            hmax = 4 if blflag else 12
+
+            sweep_radar = radar.extract_sweeps([sweep_idx])
+            sub_segments = split_radar_at_time_gaps(sweep_radar, max_gap_seconds=60)
+
+            fig, axes_vpt = plt.subplots(2, 2, figsize=(16, 10))
+            first_seg = True
+            all_t_start = None
+            all_t_end = None
+
+            for seg in sub_segments:
+                if seg.nrays < 2 or seg.ngates < 2:
+                    continue
+                _mask_transition_rays(seg)
+                seg_times = cftime.num2pydate(seg.time['data'], seg.time['units'])
+                if all_t_start is None or seg_times[0] < all_t_start:
+                    all_t_start = seg_times[0]
+                if all_t_end is None or seg_times[-1] > all_t_end:
+                    all_t_end = seg_times[-1]
+                seg_display = pyart.graph.RadarDisplay(seg)
+
+                dbz_title = "{} ({})".format(
+                    seg.fields['DBZ'].get('long_name', 'Reflectivity'),
+                    seg.fields['DBZ'].get('units', 'dBZ'))
+                vel_title = "{} ({})".format(
+                    seg.fields['VEL'].get('long_name', 'Velocity'),
+                    seg.fields['VEL'].get('units', 'm/s'))
+                width_title = "{} ({})".format(
+                    seg.fields['WIDTH'].get('long_name', 'Spectrum Width'),
+                    seg.fields['WIDTH'].get('units', 'm/s'))
+                ldr_title = "{} ({})".format(
+                    seg.fields['LDR'].get('long_name', 'LDR'),
+                    seg.fields['LDR'].get('units', 'dB'))
+
+                seg_vel_min = seg.fields['VEL'].get('field_limit_lower', vel_limit_lower)
+                seg_vel_max = seg.fields['VEL'].get('field_limit_upper', vel_limit_upper)
+
+                if first_seg:
+                    _plot_vpt_field_composite(seg_display, axes_vpt[0, 0], 'DBZ', dbz_title,
+                                              'Reflectivity (dBZ)', COLORMAPS['dbz'],
+                                              -60, 40, hmax, seg_times, first=True)
+                    _plot_vpt_field_composite(seg_display, axes_vpt[0, 1], 'VEL', vel_title,
+                                              'Velocity (m/s)', COLORMAPS['vel'],
+                                              seg_vel_min, seg_vel_max, hmax, seg_times, first=True)
+                    _plot_vpt_field_composite(seg_display, axes_vpt[1, 0], 'WIDTH', width_title,
+                                              'Spectrum Width (m/s)', COLORMAPS['width'],
+                                              0.01, 3, hmax, seg_times, log_scale=True, first=True)
+                    _plot_vpt_field_composite(seg_display, axes_vpt[1, 1], 'LDR', ldr_title,
+                                              'LDR (dB)', COLORMAPS['ldr'],
+                                              -35, 5, hmax, seg_times, first=True)
+                    first_seg = False
+                else:
+                    _plot_vpt_field_composite(seg_display, axes_vpt[0, 0], 'DBZ', dbz_title,
+                                              'Reflectivity (dBZ)', COLORMAPS['dbz'],
+                                              -60, 40, hmax, seg_times, first=False)
+                    _plot_vpt_field_composite(seg_display, axes_vpt[0, 1], 'VEL', vel_title,
+                                              'Velocity (m/s)', COLORMAPS['vel'],
+                                              seg_vel_min, seg_vel_max, hmax, seg_times, first=False)
+                    _plot_vpt_field_composite(seg_display, axes_vpt[1, 0], 'WIDTH', width_title,
+                                              'Spectrum Width (m/s)', COLORMAPS['width'],
+                                              0.01, 3, hmax, seg_times, log_scale=True, first=False)
+                    _plot_vpt_field_composite(seg_display, axes_vpt[1, 1], 'LDR', ldr_title,
+                                              'LDR (dB)', COLORMAPS['ldr'],
+                                              -35, 5, hmax, seg_times, first=False)
+
+            if first_seg:
+                # No valid segments were plotted
+                plt.close()
+                print(f"    No valid segments to plot for sweep {sweep_idx+1}")
+                continue
+
+            if all_t_start is not None and all_t_end is not None:
+                for ax_vpt in axes_vpt.flat:
+                    _set_adaptive_time_ticks(ax_vpt, all_t_start, all_t_end)
+
+            fig.suptitle(
+                f'PICASSO MAN Turning (Vertical) - Elevation: {ppi_el:.1f}° (Sweep {sweep_idx+1}/{nsweeps})\n'
+                f'{instrument_name}\n{dtime_sweep.strftime("%Y-%m-%d %H:%M:%S")} UTC',
+                fontsize=14, fontweight='bold')
+
+            figname = (f'ncas-mobile-ka-band-radar-1_cao_picasso_{dtime_sweep_str}'
+                       f'_man_sweep{sweep_idx:02d}_turning_vpt_l1_{product_version}.png')
+            plt.tight_layout()
+            plt.savefig(os.path.join(ppi_map_figpath, figname), dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"  Saved: {figname}")
+
+        else:
+            # Standard turning phase — PPI map plot
+            variables = ["DBZ", "VEL", "WIDTH", "LDR"]
+            positions = [(0, 0), (1, 0), (0, 1), (1, 1)]
+            fig, ax = plt.subplots(2, 2, figsize=(30, 30), subplot_kw=dict(projection=projection))
+            fig.subplots_adjust(wspace=0.1, hspace=0.1)
+
+            for var, pos in zip(variables, positions):
+                cmap_orig = plt.get_cmap(colormaps[var])
+                if var == "WIDTH":
+                    norm = colors.LogNorm(vmin=default_vmin_vmax[var][0], vmax=default_vmin_vmax[var][1])
+                else:
+                    norm = plt.Normalize(vmin=default_vmin_vmax[var][0], vmax=default_vmin_vmax[var][1])
+
+                var_name = radar.fields[var].get('long_name', var) if var in radar.fields else var
+
+                display.plot_ppi_map(
+                    var, sweep_idx,
+                    vmin=default_vmin_vmax[var][0], vmax=default_vmin_vmax[var][1],
+                    min_lat=lat_min - 5, max_lat=lat_max + 5,
+                    min_lon=lon_min - 5, max_lon=lon_max + 5,
+                    lon_lines=None,
+                    lat_lines=None,
+                    projection=projection,
+                    fig=fig,
+                    ax=ax[pos],
+                    lat_0=radar_lat,
+                    lon_0=radar_lon,
+                    cmap=cmap_orig,
+                    norm=norm,
+                    alpha=0.5,
+                    colorbar_flag=False,
+                    gatefilter=gatefilter,
+                    edges=False,
+                    embellish=False,
+                    resolution="10m",
+                    title=(f"{var_name}\nElevation: {ppi_el:.2f}° | "
+                           f"Date: {dtime_sweep.strftime('%Y-%m-%d')} | "
+                           f"Time: {dtime_sweep.strftime('%H:%M:%S')} | "
+                           f"Ray duration: {ray_duration_str}"),
+                )
+
+                colorbar_mappable = ScalarMappable(norm=norm, cmap=cmap_orig)
+                colorbar_mappable.set_array([])
+                cbar = fig.colorbar(colorbar_mappable, ax=ax[pos], orientation='horizontal',
+                                    shrink=0.7, pad=0.12)
+                cbar.set_alpha(1.0)
+                cbar.set_label(_short_cbar_label.get(var, var), fontsize=12)
+
+                display.plot_range_rings([10, 20, 30, 40], ax=ax[pos], lw=0.5, col='0.5')
+
+            # Set map extents and add basemap
+            for pos in positions:
+                ax[pos].set_extent([lon_min, lon_max, lat_min, lat_max], ccrs.PlateCarree())
+                try:
+                    ctx.add_basemap(ax[pos], zoom=zoom_level_used,
+                                    source=ctx.providers.OpenTopoMap, crs=projection)
+                except Exception as e:
+                    print(f"    OpenTopoMap failed: {e}, trying CartoDB")
+                    try:
+                        ctx.add_basemap(ax[pos], zoom=zoom_level_used,
+                                        source=ctx.providers.CartoDB.Positron, crs=projection)
+                    except Exception as e2:
+                        print(f"    CartoDB also failed: {e2}")
+
+                gridliner = ax[pos].gridlines(draw_labels=True, linestyle="--", linewidth=0.5, color='gray')
+                gridliner.top_labels = False
+                gridliner.right_labels = False
+                gridliner.xformatter = LONGITUDE_FORMATTER
+                gridliner.yformatter = LATITUDE_FORMATTER
+                gridliner.xlabel_style = {'size': 10, 'color': 'black'}
+                gridliner.ylabel_style = {'size': 10, 'color': 'black'}
+
+            fig.suptitle(f'PICASSO MAN Turning Phase PPI Map - Elevation: {ppi_el:.1f}°\n{instrument_name}',
+                         fontsize=16, fontweight='bold', y=0.98)
+
+            figname = (f'ncas-mobile-ka-band-radar-1_cao_picasso_{dtime_sweep_str}'
+                       f'_man_sweep{sweep_idx:02d}_turning_ppi-map_l1_{product_version}.png')
+            plt.savefig(os.path.join(ppi_map_figpath, figname), dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"  Saved: {figname}")
+
+    if not turning_found:
+        print(f"  No turning phases found in {os.path.basename(ncfile)}")
+
+    print(f"MAN turning PPI map plots saved to: {ppi_map_figpath}")
+
 def _plot_ppi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, max_range):
     """Helper function to plot PPI fields on axes for turning scans."""
     
@@ -1844,14 +2203,13 @@ def _make_man_sweep_plots(radar_ds, gatefilter, figpath, dtime_str, version, ins
         print(f"  Sweep {sweep_idx+1}: mode='{mode}', mean_elevation={mean_elevation:.1f}°")
         
         try:
-            if mode == 'turning':
+            if mode == 'turning' and mean_elevation <= 85.0:
                 _plot_ppi_fields(display, axes, sweep_idx, gatefilter, vel_min, vel_max, max_range)
                 subtitle = f'Mean Elevation: {mean_elevation:.1f}° | {time_range_str}'
             elif mode in ['dwell', 'vertical_pointing'] or mean_elevation > 85.0:
                 # Use VPT-style plotting for:
                 # 1. Dwell and vertical_pointing modes
-                # 2. ANY sweep with mean elevation > 85° (nearly vertical)
-                # These show nothing useful in RHI format and should be time-height plots
+                # 2. ANY sweep with mean elevation > 85° (nearly vertical), including turning
                 if mean_elevation > 85.0 and mode not in ['dwell', 'vertical_pointing']:
                     print(f"    High elevation sweep ({mean_elevation:.1f}°), using VPT format")
                 else:
@@ -2935,7 +3293,18 @@ def process_day(datestr, inpath, figpath, blflag=False, skip_all_transition=Fals
                 make_picasso_man_plot(ncfile, figpath, blflag, skip_all_transition)
             except Exception as e:
                 print(f"Error processing MAN file {ncfile}: {e}")
-        
+
+        # Generate PPI map plots for turning phases in MAN files
+        if man_files:
+            print(f"\nGenerating PPI map plots for MAN turning phases")
+            for ncfile in man_files:
+                try:
+                    make_picasso_man_turning_ppi_map_plot(ncfile, figpath, blflag, skip_all_transition,
+                                                          azimuth_offset=azimuth_offset,
+                                                          zoom_km=zoom_km, zoom_level=zoom_level)
+                except Exception as e:
+                    print(f"  Error processing MAN turning PPI map for {ncfile}: {e}")
+
         # Process VPT files
         vpt_files = sorted(glob.glob(os.path.join(date_path, '*_vpt_*.nc')))
         print(f"\nFound {len(vpt_files)} VPT files")

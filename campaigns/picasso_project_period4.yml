@@ -1,16 +1,16 @@
-# PICASSO Campaign - Period 3 Configuration
-# Date Range: 2019-05-07 to 2019-05-23 (Spring deployment in Chilbolton)
-# north_angle: 93.6
+# PICASSO Campaign - Period 4 (PICASSO-B) Configuration
+# Date Range: 2021-05-06 to 2021-06-07 (Spring deployment in Chilbolton)
+# north_angle: 9.6
 # This file is automatically selected for dates in this period by proc_kepler_picasso_campaign_batch.py
 ---
 
-- CFARR_0002:
+- AMOF_08062020170341:
 
     project_name: PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency doppler radar data)
 
     amof_admin: 
-      tracking_tag: CFARR_0002
-      project_type: NERC Grant
+      tracking_tag: AMOF_08062020170341
+      project_type: NERC NC Science
       facility_charge: TBD
 
     grant:
@@ -82,20 +82,20 @@
           title: Moment data from NCAS Ka-band Mobile Cloud Radar (Kepler) at Chilbolton Atmospheric Observatory, UK
           source: NCAS Ka-Band Mobile Cloud Radar unit 1
           altitude:
-            value: 87.0
+            value: 85.0
             units: metres
           altitude_agl:
             value: 3.0
             units: metres
           latitude:
-            value: 51.14421
+            value: 51.144832
             units: degrees_north
           longitude:
-            value: -1.438579
+            value: -1.438735
             units: degrees_east
           platform:
             location: CAO
-            altitude: 87 m (orthometric height above EGM2008 geoid)
+            altitude: 85 m (orthometric height above EGM2008 geoid)
             type: stationary_platform
             deployment_mode: land
             location_keywords: Chilbolton, Hampshire, England
@@ -112,12 +112,12 @@
             version: v1.1.0
           data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
           acknowledgement: |-
-            This dataset was developed as part of the PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency doppler radar data) campaign, 
-            funded by Natural Environment Research Council (NERC) Grant NE/P012426/1.
+            This dataset was developed as part of PICASSO-B, an extension of the PICASSO (Parameterizing ice clouds using airborne observations and triple-frequency doppler radar data) campaign, 
+            funded by Natural Environment Research Council (NERC) as part of NCAS National Capability.
             It uses instrumentation provided by the Atmospheric Measurement and Observation Facility (AMOF), part of NERC National Capability.
             Users should acknowledge the National Centre for Atmospheric Science (NCAS) as the data provider.
           usage:
             - bespoke scanning
-          north_angle: 99.0
+          north_angle: 9.6
 
 

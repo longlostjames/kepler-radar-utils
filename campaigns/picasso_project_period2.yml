@@ -82,7 +82,7 @@
           title: Moment data from NCAS Ka-band Mobile Cloud Radar (Kepler) at Chilbolton Atmospheric Observatory, UK
           source: NCAS Ka-Band Mobile Cloud Radar unit 1
           altitude:
-            value: 83.0
+            value: 87.0
             units: metres
           altitude_agl:
             value: 3.0
@@ -95,7 +95,7 @@
             units: degrees_east
           platform:
             location: CAO
-            altitude: 83 m (orthometric height above EGM2008 geoid)
+            altitude: 87 m (orthometric height above EGM2008 geoid)
             type: stationary_platform
             deployment_mode: land
             location_keywords: Chilbolton, Hampshire, England
