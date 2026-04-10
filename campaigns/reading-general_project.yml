@@ -1,0 +1,78 @@
+---
+# north_angle: 288
+
+- reading-general:
+
+    project_name: Reading General
+
+    amof_admin: 
+      tracking_tag: N/A
+      project_type: Direct Access
+      facility_charge: N/A
+
+    grant:
+      ref: N/A
+      start_date: 01/04/2026
+      end_date: 31/12/2026
+      value: 
+      grade: 
+      scheme: N/A
+      programme: 
+
+      abstract: |-
+
+      scientific_area:
+        - Atmospheric: 100%
+        - Earth: 0%
+        - Freshwater: 0%
+        - Marine: 0%
+        - Terrestrial: 0%
+      ENRI:
+        - Biodiversity: 0%
+        - Environmental Risks and Hazards: 0%
+        - Global Change: 0%
+        - Natural Resource Management: 0%
+        - Pollution and Waste: 0%
+      research_area:
+        - Atmospheric physics and chemistry:
+          - Tropospheric processes: 100%
+      keywords:
+
+    principal_investigator:
+      name: Chris Westbrook
+      institution: University of Reading
+      email: c.d.westbrook@reading.ac.uk
+      pid: https://orcid.org/0000-0002-2889-8815
+
+    co-investigators:
+
+    project_partners:
+
+    chilbolton_instruments:
+      - reading-mobile-ka-band-radar-1:
+          title: Moment data from Reading Mobile Ka-band Radar (Kepler)
+          source: Reading Ka-Band Mobile Cloud Radar unit 1
+          platform:
+            location: CAO
+            type: stationary_platform
+            deployment_mode: land
+            location_keywords: Chilbolton, Hampshire, England
+          instrument_software: 
+            name: rx_client
+            version: /home/vin/WORK/MBR3_XCRL_B3XC/ews/rx_client/Debug/rx_client 20161014-1951
+          data_creator: 
+            name: Chris Walden
+            email: chris.walden@stfc.ac.uk
+            pid: https://orcid.org/0000-0002-5718-466X
+            institution: Science and Technology Facilities Council (STFC) as part of UK Research and Innovation (UKRI)
+          processing_software:
+            url: https://github.com/longlostjames/kepler-radar-utils/releases/tag/v1.2.0
+            version: v1.2.0
+          data_licence: This dataset is released for use under the Open Government Licence, OGL-UK-3.0 (see https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+
+          acknowledgement: |-
+            This dataset was developed as part of routine observations by the University of Reading at the Chilbolton Observatory.
+            Users should acknowledge the University of Reading and STFC as the data providers.
+          usage:
+            - routine scanning
+          north_angle: 288

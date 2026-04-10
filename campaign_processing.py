@@ -1042,10 +1042,12 @@ def process_ppi_file_with_sweep_detection(
                 for p in projects:
                     if tracking_tag in p:
                         project = p[tracking_tag]
-                        if 'ncas_instruments' in project:
-                            for instrument in project['ncas_instruments']:
-                                if 'ncas-mobile-ka-band-radar-1' in instrument:
-                                    radar_info = instrument['ncas-mobile-ka-band-radar-1']
+                        _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project), None)
+                        if _instr_key:
+                            for instrument in project[_instr_key]:
+                                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
+                                    radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                                    radar_info = instrument[radar_name_key]
                                     if 'platform' in radar_info and 'location' in radar_info['platform']:
                                         location = radar_info['platform']['location'].lower()
                                         break
@@ -2941,11 +2943,13 @@ def process_kepler_picasso_day_step1(
                         project = p[tracking_tag]
                         break
                 
-                if project and 'ncas_instruments' in project:
+                _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project), None)
+                if project and _instr_key:
                     # Find the radar instrument
-                    for instrument in project['ncas_instruments']:
-                        if 'ncas-mobile-ka-band-radar-1' in instrument:
-                            radar_info = instrument['ncas-mobile-ka-band-radar-1']
+                    for instrument in project[_instr_key]:
+                        if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
+                            radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                            radar_info = instrument[radar_name_key]
                             if 'platform' in radar_info and 'location' in radar_info['platform']:
                                 location = radar_info['platform']['location'].lower()
                                 print(f"Using location from YAML: {location}")
@@ -3853,11 +3857,13 @@ def load_yaml_config(yaml_project_file, yaml_instrument_file):
             # If not a list, assume it's directly the project dictionary
             project_info = project_data
         
-        # Navigate through YAML structure: ncas_instruments -> ncas-mobile-ka-band-radar-1
-        if 'ncas_instruments' in project_info:
-            for instrument in project_info['ncas_instruments']:
-                if 'ncas-mobile-ka-band-radar-1' in instrument:
-                    radar_config = instrument['ncas-mobile-ka-band-radar-1']
+        # Navigate through YAML structure: ncas_instruments/chilbolton_instruments -> kepler radar
+        _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project_info), None)
+        if _instr_key:
+            for instrument in project_info[_instr_key]:
+                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
+                    radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                    radar_config = instrument[radar_name_key]
                     
                     # Extract north_angle
                     if 'north_angle' in radar_config:
@@ -3910,6 +3916,10 @@ def get_campaign_info(campaign: str) -> Dict[str, Any]:
         'kasbex': {
             'revised_northangle': 55.62,
             'tracking_tag': 'AMOF_20250508133639'  # KASBEX-specific tracking tag
+        },
+        'reading-general': {
+            'revised_northangle': 288.0,
+            'tracking_tag': 'reading-general'
         },
         'picasso': {
             'revised_northangle': 97.1,  # PICASSO north angle from YAML
@@ -4022,7 +4032,8 @@ def process_campaign_day(
         'coalesc3': process_kepler_general_day_step1,
         'picasso': process_kepler_picasso_day_step1,
         'cobalt': process_kepler_cobalt_day_step1,
-        'kasbex': process_kepler_kasbex_day_step1
+        'kasbex': process_kepler_kasbex_day_step1,
+        'reading-general': process_kepler_general_day_step1
     }
     
     if campaign_lower not in processors:

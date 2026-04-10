@@ -1190,7 +1190,8 @@ def convert_kepler_mmclx2l1(
     radar_name = instrument["instrument_name"].lower()
     
     # Find location from project metadata
-    for n in project["ncas_instruments"]:
+    _instr_key = 'chilbolton_instruments' if 'chilbolton_instruments' in project else 'ncas_instruments'
+    for n in project[_instr_key]:
         if radar_name in n:
             project_instrument = n[radar_name]
             break
@@ -2060,19 +2061,21 @@ def _add_ncas_metadata_manually(
                         instrument_info = value
                         break
     
-    # Also look for instrument info in the project YAML file under ncas_instruments
+    # Also look for instrument info in the project YAML file under ncas_instruments/chilbolton_instruments
     project_instrument_info = None
-    
-    # Check if project_info has ncas_instruments
-    if project_info and isinstance(project_info, dict) and 'ncas_instruments' in project_info:
-        instruments_list = project_info['ncas_instruments']
+    _KEPLER_RADAR_NAMES = ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')
+
+    # Check if project_info has ncas_instruments or chilbolton_instruments
+    _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if isinstance(project_info, dict) and k in project_info), None)
+    if project_info and isinstance(project_info, dict) and _instr_key:
+        instruments_list = project_info[_instr_key]
         if isinstance(instruments_list, list):
             for instrument in instruments_list:
                 if isinstance(instrument, dict):
                     # Handle dict with instrument name as key
                     for inst_name, inst_data in instrument.items():
                         # Check for exact match or partial match (case insensitive)
-                        if inst_name == 'ncas-mobile-ka-band-radar-1' or 'ncas-mobile-ka-band-radar-1' in inst_name.lower():
+                        if inst_name in _KEPLER_RADAR_NAMES or 'ka-band-radar-1' in inst_name.lower():
                             project_instrument_info = inst_data
                             print(f"Found instrument info under key: {inst_name}")
                             break
@@ -2656,11 +2659,13 @@ def multi_mmclx2cfrad(
                 project = p[tracking_tag]
                 break
         
-        if project and 'ncas_instruments' in project:
+        _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project), None)
+        if project and _instr_key:
             # Find the radar instrument
-            for instrument in project['ncas_instruments']:
-                if 'ncas-mobile-ka-band-radar-1' in instrument:
-                    radar_info = instrument['ncas-mobile-ka-band-radar-1']
+            for instrument in project[_instr_key]:
+                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
+                    radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                    radar_info = instrument[radar_name_key]
                     if 'platform' in radar_info and 'location' in radar_info['platform']:
                         location = radar_info['platform']['location'].lower()
                         print(f"Found location from YAML: {location}")
