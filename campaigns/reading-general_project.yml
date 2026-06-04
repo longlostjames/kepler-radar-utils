@@ -49,11 +49,21 @@
     project_partners:
 
     chilbolton_instruments:
-      - reading-mobile-ka-band-radar-1:
+      - reading-radar-ka-band-1:
           title: Moment data from Reading Mobile Ka-band Radar (Kepler)
           source: Reading Ka-Band Mobile Cloud Radar unit 1
+          institution: University of Reading
           platform:
             location: CAO
+            latitude:
+              value: 51.14634
+              units: degrees_north
+            longitude:
+              value: -1.43846
+              units: degrees_east
+            altitude:
+              value: 84.0
+              units: metres
             type: stationary_platform
             deployment_mode: land
             location_keywords: Chilbolton, Hampshire, England
@@ -75,4 +85,7 @@
             Users should acknowledge the University of Reading and STFC as the data providers.
           usage:
             - routine scanning
-          north_angle: 288
+          north_angle: 278.6
+          altitude_agl:
+            value: 3.0
+            units: metres

@@ -39,13 +39,47 @@ from kepler_utils import (
     split_monotonic_sequence
 )
 
-def get_file_elevation(filepath: str, gzip_flag: bool = True) -> Optional[float]:
+def _get_azimuth_range(filepath: str, gzip_flag: bool = True) -> Optional[float]:
+    """Return the circular azimuth range (degrees) covered by an mmclx file.
+
+    Reads the 'azi' variable and computes the span of valid (non-sentinel) azimuth
+    values using a circular unwrap approach.  Returns None if azimuth cannot be
+    read or all values are fill.
+
+    A full 360° VAD scan returns ≈ 360°; a narrow sector PPI returns a value
+    equal to the sector width (e.g. ≈ 30° for a 10–40° sector).
+    """
+    try:
+        def _compute(nc):
+            if 'azi' not in nc.variables:
+                return None
+            azi = nc.variables['azi'][:]
+            valid = azi[azi > -900.0]
+            if len(valid) < 2:
+                return None
+            # Circular range: unwrap then take peak-to-peak
+            uw = np.degrees(np.unwrap(np.radians(valid)))
+            return float(uw[-1] - uw[0])
+
+        if gzip_flag:
+            with gzip.open(filepath, 'rb') as gz:
+                with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
+                    return _compute(nc)
+        else:
+            with nc4.Dataset(filepath, 'r') as nc:
+                return _compute(nc)
+    except Exception:
+        return None
+
+
+def get_file_elevation(filepath: str, gzip_flag: bool = True, logp_dir: str = None) -> Optional[float]:
     """
     Get the mean elevation angle from an mmclx file.
     
     Args:
         filepath: Path to mmclx file
         gzip_flag: Whether file is gzip compressed
+        logp_dir: Path to axis-log directory; used when mmclx elevation is a sentinel
         
     Returns:
         Mean elevation angle in degrees, or None if unable to read
@@ -55,11 +89,23 @@ def get_file_elevation(filepath: str, gzip_flag: bool = True) -> Optional[float]
             with gzip.open(filepath, 'rb') as gz:
                 with nc4.Dataset('dummy', mode='r', memory=gz.read()) as nc:
                     if 'elv' in nc.variables:
-                        return float(nc.variables['elv'][:].mean())
+                        elv_mean = float(nc.variables['elv'][:].mean())
+                        if elv_mean < -900.0 and logp_dir is not None:
+                            from kepler_utils import _load_logp_angles
+                            _, elv_logp = _load_logp_angles(nc.variables['time'][:], logp_dir)
+                            if elv_logp is not None:
+                                return float(np.median(elv_logp))
+                        return elv_mean
         else:
             with nc4.Dataset(filepath, 'r') as nc:
                 if 'elv' in nc.variables:
-                    return float(nc.variables['elv'][:].mean())
+                    elv_mean = float(nc.variables['elv'][:].mean())
+                    if elv_mean < -900.0 and logp_dir is not None:
+                        from kepler_utils import _load_logp_angles
+                        _, elv_logp = _load_logp_angles(nc.variables['time'][:], logp_dir)
+                        if elv_logp is not None:
+                            return float(np.median(elv_logp))
+                    return elv_mean
     except Exception as e:
         print(f"Warning: Could not read elevation from {filepath}: {e}")
     return None
@@ -442,6 +488,7 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
         net_az_change = float(abs(sweep_az_unwrapped[-1] - sweep_az_unwrapped[0]))
 
         scanning_fraction = None
+        scan_rate_median_abs = None
         if scan_rate is not None:
             sweep_scan_rate = np.asarray(scan_rate[start:end + 1], dtype=float)
             valid_scan_rate = np.isfinite(sweep_scan_rate)
@@ -449,6 +496,7 @@ def detect_ppi_sweeps_by_direction(azimuth: np.ndarray, elevation: np.ndarray,
                 scanning_fraction = float(
                     np.mean(np.abs(sweep_scan_rate[valid_scan_rate]) >= stationary_scan_rate_threshold)
                 )
+                scan_rate_median_abs = float(np.median(np.abs(sweep_scan_rate[valid_scan_rate])))
 
         # Check if stationary (low variation)
         stationary_candidate = (
@@ -827,7 +875,8 @@ def process_ppi_file_with_sweep_detection(
     pointing_total_change_threshold: float = 3.0,
     pointing_scan_rate_threshold: float = 0.2,
     stationary_max_scanning_fraction: float = 0.15,
-    pointing_max_scanning_fraction: float = 0.15
+    pointing_max_scanning_fraction: float = 0.15,
+    logp_dir: str = None
 ) -> List[str]:
     """
     Process a single PPI file with sweep detection and splitting.
@@ -966,7 +1015,8 @@ def process_ppi_file_with_sweep_detection(
         ncobj.close()
     
     # Now read with PyART
-    radar = read_mira35_mmclx(filepath, gzip_flag=gzip_flag, revised_northangle=revised_northangle)
+    radar = read_mira35_mmclx(filepath, gzip_flag=gzip_flag, revised_northangle=revised_northangle,
+                               logp_dir=logp_dir)
     
     # Filter radar object to only valid time rays
     n_invalid = np.sum(~valid_time_indices)
@@ -1046,8 +1096,8 @@ def process_ppi_file_with_sweep_detection(
                         _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project), None)
                         if _instr_key:
                             for instrument in project[_instr_key]:
-                                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
-                                    radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1', 'reading-radar-ka-band-1')):
+                                    radar_name_key = next(name for name in ('reading-radar-ka-band-1', 'reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
                                     radar_info = instrument[radar_name_key]
                                     if 'platform' in radar_info and 'location' in radar_info['platform']:
                                         location = radar_info['platform']['location'].lower()
@@ -2410,6 +2460,7 @@ def process_kepler_general_day_step1(
     single_sweep: bool = True,
     tracking_tag: str = 'AMOF_20230401000000',
     campaign: str = 'ccrest-m',
+    logp_dir: str = None,
     **kwargs
 ) -> None:
     """
@@ -2437,6 +2488,8 @@ def process_kepler_general_day_step1(
     print(f"Data version: {data_version}")
     print(f"Tracking tag: {tracking_tag}")
 
+    force = kwargs.get('force', False)
+
     # Create output directory
     outdir = os.path.join(outpath, datestr)
     if not os.path.exists(outdir):
@@ -2463,7 +2516,8 @@ def process_kepler_general_day_step1(
                 data_version=data_version,
                 single_sweep=False,  # ALWAYS FALSE FOR VPT
                 yaml_project_file=yaml_project_file,
-                yaml_instrument_file=yaml_instrument_file
+                yaml_instrument_file=yaml_instrument_file,
+                force=force
             )
             print(f"Processed {len(vpt_files)} VPT files into multi-sweep dataset")
     except Exception as e:
@@ -2490,7 +2544,8 @@ def process_kepler_general_day_step1(
                         data_version=data_version,
                         single_sweep=True,
                         yaml_project_file=yaml_project_file,
-                        yaml_instrument_file=yaml_instrument_file
+                        yaml_instrument_file=yaml_instrument_file,
+                        force=force
                     )
                     print(f"Processed single RHI file: {f}")
                 except Exception as e:
@@ -2507,7 +2562,8 @@ def process_kepler_general_day_step1(
                     data_version=data_version,
                     single_sweep=False,
                     yaml_project_file=yaml_project_file,
-                    yaml_instrument_file=yaml_instrument_file
+                    yaml_instrument_file=yaml_instrument_file,
+                    force=force
                 )
                 print(f"Processed {len(rhi_files)} RHI files into combined dataset")
             except Exception as e:
@@ -2523,8 +2579,8 @@ def process_kepler_general_day_step1(
     vad_from_ppi_files = []
     
     for f in ppi_files:
-        elv = get_file_elevation(f, gzip_flag=gzip_flag)
-        if elv is not None:
+        elv = get_file_elevation(f, gzip_flag=gzip_flag, logp_dir=logp_dir)
+        if elv is not None and elv > -900.0:
             if elv > 10.0:
                 vad_from_ppi_files.append(f)
                 print(f"  {os.path.basename(f)}: elv={elv:.1f}° -> VAD")
@@ -2532,9 +2588,16 @@ def process_kepler_general_day_step1(
                 true_ppi_files.append(f)
                 print(f"  {os.path.basename(f)}: elv={elv:.1f}° -> PPI")
         else:
-            # If we can't read elevation, assume it's a true PPI
-            true_ppi_files.append(f)
-            print(f"  {os.path.basename(f)}: elv=unknown -> PPI (default)")
+            # Elevation is sentinel and logp unavailable — use azimuth range:
+            # a full 360° rotation indicates a VAD scan; a small sector indicates PPI.
+            az_range = _get_azimuth_range(f, gzip_flag=gzip_flag)
+            if az_range is not None and az_range > 300.0:
+                vad_from_ppi_files.append(f)
+                print(f"  {os.path.basename(f)}: elv=sentinel, az_range={az_range:.0f}° -> VAD")
+            else:
+                true_ppi_files.append(f)
+                az_str = f"{az_range:.0f}°" if az_range is not None else "unknown"
+                print(f"  {os.path.basename(f)}: elv=sentinel, az_range={az_str} -> PPI")
     
     print(f"Classified {len(true_ppi_files)} as true PPI, {len(vad_from_ppi_files)} as VAD")
     
@@ -2556,7 +2619,8 @@ def process_kepler_general_day_step1(
                         yaml_project_file=yaml_project_file,
                         yaml_instrument_file=yaml_instrument_file,
                         split_ppi_by_direction=True,
-                        split_ppi_pointing=True
+                        split_ppi_pointing=True,
+                        logp_dir=logp_dir
                     )
                     print(f"Processed PPI file {os.path.basename(f)} -> {len(output_files)} output file(s)")
                 except Exception as e:
@@ -2575,7 +2639,9 @@ def process_kepler_general_day_step1(
                     data_version=data_version,
                     single_sweep=False,
                     yaml_project_file=yaml_project_file,
-                    yaml_instrument_file=yaml_instrument_file
+                    yaml_instrument_file=yaml_instrument_file,
+                    logp_dir=logp_dir,
+                    force=force
                 )
                 print(f"Processed {len(true_ppi_files)} PPI files into combined dataset")
             except Exception as e:
@@ -2588,7 +2654,7 @@ def process_kepler_general_day_step1(
         vad_by_elevation = defaultdict(list)
         
         for f in vad_from_ppi_files:
-            elv = get_file_elevation(f, gzip_flag=gzip_flag)
+            elv = get_file_elevation(f, gzip_flag=gzip_flag, logp_dir=logp_dir)
             if elv is not None:
                 # Round to nearest degree to group similar elevations
                 elv_rounded = round(elv)
@@ -2599,25 +2665,40 @@ def process_kepler_general_day_step1(
         # Process each elevation group separately
         for elv, files in sorted(vad_by_elevation.items()):
             print(f"Processing {len(files)} VAD scans at {elv}° elevation...")
-            try:
-                # Include elevation in scan name to create unique filenames
-                scan_name = f'vad-{elv}deg' if len(vad_by_elevation) > 1 else 'vad'
-                RadarDS_VAD = multi_mmclx2cfrad(
-                    files, outdir, scan_name=scan_name, gzip_flag=gzip_flag,
-                    azimuth_offset=azimuth_offset,
-                    tracking_tag=tracking_tag,
-                    campaign=campaign,
-                    revised_northangle=revised_northangle,
-                    data_version=data_version,
-                    single_sweep=False,  # VAD always multi-sweep (one file per elevation per day)
-                    yaml_project_file=yaml_project_file,
-                    yaml_instrument_file=yaml_instrument_file
-                )
-                print(f"Processed {len(files)} VAD scans at {elv}° into single multi-sweep file")
-            except Exception as e:
-                print(f"Error processing VAD files at {elv}°: {e}")
-                import traceback
-                traceback.print_exc()
+            # Sub-group by ngates so old/new gate-count files don't collide
+            from kepler_utils import _mmclx_get_dims
+            vad_by_ngates = defaultdict(list)
+            for f in files:
+                try:
+                    _, ng = _mmclx_get_dims(f, gzip_flag)
+                    vad_by_ngates[ng].append(f)
+                except Exception:
+                    vad_by_ngates[None].append(f)
+            multiple_ngates = len(vad_by_ngates) > 1
+            if multiple_ngates:
+                print(f"  Multiple gate counts found among VAD files: {sorted(k for k in vad_by_ngates if k)}")
+            for ng, ng_files in sorted((k, v) for k, v in vad_by_ngates.items() if k is not None):
+                try:
+                    base_name = f'vad-{elv}deg' if len(vad_by_elevation) > 1 else 'vad'
+                    scan_name = f'{base_name}-{ng}g' if multiple_ngates else base_name
+                    RadarDS_VAD = multi_mmclx2cfrad(
+                        ng_files, outdir, scan_name=scan_name, gzip_flag=gzip_flag,
+                        azimuth_offset=azimuth_offset,
+                        tracking_tag=tracking_tag,
+                        campaign=campaign,
+                        revised_northangle=revised_northangle,
+                        data_version=data_version,
+                        single_sweep=False,  # VAD always multi-sweep (one file per elevation per day)
+                        yaml_project_file=yaml_project_file,
+                        yaml_instrument_file=yaml_instrument_file,
+                        logp_dir=logp_dir,
+                        force=force
+                    )
+                    print(f"Processed {len(ng_files)} VAD scans at {elv}° ({ng} gates) into single multi-sweep file")
+                except Exception as e:
+                    print(f"Error processing VAD files at {elv}° ({ng} gates): {e}")
+                    import traceback
+                    traceback.print_exc()
 
     # Process plain mmclx files (named YYYYMMDD_HHMMSS.mmclx[.gz] with no scan-type keyword).
     # Such files are assumed to be vertically pointing.  Elevation is checked to
@@ -2668,6 +2749,7 @@ def process_kepler_general_day_step1(
                     single_sweep=False,
                     yaml_project_file=yaml_project_file,
                     yaml_instrument_file=yaml_instrument_file,
+                    force=force
                 )
                 print(f"Processed {len(vpt_plain)} plain VPT file(s)")
         else:
@@ -2678,6 +2760,7 @@ def process_kepler_general_day_step1(
         traceback.print_exc()
 
     print(f"Completed {campaign.upper()} processing for {datestr}")
+
 
 def process_kepler_picasso_day_step1(
     datestr: str,
@@ -2808,7 +2891,7 @@ def process_kepler_picasso_day_step1(
     
     for f in ppi_files:
         elv = get_file_elevation(f, gzip_flag=gzip_flag)
-        if elv is not None:
+        if elv is not None and elv > -900.0:
             if elv > 10.0:
                 vad_from_ppi_files.append(f)
                 print(f"  {os.path.basename(f)}: elv={elv:.1f}° -> VAD")
@@ -2816,9 +2899,15 @@ def process_kepler_picasso_day_step1(
                 true_ppi_files.append(f)
                 print(f"  {os.path.basename(f)}: elv={elv:.1f}° -> PPI")
         else:
-            # If we can't read elevation, assume it's a true PPI
-            true_ppi_files.append(f)
-            print(f"  {os.path.basename(f)}: elv=unknown -> PPI (default)")
+            # Elevation is sentinel — use azimuth range as tiebreaker.
+            az_range = _get_azimuth_range(f, gzip_flag=gzip_flag)
+            if az_range is not None and az_range > 300.0:
+                vad_from_ppi_files.append(f)
+                print(f"  {os.path.basename(f)}: elv=sentinel, az_range={az_range:.0f}° -> VAD")
+            else:
+                true_ppi_files.append(f)
+                az_str = f"{az_range:.0f}°" if az_range is not None else "unknown"
+                print(f"  {os.path.basename(f)}: elv=sentinel, az_range={az_str} -> PPI")
     
     print(f"Classified {len(true_ppi_files)} as true PPI, {len(vad_from_ppi_files)} as VAD")
     
@@ -2883,25 +2972,38 @@ def process_kepler_picasso_day_step1(
         # Process each elevation group separately
         for elv, files in sorted(vad_by_elevation.items()):
             print(f"Processing {len(files)} VAD scans at {elv}° elevation...")
-            try:
-                # Include elevation in scan name to create unique filenames
-                scan_name = f'vad-{elv}deg' if len(vad_by_elevation) > 1 else 'vad'
-                RadarDS_VAD = multi_mmclx2cfrad(
-                    files, outdir, scan_name=scan_name, gzip_flag=gzip_flag,
-                    azimuth_offset=azimuth_offset,
-                    tracking_tag=tracking_tag,
-                    campaign=campaign,
-                    revised_northangle=revised_northangle,
-                    data_version=data_version,
-                    single_sweep=False,  # VAD always multi-sweep (one file per elevation per day)
-                    yaml_project_file=yaml_project_file,
-                    yaml_instrument_file=yaml_instrument_file
-                )
-                print(f"Processed {len(files)} VAD scans at {elv}° into single multi-sweep file")
-            except Exception as e:
-                print(f"Error processing VAD files at {elv}°: {e}")
-                import traceback
-                traceback.print_exc()
+            # Sub-group by ngates so old/new gate-count files don't collide
+            from kepler_utils import _mmclx_get_dims
+            vad_by_ngates = defaultdict(list)
+            for f in files:
+                try:
+                    _, ng = _mmclx_get_dims(f, gzip_flag)
+                    vad_by_ngates[ng].append(f)
+                except Exception:
+                    vad_by_ngates[None].append(f)
+            multiple_ngates = len(vad_by_ngates) > 1
+            if multiple_ngates:
+                print(f"  Multiple gate counts found among VAD files: {sorted(k for k in vad_by_ngates if k)}")
+            for ng, ng_files in sorted((k, v) for k, v in vad_by_ngates.items() if k is not None):
+                try:
+                    base_name = f'vad-{elv}deg' if len(vad_by_elevation) > 1 else 'vad'
+                    scan_name = f'{base_name}-{ng}g' if multiple_ngates else base_name
+                    RadarDS_VAD = multi_mmclx2cfrad(
+                        ng_files, outdir, scan_name=scan_name, gzip_flag=gzip_flag,
+                        azimuth_offset=azimuth_offset,
+                        tracking_tag=tracking_tag,
+                        campaign=campaign,
+                        revised_northangle=revised_northangle,
+                        data_version=data_version,
+                        single_sweep=False,  # VAD always multi-sweep (one file per elevation per day)
+                        yaml_project_file=yaml_project_file,
+                        yaml_instrument_file=yaml_instrument_file
+                    )
+                    print(f"Processed {len(ng_files)} VAD scans at {elv}° ({ng} gates) into single multi-sweep file")
+                except Exception as e:
+                    print(f"Error processing VAD files at {elv}° ({ng} gates): {e}")
+                    import traceback
+                    traceback.print_exc()
     
     # Process MAN (manual tracking) scans - PICASSO-specific
     # These track aircraft with simultaneous azimuth and elevation changes
@@ -2950,8 +3052,8 @@ def process_kepler_picasso_day_step1(
                 if project and _instr_key:
                     # Find the radar instrument
                     for instrument in project[_instr_key]:
-                        if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
-                            radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                        if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1', 'reading-radar-ka-band-1')):
+                            radar_name_key = next(name for name in ('reading-radar-ka-band-1', 'reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
                             radar_info = instrument[radar_name_key]
                             if 'platform' in radar_info and 'location' in radar_info['platform']:
                                 location = radar_info['platform']['location'].lower()
@@ -3864,8 +3966,8 @@ def load_yaml_config(yaml_project_file, yaml_instrument_file):
         _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project_info), None)
         if _instr_key:
             for instrument in project_info[_instr_key]:
-                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
-                    radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1', 'reading-radar-ka-band-1')):
+                    radar_name_key = next(name for name in ('reading-radar-ka-band-1', 'reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
                     radar_config = instrument[radar_name_key]
                     
                     # Extract north_angle
@@ -3986,6 +4088,7 @@ def process_campaign_day(
     revised_northangle: float = None,
     no_vpt: bool = False,  # Add no_vpt argument
     max_age: Optional[float] = None,
+    logp_dir: str = None,
     **kwargs
 ) -> None:
     """
@@ -4056,6 +4159,7 @@ def process_campaign_day(
         'tracking_tag': campaign_info.get('tracking_tag', f'AMOF_{campaign.upper()}'),
         'campaign': campaign_lower,  # Pass campaign name for general processor
         'no_vpt': no_vpt,  # Pass no_vpt argument
+        'logp_dir': logp_dir,
         **kwargs
     }
     

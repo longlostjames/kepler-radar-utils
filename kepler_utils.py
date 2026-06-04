@@ -155,6 +155,15 @@ def read_mira35_mmclx(
         )
         azimuth = angle_info['azimuth']
         elevation = angle_info['elevation']
+
+        # If _determine_scan_type recorded a sentinel fixed_angle (e.g. -1001°) for a
+        # PPI and logp reconstruction supplied real elevation values, recompute it.
+        if (scan_name == 'ppi'
+                and float(fixed_angle['data'][0]) < -900.0
+                and angle_info.get('logp_reconstructed')):
+            fixed_angle_value = float(np.round(np.median(elevation['data']), 2))
+            fixed_angle['data'] = np.array([fixed_angle_value], dtype='f')
+            print(f"  [logp] Corrected fixed_angle from sentinel to {fixed_angle_value:.2f}°")
         scan_rate = angle_info.get('scan_rate')
         antenna_transition = angle_info.get('antenna_transition')
         target_scan_rate = angle_info.get('target_scan_rate')
@@ -452,28 +461,30 @@ def _load_logp_angles(
     logp_elv_all = []
 
     for datestr in sorted(candidate_dates):
-        pattern = os.path.join(logp_dir, f'{datestr}*.axis.gz')
-        for fpath in sorted(glob.glob(pattern)):
-            with gzip.open(fpath, 'rt') as fh:
-                for line in fh:
-                    parts = line.split()
-                    if len(parts) < 3:
-                        continue
-                    try:
-                        ts = float(parts[0])
-                    except ValueError:
-                        continue
-                    # Only keep rows within a generous window around the mmclx sweep
-                    if ts < t0 - 60 or ts > t1 + 60:
-                        continue
-                    if parts[1] == 'nan' or parts[2] == 'nan':
-                        continue
-                    try:
-                        logp_ts_all.append(ts)
-                        logp_azi_all.append(float(parts[1]))
-                        logp_elv_all.append(float(parts[2]))
-                    except ValueError:
-                        continue
+        for suffix, opener in [('.axis.gz', lambda p: gzip.open(p, 'rt')),
+                                ('.axis',    lambda p: open(p, 'r'))]:
+            pattern = os.path.join(logp_dir, f'{datestr}*{suffix}')
+            for fpath in sorted(glob.glob(pattern)):
+                with opener(fpath) as fh:
+                    for line in fh:
+                        parts = line.split()
+                        if len(parts) < 3:
+                            continue
+                        try:
+                            ts = float(parts[0])
+                        except ValueError:
+                            continue
+                        # Only keep rows within a generous window around the mmclx sweep
+                        if ts < t0 - 60 or ts > t1 + 60:
+                            continue
+                        if parts[1] == 'nan' or parts[2] == 'nan':
+                            continue
+                        try:
+                            logp_ts_all.append(ts)
+                            logp_azi_all.append(float(parts[1]))
+                            logp_elv_all.append(float(parts[2]))
+                        except ValueError:
+                            continue
 
     if len(logp_ts_all) < 2:
         return None, None
@@ -1329,22 +1340,45 @@ def add_scan_rate_coordinates(filename: str, radar_obj: Radar) -> None:
 def cfradial_get_bbox(cfradfile: str) -> str:
     """
     Calculate bounding box from CF-Radial file.
-    
+
+    Reads only the small coordinate variables (azimuth, elevation, range,
+    latitude, longitude, altitude) directly with netCDF4 rather than loading
+    the entire file via pyart, which would pull all field data into memory.
+
     Args:
         cfradfile: Path to CF-Radial file
-        
+
     Returns:
         String describing the bounding box
     """
-    print(cfradfile)
-    radar = pyart.io.read_cfradial(cfradfile)
-    latmin = np.min(radar.gate_latitude['data'])
-    lonmin = np.min(radar.gate_longitude['data'])
-    latmax = np.max(radar.gate_latitude['data'])
-    lonmax = np.max(radar.gate_longitude['data'])
-    print(latmin, latmax, lonmin, lonmax)
-    boundingbox = f"Bounding box: {latmin:.2f}N {lonmin:.2f}E, {latmax:.2f}N {lonmax:.2f}E"
-    return boundingbox
+    with nc4.Dataset(cfradfile, 'r') as ds:
+        lat0  = float(np.asarray(ds.variables['latitude']).flat[0])
+        lon0  = float(np.asarray(ds.variables['longitude']).flat[0])
+        alt0  = float(np.asarray(ds.variables['altitude']).flat[0])
+        az    = ds.variables['azimuth'][:]
+        el    = ds.variables['elevation'][:]
+        rng   = ds.variables['range'][:]
+
+    # Compute gate positions via pyart helper (no field data needed)
+    az_rad = np.deg2rad(az)
+    el_rad = np.deg2rad(el)
+    # Gate (row, col) positions: r_h = range * cos(el), r_v = range * sin(el)
+    # lat/lon shift from (x, y) in metres using the flat-earth approximation
+    R_EARTH = 6371000.0
+    r_h = np.outer(np.cos(el_rad), rng)   # (nrays, ngates) horizontal distance
+    x   = r_h * np.sin(az_rad[:, None])   # (nrays, ngates) east offset [m]
+    y   = r_h * np.cos(az_rad[:, None])   # (nrays, ngates) north offset [m]
+
+    dlat = np.rad2deg(y / R_EARTH)
+    dlon = np.rad2deg(x / (R_EARTH * np.cos(np.deg2rad(lat0))))
+
+    latmin = lat0 + float(dlat.min())
+    latmax = lat0 + float(dlat.max())
+    lonmin = lon0 + float(dlon.min())
+    lonmax = lon0 + float(dlon.max())
+
+    print(f"  bbox: {latmin:.2f}N {lonmin:.2f}E  to  {latmax:.2f}N {lonmax:.2f}E")
+    return f"Bounding box: {latmin:.2f}N {lonmin:.2f}E, {latmax:.2f}N {lonmax:.2f}E"
 
 def cfradial_add_instrument_parameters(
     mmclxfile: str, 
@@ -2063,7 +2097,8 @@ def _add_ncas_metadata_manually(
     
     # Also look for instrument info in the project YAML file under ncas_instruments/chilbolton_instruments
     project_instrument_info = None
-    _KEPLER_RADAR_NAMES = ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')
+    project_instrument_name = None
+    _KEPLER_RADAR_NAMES = ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1', 'reading-radar-ka-band-1')
 
     # Check if project_info has ncas_instruments or chilbolton_instruments
     _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if isinstance(project_info, dict) and k in project_info), None)
@@ -2077,6 +2112,7 @@ def _add_ncas_metadata_manually(
                         # Check for exact match or partial match (case insensitive)
                         if inst_name in _KEPLER_RADAR_NAMES or 'ka-band-radar-1' in inst_name.lower():
                             project_instrument_info = inst_data
+                            project_instrument_name = inst_name
                             print(f"Found instrument info under key: {inst_name}")
                             break
                 if project_instrument_info:
@@ -2167,18 +2203,23 @@ def _add_ncas_metadata_manually(
                 if 'title' in project_instrument_info:
                     ds.setncattr('title', project_instrument_info['title'])
                     print(f"Set title from project YAML: {project_instrument_info['title']}")
+                if 'institution' in project_instrument_info:
+                    ds.setncattr('institution', project_instrument_info['institution'])
+                    print(f"Set institution from project YAML: {project_instrument_info['institution']}")
+                if project_instrument_name:
+                    ds.setncattr('instrument_name', project_instrument_name)
+                    print(f"Set instrument_name from project YAML: {project_instrument_name}")
                 if 'data_creator' in project_instrument_info:
                     dc = project_instrument_info['data_creator']
                     if isinstance(dc, dict):
-                        if 'institution' in dc:
-                            ds.setncattr('institution', dc['institution'])
-                            print(f"Set institution from project YAML: {dc['institution']}")
                         if 'name' in dc:
                             ds.setncattr('creator_name', dc['name'])
                         if 'email' in dc:
                             ds.setncattr('creator_email', dc['email'])
                         if 'pid' in dc:
                             ds.setncattr('creator_url', dc['pid'])
+                        if 'institution' in dc:
+                            ds.setncattr('creator_institution', dc['institution'])
                 if 'comment' in project_instrument_info:
                     _yaml_comment = project_instrument_info['comment'].rstrip()
                     # Extract any extra content (e.g. logp reconstruction note) from the
@@ -2281,6 +2322,8 @@ def _add_ncas_metadata_manually(
                             ds.setncattr('project_principal_investigator_email', pi['email'])
                         if 'pid' in pi:
                             ds.setncattr('project_principal_investigator_url', pi['pid'])
+                        if 'institution' in pi:
+                            ds.setncattr('project_principal_investigator_institution', pi['institution'])
                 
                 # Try to get acknowledgement from project_instrument_info first (from project YAML)
                 acknowledgement_set = False
@@ -2342,11 +2385,10 @@ def _add_ncas_metadata_manually(
             if 'altitude' in ds.variables:
                 try:
                     alt_var = ds.variables['altitude']
-                    if len(alt_var) > 0:
-                        platform_altitude = float(alt_var[0])
-                        ds.setncattr('platform_altitude', f'{platform_altitude:.1f} m')
-                        print(f"Set platform_altitude to {platform_altitude:.1f} m from altitude variable")
-                        platform_altitude_set = True
+                    platform_altitude = float(np.asarray(alt_var).flat[0])
+                    ds.setncattr('platform_altitude', f'{platform_altitude:.1f} m')
+                    print(f"Set platform_altitude to {platform_altitude:.1f} m from altitude variable")
+                    platform_altitude_set = True
                 except Exception as e:
                     print(f"Warning: Could not extract platform_altitude from altitude variable: {e}")
             
@@ -2364,14 +2406,20 @@ def _add_ncas_metadata_manually(
                 except Exception as e:
                     print(f"Warning: Could not extract platform_altitude from YAML altitude: {e}")
             
-            # Third try: get from YAML platform.altitude string
+            # Third try: get from YAML platform.altitude (dict or string)
             if not platform_altitude_set and project_instrument_info and 'platform' in project_instrument_info:
                 try:
                     platform_info = project_instrument_info['platform']
                     if isinstance(platform_info, dict) and 'altitude' in platform_info:
-                        # Use the string as-is (e.g., "83 m (orthometric height above EGM2008 geoid)")
-                        ds.setncattr('platform_altitude', platform_info['altitude'])
-                        print(f"Set platform_altitude to '{platform_info['altitude']}' from YAML platform.altitude")
+                        alt_entry = platform_info['altitude']
+                        if isinstance(alt_entry, dict) and 'value' in alt_entry:
+                            alt_value = float(alt_entry['value'])
+                            ds.setncattr('platform_altitude', f'{alt_value:.1f} m')
+                            print(f"Set platform_altitude to {alt_value:.1f} m from YAML platform.altitude")
+                        else:
+                            # Plain string e.g. "83 m (orthometric height above EGM2008 geoid)"
+                            ds.setncattr('platform_altitude', str(alt_entry))
+                            print(f"Set platform_altitude to '{alt_entry}' from YAML platform.altitude")
                         platform_altitude_set = True
                 except Exception as e:
                     print(f"Warning: Could not extract platform_altitude from YAML platform: {e}")
@@ -2380,7 +2428,73 @@ def _add_ncas_metadata_manually(
             if not platform_altitude_set:
                 ds.setncattr('platform_altitude', '83.0 m')
                 print("Set platform_altitude to default '83.0 m' for Chilbolton")
-            
+
+            # Add platform_latitude and platform_longitude
+            # Prefer YAML platform.latitude / platform.longitude; fall back to NetCDF variables
+            def _set_platform_latlon(ds, project_instrument_info):
+                for attr, coord_var, yaml_key, units_suffix in (
+                    ('platform_latitude',  'latitude',  'latitude',  'degrees_north'),
+                    ('platform_longitude', 'longitude', 'longitude', 'degrees_east'),
+                ):
+                    set_ok = False
+                    if project_instrument_info and 'platform' in project_instrument_info:
+                        platform_info = project_instrument_info['platform']
+                        if isinstance(platform_info, dict) and yaml_key in platform_info:
+                            entry = platform_info[yaml_key]
+                            try:
+                                if isinstance(entry, dict):
+                                    val = float(entry['value'])
+                                else:
+                                    val = float(entry)
+                                ds.setncattr(attr, f'{val:.6f} {units_suffix}')
+                                print(f"Set {attr} from YAML platform.{yaml_key}: {val:.6f}")
+                                set_ok = True
+                            except Exception as e:
+                                print(f"Warning: Could not parse YAML platform.{yaml_key}: {e}")
+                    if not set_ok and coord_var in ds.variables:
+                        try:
+                            val = float(ds.variables[coord_var][0])
+                            ds.setncattr(attr, f'{val:.6f} {units_suffix}')
+                            print(f"Set {attr} from {coord_var} variable")
+                        except Exception as e:
+                            print(f"Warning: Could not set {attr}: {e}")
+
+            _set_platform_latlon(ds, project_instrument_info)
+
+            # Add altitude_agl scalar variable from YAML if available, and recalculate
+            # the altitude variable as platform.altitude (ground above geoid) + altitude_agl.
+            if project_instrument_info and 'altitude_agl' in project_instrument_info:
+                try:
+                    agl_entry = project_instrument_info['altitude_agl']
+                    agl_value = float(agl_entry['value']) if isinstance(agl_entry, dict) else float(agl_entry)
+                    if 'altitude_agl' not in ds.variables:
+                        agl_var = ds.createVariable('altitude_agl', 'f4')
+                    else:
+                        agl_var = ds.variables['altitude_agl']
+                    agl_var[:] = np.float32(agl_value)
+                    agl_var.long_name = 'altitude of the elevation axis above ground'
+                    agl_var.units = 'm'
+                    agl_var.positive = 'up'
+                    print(f"Set altitude_agl variable to {agl_value:.1f} m from YAML")
+
+                    # Recalculate altitude (antenna axis above geoid) from YAML values
+                    # if platform.altitude (terrain height above geoid) is available.
+                    if (project_instrument_info and 'platform' in project_instrument_info
+                            and 'altitude' in project_instrument_info['platform']):
+                        try:
+                            alt_entry = project_instrument_info['platform']['altitude']
+                            terrain_alt = float(alt_entry['value']) if isinstance(alt_entry, dict) else float(alt_entry)
+                            antenna_alt = terrain_alt + agl_value
+                            if 'altitude' in ds.variables:
+                                ds.variables['altitude'][:] = np.float64(antenna_alt)
+                                print(f"Recalculated altitude variable: {terrain_alt:.1f} + {agl_value:.1f} = {antenna_alt:.1f} m")
+                                # Update platform_altitude to match
+                                ds.setncattr('platform_altitude', f'{antenna_alt:.1f} m')
+                        except Exception as e:
+                            print(f"Warning: Could not recalculate altitude from YAML: {e}")
+                except Exception as e:
+                    print(f"Warning: Could not set altitude_agl variable: {e}")
+
             # Processing information - try to get from YAML first
             if project_instrument_info and 'processing_software' in project_instrument_info:
                 ps_info = project_instrument_info['processing_software']
@@ -2405,11 +2519,19 @@ def _add_ncas_metadata_manually(
             ds.setncattr('instrument_software', 'rx_client')
             ds.setncattr('instrument_software_version', '/home/vin/WORK/MBR3_XCRL_B3XC/ews/rx_client/Debug/rx_client 20161014-1951')
             
-            # Add geospatial bounds - CALCULATE DYNAMICALLY
+            # Add geospatial bounds
             try:
-                geospatial_bounds = cfradial_get_bbox(cfradial_file)
-                ds.setncattr('geospatial_bounds', geospatial_bounds)
-                print(f"Added dynamic geospatial bounds: {geospatial_bounds}")
+                if _is_vpt:
+                    # VPT is vertically pointing — geospatial extent is a single point
+                    _lat = float(np.asarray(ds.variables['latitude']).flat[0])
+                    _lon = float(np.asarray(ds.variables['longitude']).flat[0])
+                    geospatial_bounds = f"{_lat:.6f}N {_lon:.6f}E"
+                    ds.setncattr('geospatial_bounds', geospatial_bounds)
+                    print(f"Added VPT geospatial bounds: {geospatial_bounds}")
+                else:
+                    geospatial_bounds = cfradial_get_bbox(cfradial_file)
+                    ds.setncattr('geospatial_bounds', geospatial_bounds)
+                    print(f"Added dynamic geospatial bounds: {geospatial_bounds}")
             except Exception as e:
                 print(f"Warning: Could not calculate geospatial bounds: {e}")
                 # Fallback to Chilbolton area
@@ -2592,7 +2714,8 @@ def multi_mmclx2cfrad(
     single_sweep: bool = False,
     yaml_project_file: str = None,
     yaml_instrument_file: str = None,
-    logp_dir: str = None
+    logp_dir: str = None,
+    force: bool = False
 ) -> Optional[Radar]:
     """
     Convert multiple mmclx files to CF-Radial file(s).
@@ -2642,172 +2765,256 @@ def multi_mmclx2cfrad(
     print(f"Using YAML files:")
     print(f"  Project: {yaml_project_file}")
     print(f"  Instrument: {yaml_instrument_file}")
-    
-    # Read all radar files
-    radars = []
-    for mmclx_file in mmclxfiles:
-        try:
-            radar = read_mira35_mmclx(
-                mmclx_file, gzip_flag=gzip_flag,
-                revised_northangle=revised_northangle,
-                logp_dir=logp_dir
-            )
-            radars.append(radar)
-        except Exception as e:
-            print(f"Error reading {mmclx_file}: {e}")
-            continue
-    
-    if not radars:
-        print("No valid radar files could be read")
-        return None
-    
-    # Determine location from project YAML file
-    location = 'unknown'  # default
+
+    # ------------------------------------------------------------------
+    # Resolve location and radar_name_key from the project YAML.
+    # Done before any radar reading so that memory-intensive operations
+    # below can start with a clean baseline.
+    # ------------------------------------------------------------------
+    location = 'unknown'
     radar_name_key = 'ncas-mobile-ka-band-radar-1'  # default
     try:
         with open(yaml_project_file, 'r') as f:
             projects = yaml.safe_load(f)
-        
-        # Find the project with the matching tracking_tag
+
         project = None
         for p in projects:
             if tracking_tag in p:
                 project = p[tracking_tag]
                 break
-        
-        _instr_key = next((k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project), None)
+
+        _instr_key = next(
+            (k for k in ('chilbolton_instruments', 'ncas_instruments') if k in project),
+            None,
+        )
         if project and _instr_key:
-            # Find the radar instrument
             for instrument in project[_instr_key]:
-                if any(name in instrument for name in ('ncas-mobile-ka-band-radar-1', 'reading-mobile-ka-band-radar-1')):
-                    radar_name_key = next(name for name in ('reading-mobile-ka-band-radar-1', 'ncas-mobile-ka-band-radar-1') if name in instrument)
+                if any(
+                    name in instrument
+                    for name in (
+                        'ncas-mobile-ka-band-radar-1',
+                        'reading-mobile-ka-band-radar-1',
+                        'reading-radar-ka-band-1',
+                    )
+                ):
+                    radar_name_key = next(
+                        name
+                        for name in (
+                            'reading-radar-ka-band-1',
+                            'reading-mobile-ka-band-radar-1',
+                            'ncas-mobile-ka-band-radar-1',
+                        )
+                        if name in instrument
+                    )
                     radar_info = instrument[radar_name_key]
                     if 'platform' in radar_info and 'location' in radar_info['platform']:
                         location = radar_info['platform']['location'].lower()
                         print(f"Found location from YAML: {location}")
                         break
-        
+
         if location == 'unknown':
-            print(f"Warning: Could not find platform location in {yaml_project_file}, using 'unknown'")
-    
+            print(
+                f"Warning: Could not find platform location in "
+                f"{yaml_project_file}, using 'unknown'"
+            )
+
     except Exception as e:
         print(f"Warning: Error reading location from {yaml_project_file}: {e}")
         print("Using 'unknown' as location")
-    
+
     scan_name_lower = scan_name.lower().replace('_', '-')
-    
-   
-    
+
+    # ------------------------------------------------------------------
+    # Single-sweep path: read + write + free one file at a time.
+    # ------------------------------------------------------------------
     if single_sweep:
-        # Create separate file for each sweep
         created_files = []
-        
-        for i, radar in enumerate(radars):
+
+        for mmclx_file in mmclxfiles:
             try:
-                # Get the actual start time from the radar data
+                radar = read_mira35_mmclx(
+                    mmclx_file,
+                    gzip_flag=gzip_flag,
+                    revised_northangle=revised_northangle,
+                    logp_dir=logp_dir,
+                )
+
                 first_time = cftime.num2pydate(radar.time['data'][0], radar.time['units'])
                 dtstr = first_time.strftime('%Y%m%d-%H%M%S')
-                
-                # Simple filename with correct data version
+
                 outfile = os.path.join(
                     outdir,
-                    f'{radar_name_key}_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
+                    f'{radar_name_key}_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc',
                 )
-                
                 print(f"Creating output file: {outfile}")
-                
-                # If multiple files would have the same name, add a sequence number
+
                 if os.path.exists(outfile):
-                    base_name = outfile.replace('.nc', '')
-                    counter = 1
-                    while os.path.exists(f'{base_name}_{counter:02d}.nc'):
-                        counter += 1
-                    outfile = f'{base_name}_{counter:02d}.nc'
-                    print(f"File exists, using: {outfile}")
-                
-                # Write CF-Radial file
+                    if force:
+                        print(f"File exists, overwriting (force): {outfile}")
+                    else:
+                        base_name = outfile.replace('.nc', '')
+                        counter = 1
+                        while os.path.exists(f'{base_name}_{counter:02d}.nc'):
+                            counter += 1
+                        outfile = f'{base_name}_{counter:02d}.nc'
+                        print(f"File exists, using: {outfile}")
+
                 pyart.io.write_cfradial(outfile, radar, format='NETCDF4', time_reference=True)
-                
-                # Add elevation and azimuth scan rates for MAN scans
+
+                # Last step that needs in-memory radar data
                 add_scan_rate_coordinates(outfile, radar)
-                
-                # Add time coverage attributes
-                cfradial_add_time_coverage(outfile)
-                
-                # Add NCAS metadata
-                cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version, revised_northangle)
-                
-                # Update history with correct information - USE "deg" INSTEAD OF DEGREE SYMBOL
+
+                # Capture angle info before releasing radar
                 if scan_name == 'RHI':
                     angle_info = f"azimuth={radar.fixed_angle['data'][0]:.1f}deg"
                 elif scan_name == 'PPI':
                     angle_info = f"elevation={radar.fixed_angle['data'][0]:.1f}deg"
                 else:
                     angle_info = ""
-                
+
+                del radar  # free immediately; remaining steps are file-only
+
+                cfradial_add_time_coverage(outfile)
+                cfradial_add_ncas_metadata(
+                    outfile, yaml_project_file, yaml_instrument_file,
+                    tracking_tag, data_version, revised_northangle,
+                )
+
                 history_msg = f"{campaign.upper()}: Single-sweep {scan_name} conversion"
                 if angle_info:
                     history_msg += f", {angle_info}"
                 if revised_northangle:
                     history_msg += f", revised_northangle={revised_northangle}deg"
-                
+
                 update_history_attribute(outfile, history_msg)
-                
+
                 print(f"Created single-sweep file: {outfile}")
                 created_files.append(outfile)
-                
+
             except Exception as e:
-                print(f"Error processing sweep {i}: {e}")
+                print(f"Error processing {mmclx_file}: {e}")
                 continue
-        
+
         print(f"Created {len(created_files)} single-sweep files")
-        return radars[0] if radars else None
-    
-    else:
-        # Original multi-sweep processing
-        if len(radars) == 1:
-            combined_radar = radars[0]
-        else:
-            try:
-                # Combine multiple radar objects
-                combined_radar = _combine_radars(radars, scan_name)
-            except Exception as e:
-                print(f"Error combining sweeps: {e}")
-                return None
-        
-        # Generate output filename for multi-sweep file
-        first_time = cftime.num2pydate(combined_radar.time['data'][0], combined_radar.time['units'])
+        return None
+
+    # ------------------------------------------------------------------
+    # Multi-sweep path
+    # ------------------------------------------------------------------
+    # Scan types with dedicated combiners (typically few files per day):
+    #   ppi, vpt, rhi → accumulate all then combine
+    # Everything else (vad, vad-75deg, …) → streaming to avoid OOM
+    # ------------------------------------------------------------------
+    _scan_key = scan_name.lower()
+    _uses_dedicated_combiner = _scan_key in (
+        'ppi', 'vpt', 'vertical_pointing', 'rhi', 'manual_rhi'
+    )
+
+    def _write_combined_radar_to_file(combined_radar: Radar) -> None:
+        """Write a combined radar object to a CF-Radial file with NCAS metadata."""
+        first_time = cftime.num2pydate(
+            combined_radar.time['data'][0], combined_radar.time['units']
+        )
         dtstr = first_time.strftime('%Y%m%d-%H%M%S')
-        
+
         outfile = os.path.join(
             outdir,
-            f'{radar_name_key}_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc'
+            f'{radar_name_key}_{location}_{dtstr}_{scan_name_lower}_l1_v{data_version}.nc',
         )
-        
         print(f"Creating multi-sweep output file: {outfile}")
-        
-        # Write CF-Radial file
+
         pyart.io.write_cfradial(outfile, combined_radar, format='NETCDF4', time_reference=True)
-        
-        # Add elevation and azimuth scan rates for MAN scans
+
         add_scan_rate_coordinates(outfile, combined_radar)
-        
-        # Add time coverage attributes
+
+        n_sweeps_written = combined_radar.nsweeps
+        del combined_radar
+
         cfradial_add_time_coverage(outfile)
-        
-        # Add NCAS metadata
-        cfradial_add_ncas_metadata(outfile, yaml_project_file, yaml_instrument_file, tracking_tag, data_version, revised_northangle)
-        
-        # Update history - USE "deg" INSTEAD OF DEGREE SYMBOL
+        cfradial_add_ncas_metadata(
+            outfile, yaml_project_file, yaml_instrument_file,
+            tracking_tag, data_version, revised_northangle,
+        )
+
         history_msg = f"{campaign.upper()}: Multi-sweep {scan_name} conversion"
         if revised_northangle:
             history_msg += f", revised_northangle={revised_northangle}deg"
-        history_msg += f", {len(radars)} sweeps"
-        
+        history_msg += f", {n_sweeps_written} sweeps"
+
         update_history_attribute(outfile, history_msg)
-        
+
         print(f"Created multi-sweep file: {outfile}")
-        return combined_radar
+
+    if _uses_dedicated_combiner:
+        # Accumulate all radars, then use the type-specific combiner
+        radars: List[Radar] = []
+        for mmclx_file in mmclxfiles:
+            try:
+                radar = read_mira35_mmclx(
+                    mmclx_file,
+                    gzip_flag=gzip_flag,
+                    revised_northangle=revised_northangle,
+                    logp_dir=logp_dir,
+                )
+                radars.append(radar)
+            except Exception as e:
+                print(f"Error reading {mmclx_file}: {e}")
+
+        if not radars:
+            print("No valid radar files could be read")
+            return None
+
+        # VPT: split by gate count and write a separate file per group so that
+        # a change in range configuration mid-day does not cause a broadcast error.
+        if _scan_key in ('vpt', 'vertical_pointing'):
+            from collections import defaultdict
+            gate_groups: dict = defaultdict(list)
+            for r in radars:
+                gate_groups[r.ngates].append(r)
+            radars.clear()
+
+            if len(gate_groups) > 1:
+                counts_str = ', '.join(
+                    f'{len(v)} file(s) with {k} gates'
+                    for k, v in sorted(gate_groups.items())
+                )
+                print(f"  VPT files have mixed gate counts ({counts_str}); writing one file per group")
+
+            for ngates, group_radars in sorted(gate_groups.items()):
+                print(f"  Combining {len(group_radars)} VPT sweep(s) with {ngates} gates")
+                try:
+                    combined_radar = _combine_radars(group_radars, scan_name)
+                except Exception as e:
+                    print(f"  Error combining VPT sweeps ({ngates} gates): {e}")
+                    continue
+                finally:
+                    group_radars.clear()
+
+                _write_combined_radar_to_file(combined_radar)
+
+            return None
+
+        try:
+            combined_radar = _combine_radars(radars, scan_name)
+        except Exception as e:
+            print(f"Error combining sweeps: {e}")
+            return None
+        finally:
+            radars.clear()
+    else:
+        # Streaming path: read one file at a time (handles large VAD sets)
+        combined_radar = _stream_combine_radars(
+            mmclxfiles, scan_name, gzip_flag, revised_northangle, logp_dir
+        )
+        if combined_radar is None:
+            print("No valid radar files could be read")
+            return None
+
+    # ------------------------------------------------------------------
+    # Write combined file and apply metadata
+    # ------------------------------------------------------------------
+    _write_combined_radar_to_file(combined_radar)
+    return None
 
 def cfradial_add_time_coverage(cfradial_file: str) -> None:
     """
@@ -2913,6 +3120,216 @@ def _safe_parse_time(nc_dataset, time_index=0):
     print("Warning: Could not parse time from file, using current time")
     return datetime.datetime.utcnow()
 
+def _mmclx_get_dims(filepath: str, gzip_flag: bool) -> tuple:
+    """Return (nrays, ngates) from an mmclx file without loading moment data.
+
+    Much cheaper than a full read_mira35_mmclx call; used by
+    _stream_combine_radars to pre-scan all files and determine the total ray
+    count needed for pre-allocation.
+    """
+    import gzip as _gzip
+    if gzip_flag:
+        with _gzip.open(filepath) as gz:
+            with nc4.Dataset('dummy', mode='r', memory=gz.read()) as ds:
+                return len(ds.dimensions['time']), len(ds.dimensions['range'])
+    else:
+        with nc4.Dataset(filepath) as ds:
+            return len(ds.dimensions['time']), len(ds.dimensions['range'])
+
+
+def _stream_combine_radars(
+    mmclxfiles: List[str],
+    scan_name: str,
+    gzip_flag: bool,
+    revised_northangle: float,
+    logp_dir: Optional[str],
+) -> Optional[Radar]:
+    """Combine mmclx files into one Radar object using a streaming two-pass approach.
+
+    Pass 1 (cheap): open each file just long enough to read dimension sizes,
+    then close it.  This gives the total ray count needed for pre-allocation.
+
+    Pass 2: read each file fully one at a time, copy its arrays into the
+    pre-allocated output arrays, then immediately free the PyART object.
+
+    Peak memory = pre-allocated output (~1× data) + one file at a time (~1
+    file), versus the old approach which held all N files simultaneously
+    before concatenation (~N+1× data).
+    """
+    # ------------------------------------------------------------------
+    # Pass 1: lightweight pre-scan to determine per-file ray counts
+    # ------------------------------------------------------------------
+    valid_files: List[str] = []
+    nrays_list: List[int] = []
+    ref_ngates: Optional[int] = None
+
+    for f in mmclxfiles:
+        try:
+            nrays, ngates = _mmclx_get_dims(f, gzip_flag)
+        except Exception as e:
+            print(f"  Skipping {os.path.basename(f)}: cannot read dims: {e}")
+            continue
+        if ref_ngates is None:
+            ref_ngates = ngates
+        if ngates != ref_ngates:
+            print(
+                f"  Skipping {os.path.basename(f)}: ngates mismatch "
+                f"({ngates} vs {ref_ngates})"
+            )
+            continue
+        valid_files.append(f)
+        nrays_list.append(nrays)
+
+    if not valid_files:
+        print("No valid files in streaming combine")
+        return None
+
+    total_nrays = sum(nrays_list)
+    nsweeps = len(valid_files)
+    ngates = ref_ngates
+    print(f"Combining {nsweeps} sweeps with {total_nrays} total rays (streaming)")
+
+    # ------------------------------------------------------------------
+    # Read first file fully to obtain template metadata
+    # ------------------------------------------------------------------
+    base_radar = read_mira35_mmclx(
+        valid_files[0],
+        gzip_flag=gzip_flag,
+        revised_northangle=revised_northangle,
+        logp_dir=logp_dir,
+    )
+
+    # Save lightweight copies of template metadata before freeing base_radar
+    range_dict            = base_radar.range
+    metadata              = base_radar.metadata
+    latitude              = base_radar.latitude
+    longitude             = base_radar.longitude
+    altitude              = base_radar.altitude
+    time_template         = base_radar.time          # preserves 'units', 'calendar', etc.
+    azimuth_template      = base_radar.azimuth
+    elevation_template    = base_radar.elevation
+    instrument_parameters = base_radar.instrument_parameters
+    field_names           = list(base_radar.fields.keys())
+    # Save field metadata without the data arrays (we'll overwrite data below)
+    field_templates = {
+        fn: {k: v for k, v in base_radar.fields[fn].items() if k != 'data'}
+        for fn in field_names
+    }
+    has_at = base_radar.antenna_transition is not None
+    at_template = base_radar.antenna_transition if has_at else None
+
+    # ------------------------------------------------------------------
+    # Pre-allocate output arrays (one allocation each)
+    # ------------------------------------------------------------------
+    time_arr = np.empty(total_nrays, dtype=float)
+    az_arr   = np.empty(total_nrays, dtype=np.float32)
+    el_arr   = np.empty(total_nrays, dtype=np.float32)
+    at_arr   = np.zeros(total_nrays, dtype='int8') if has_at else None
+
+    sweep_start_arr = np.zeros(nsweeps, dtype='int32')
+    sweep_end_arr   = np.zeros(nsweeps, dtype='int32')
+    fixed_angle_arr = np.zeros(nsweeps, dtype='float32')
+
+    prealloc: Dict[str, np.ma.MaskedArray] = {}
+    for fn in field_names:
+        fv = field_templates[fn].get('_FillValue', -9999.0)
+        arr = np.ma.masked_all((total_nrays, ngates), dtype=np.float32)
+        arr.fill_value = fv
+        prealloc[fn] = arr
+
+    # ------------------------------------------------------------------
+    # Fill sweep 0 from base_radar, then free it
+    # ------------------------------------------------------------------
+    n0 = nrays_list[0]
+    time_arr[:n0]      = base_radar.time['data']
+    az_arr[:n0]        = base_radar.azimuth['data']
+    el_arr[:n0]        = base_radar.elevation['data']
+    sweep_start_arr[0] = 0
+    sweep_end_arr[0]   = n0 - 1
+    fixed_angle_arr[0] = base_radar.fixed_angle['data'][0]
+    for fn in field_names:
+        if fn in base_radar.fields:
+            prealloc[fn][:n0] = base_radar.fields[fn]['data']
+    if has_at and base_radar.antenna_transition is not None:
+        at_arr[:n0] = base_radar.antenna_transition['data']
+    del base_radar  # free sweep 0 immediately
+
+    # ------------------------------------------------------------------
+    # Pass 2: read remaining sweeps one at a time, fill, free
+    # ------------------------------------------------------------------
+    offset = n0
+    for i in range(1, nsweeps):
+        n = nrays_list[i]
+        sl = slice(offset, offset + n)
+        try:
+            radar = read_mira35_mmclx(
+                valid_files[i],
+                gzip_flag=gzip_flag,
+                revised_northangle=revised_northangle,
+                logp_dir=logp_dir,
+            )
+            time_arr[sl]      = radar.time['data']
+            az_arr[sl]        = radar.azimuth['data']
+            el_arr[sl]        = radar.elevation['data']
+            sweep_start_arr[i] = offset
+            sweep_end_arr[i]   = offset + n - 1
+            fixed_angle_arr[i] = radar.fixed_angle['data'][0]
+            for fn in field_names:
+                if fn in radar.fields:
+                    prealloc[fn][sl] = radar.fields[fn]['data']
+            if has_at and radar.antenna_transition is not None:
+                at_arr[sl] = radar.antenna_transition['data']
+            del radar  # free immediately
+        except Exception as e:
+            print(f"  Error reading {valid_files[i]}: {e} — sweep {i} left masked")
+            sweep_start_arr[i] = offset
+            sweep_end_arr[i]   = offset + n - 1
+            # prealloc already masked_all; leave as-is
+        offset += n
+
+    # ------------------------------------------------------------------
+    # Assemble combined Radar from pre-allocated arrays
+    # ------------------------------------------------------------------
+    combined_time = time_template.copy()
+    combined_time['data'] = time_arr
+
+    combined_azimuth = azimuth_template.copy()
+    combined_azimuth['data'] = az_arr
+
+    combined_elevation = elevation_template.copy()
+    combined_elevation['data'] = el_arr
+
+    combined_fields: Dict[str, Dict] = {}
+    for fn in field_names:
+        combined_field = field_templates[fn].copy()
+        combined_field['data'] = prealloc[fn]
+        combined_fields[fn] = combined_field
+
+    sweep_number          = {'data': np.arange(nsweeps, dtype='int32')}
+    sweep_mode            = {'data': np.array([scan_name.lower()] * nsweeps)}
+    fixed_angle           = {'data': fixed_angle_arr}
+    sweep_start_ray_index = {'data': sweep_start_arr}
+    sweep_end_ray_index   = {'data': sweep_end_arr}
+
+    combined_antenna_transition = None
+    if has_at:
+        combined_antenna_transition = (
+            at_template.copy() if at_template is not None else {}
+        )
+        combined_antenna_transition['data'] = at_arr
+
+    return Radar(
+        combined_time, range_dict, combined_fields,
+        metadata, scan_name.lower(),
+        latitude, longitude, altitude,
+        sweep_number, sweep_mode, fixed_angle,
+        sweep_start_ray_index, sweep_end_ray_index,
+        combined_azimuth, combined_elevation,
+        antenna_transition=combined_antenna_transition,
+        instrument_parameters=instrument_parameters,
+    )
+
+
 def _combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
     """
     Combine multiple radar objects into a single radar object.
@@ -2941,82 +3358,108 @@ def _combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
 def _manual_combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
     """
     Manually combine radar objects by concatenating arrays.
-    
+
+    Memory-efficient: pre-allocates output arrays and fills them one radar at a
+    time, nullifying each list entry after use so CPython's reference counting
+    can free each radar immediately rather than holding all N objects in memory
+    simultaneously alongside the combined output.
+
     Args:
-        radar_list: List of PyART Radar objects to combine
+        radar_list: List of PyART Radar objects to combine (entries are set to
+            None in-place as each radar is consumed to release memory early).
         scan_name: Type of scan being combined
-        
+
     Returns:
         Combined PyART Radar object
     """
     base_radar = radar_list[0]
-    
-    # Calculate total dimensions
-    total_nrays = sum(r.nrays for r in radar_list)
     nsweeps = len(radar_list)
-    
+    nrange = base_radar.ngates
+
+    # Compute per-sweep ray counts before nullifying any entries
+    n_rays_per_sweep = [r.nrays for r in radar_list]
+    total_nrays = sum(n_rays_per_sweep)
+
     print(f"Combining {nsweeps} sweeps with {total_nrays} total rays")
-    
-    # Create new time array
-    time_data = []
-    for radar in radar_list:
-        time_data.extend(radar.time['data'])
-    
-    combined_time = base_radar.time.copy()
-    combined_time['data'] = np.array(time_data)
-    
-    # Create new angle arrays - explicitly use float32
-    azimuth_data = []
-    elevation_data = []
-    for radar in radar_list:
-        azimuth_data.extend(radar.azimuth['data'])
-        elevation_data.extend(radar.elevation['data'])
-    
-    combined_azimuth = base_radar.azimuth.copy()
-    combined_azimuth['data'] = np.array(azimuth_data, dtype=np.float32)
-    
-    combined_elevation = base_radar.elevation.copy()
-    combined_elevation['data'] = np.array(elevation_data, dtype=np.float32)
-    
-    # Combine fields
-    combined_fields = {}
-    for field_name in base_radar.fields:
-        field_data = []
-        for radar in radar_list:
-            if field_name in radar.fields:
-                field_data.append(radar.fields[field_name]['data'])
-        
-        if field_data:
-            combined_field = base_radar.fields[field_name].copy()
-            combined_field['data'] = np.concatenate(field_data, axis=0)
-            combined_fields[field_name] = combined_field
-    
-    # Create sweep indexing
-    sweep_start_ray_index = {'data': np.zeros(nsweeps, dtype='int32')}
-    sweep_end_ray_index = {'data': np.zeros(nsweeps, dtype='int32')}
-    sweep_number = {'data': np.arange(nsweeps, dtype='int32')}
-    fixed_angle = {'data': np.zeros(nsweeps, dtype='float32')}
-    sweep_mode = {'data': np.array([scan_name.lower()] * nsweeps)}
-    
-    current_ray = 0
-    for i, radar in enumerate(radar_list):
-        sweep_start_ray_index['data'][i] = current_ray
-        sweep_end_ray_index['data'][i] = current_ray + radar.nrays - 1
-        fixed_angle['data'][i] = radar.fixed_angle['data'][0]
-        current_ray += radar.nrays
-    
-    # Combine antenna_transition if present on any radar
-    combined_antenna_transition = None
-    if any(r.antenna_transition is not None for r in radar_list):
-        at_data = []
-        for radar in radar_list:
+
+    # Check for antenna_transition before we start nullifying entries
+    has_at = any(r.antenna_transition is not None for r in radar_list)
+
+    # --- Pre-allocate all output arrays (one allocation each) ---
+    time_arr = np.empty(total_nrays, dtype=float)
+    az_arr   = np.empty(total_nrays, dtype=np.float32)
+    el_arr   = np.empty(total_nrays, dtype=np.float32)
+    at_arr   = np.zeros(total_nrays, dtype='int8') if has_at else None
+
+    sweep_start_arr  = np.zeros(nsweeps, dtype='int32')
+    sweep_end_arr    = np.zeros(nsweeps, dtype='int32')
+    fixed_angle_arr  = np.zeros(nsweeps, dtype='float32')
+
+    field_names = list(base_radar.fields.keys())
+    prealloc = {}
+    for fn in field_names:
+        fv = base_radar.fields[fn].get('_FillValue', -9999.0)
+        arr = np.ma.masked_all((total_nrays, nrange), dtype=np.float32)
+        arr.fill_value = fv
+        prealloc[fn] = arr
+
+    # --- Single pass: fill pre-allocated arrays and free each radar ---
+    offset = 0
+    for i in range(nsweeps):
+        radar = radar_list[i]
+        n  = n_rays_per_sweep[i]
+        sl = slice(offset, offset + n)
+
+        time_arr[sl] = radar.time['data']
+        az_arr[sl]   = radar.azimuth['data']
+        el_arr[sl]   = radar.elevation['data']
+
+        sweep_start_arr[i] = offset
+        sweep_end_arr[i]   = offset + n - 1
+        fixed_angle_arr[i] = radar.fixed_angle['data'][0]
+
+        for fn in field_names:
+            if fn in radar.fields:
+                prealloc[fn][sl] = radar.fields[fn]['data']
+
+        if has_at:
             if radar.antenna_transition is not None:
-                at_data.append(radar.antenna_transition['data'])
-            else:
-                # Radar has no antenna_transition: treat all its rays as non-transition
-                at_data.append(np.zeros(radar.nrays, dtype='int8'))
-        combined_antenna_transition = base_radar.antenna_transition.copy() if base_radar.antenna_transition is not None else {}
-        combined_antenna_transition['data'] = np.concatenate(at_data)
+                at_arr[sl] = radar.antenna_transition['data']
+            # else: already zeros from initialisation
+
+        offset += n
+        radar_list[i] = None  # drop reference so GC can free this radar
+
+    # --- Assemble output dicts from pre-allocated arrays ---
+    combined_time = base_radar.time.copy()
+    combined_time['data'] = time_arr
+
+    combined_azimuth = base_radar.azimuth.copy()
+    combined_azimuth['data'] = az_arr
+
+    combined_elevation = base_radar.elevation.copy()
+    combined_elevation['data'] = el_arr
+
+    combined_fields = {}
+    for fn in field_names:
+        combined_field = base_radar.fields[fn].copy()
+        combined_field['data'] = prealloc[fn]
+        combined_fields[fn] = combined_field
+
+    sweep_number         = {'data': np.arange(nsweeps, dtype='int32')}
+    sweep_mode           = {'data': np.array([scan_name.lower()] * nsweeps)}
+    fixed_angle          = {'data': fixed_angle_arr}
+    sweep_start_ray_index = {'data': sweep_start_arr}
+    sweep_end_ray_index   = {'data': sweep_end_arr}
+
+    combined_antenna_transition = None
+    if has_at:
+        combined_antenna_transition = (
+            base_radar.antenna_transition.copy()
+            if base_radar.antenna_transition is not None
+            else {}
+        )
+        combined_antenna_transition['data'] = at_arr
 
     # Create combined radar object
     combined_radar = Radar(
@@ -3029,7 +3472,7 @@ def _manual_combine_radars(radar_list: List[Radar], scan_name: str) -> Radar:
         antenna_transition=combined_antenna_transition,
         instrument_parameters=base_radar.instrument_parameters
     )
-    
+
     return combined_radar
 
 def split_monotonic_sequence(azimuth_data: np.ndarray, tolerance: float = 5.0) -> List[Tuple[int, int]]:

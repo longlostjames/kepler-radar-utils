@@ -17,6 +17,8 @@ Author: Chris Walden, Science and Technology Facilities Council (STFC)
 
 import sys
 import os
+import re
+import shutil
 import argparse
 import datetime
 from pathlib import Path
@@ -26,6 +28,205 @@ script_dir = Path(__file__).parent.absolute()
 sys.path.insert(0, str(script_dir))
 
 from campaign_processing import process_campaign_day, get_campaign_info
+
+
+def fix_midnight_crossings_for_date(outpath: str, datestr: str,
+                                    force: bool = False) -> None:
+    """Check VPT output files for midnight crossings and fix any that are found.
+
+    Also checks the previous day's output directory for orphaned standalone
+    spillover files (written when the next-day directory did not yet exist) and
+    merges them into the current day's VPT file.
+
+    For each VPT NetCDF file in <outpath>/<datestr>/ the function:
+      1. Detects whether rays spill past midnight into the following day.
+      2. Trims the source file to its own calendar day (backup saved as *_original.nc).
+      3. Prepends the spillover as a new sweep 0 in the next-day file (or writes a
+         standalone spillover file if no next-day file exists yet).
+
+    Args:
+        outpath: Base output directory (e.g. /data/processing/kepler/reading-general)
+        datestr: Date string in YYYYMMDD format
+        force:   Overwrite existing backup files if True
+    """
+    import netCDF4 as nc4
+    import fix_midnight_crossing_vpt as fmcv
+
+    date_outdir = Path(outpath) / datestr
+    if not date_outdir.exists():
+        print(f"  Midnight fix: output directory not found: {date_outdir}")
+        return
+
+    # ------------------------------------------------------------------
+    # Step 0: merge any orphaned standalone spillover from the previous day.
+    # Primary source: prev-day output directory.
+    # Fallback source: spillover/ backup directory (used on reruns when the
+    # standalone file in prev-day/ has already been consumed).
+    # ------------------------------------------------------------------
+    prev_datestr = (datetime.datetime.strptime(datestr, '%Y%m%d')
+                    - datetime.timedelta(days=1)).strftime('%Y%m%d')
+    prev_outdir = Path(outpath) / prev_datestr
+    spillover_bak_dir = Path(outpath) / 'spillover'
+
+    orphan_spillovers = []
+    orphan_source = None
+
+    if prev_outdir.exists():
+        orphan_spillovers = sorted([
+            f for f in prev_outdir.glob(f'*{datestr}*vpt*.nc')
+            if '_original' not in f.name
+        ])
+        if orphan_spillovers:
+            orphan_source = 'live'
+
+    # Fallback: check the spillover backup directory when the live file is gone.
+    if not orphan_spillovers and spillover_bak_dir.exists():
+        orphan_spillovers = sorted([
+            f for f in spillover_bak_dir.glob(f'*{datestr}*vpt*.nc')
+            if '_original' not in f.name
+        ])
+        if orphan_spillovers:
+            orphan_source = 'backup'
+            print(f"  Midnight fix: no live spillover in {prev_datestr}/ — "
+                  f"using backup from spillover/")
+
+    if orphan_spillovers:
+        today_vpt_files = sorted([
+            f for f in date_outdir.glob('*vpt*.nc')
+            if '_original' not in f.name
+        ])
+        if today_vpt_files:
+            print(f"  Midnight fix: found {len(orphan_spillovers)} orphaned spillover "
+                  f"file(s) from {prev_datestr} — merging into today's VPT...")
+            for spillover_file in orphan_spillovers:
+                # Match by filename similarity (strip the date token) or
+                # fall back to the first (and usually only) today's VPT.
+                spill_stem = re.sub(r'\d{8}-\d{6}|\d{8}', '', spillover_file.name)
+                matched = next(
+                    (f for f in today_vpt_files
+                     if re.sub(r'\d{8}-\d{6}|\d{8}', '', f.name) == spill_stem),
+                    today_vpt_files[0]
+                )
+                print(f"    {spillover_file.name} → {matched.name}")
+                spill_date = datetime.datetime.strptime(prev_datestr, '%Y%m%d').date()
+                if fmcv._spillover_already_present(str(matched), spill_date):
+                    print(f"    Already merged — skipping")
+                    continue
+                if orphan_source == 'live':
+                    # Back up before consuming the live file.
+                    spillover_bak_dir.mkdir(exist_ok=True)
+                    shutil.copy2(spillover_file, spillover_bak_dir / spillover_file.name)
+                    print(f"    Backed up spillover to: spillover/{spillover_file.name}")
+                    fmcv.merge_spillover_into_day(str(spillover_file), str(matched),
+                                                  force=force)
+                else:
+                    # Sourced from backup: merge from a temporary copy so that
+                    # merge_spillover_into_day's os.unlink() removes the copy,
+                    # not the backup itself — keeping it intact for future reruns.
+                    tmp_spill = spillover_file.with_suffix('.mergetmp.nc')
+                    shutil.copy2(spillover_file, tmp_spill)
+                    try:
+                        fmcv.merge_spillover_into_day(str(tmp_spill), str(matched),
+                                                      force=force)
+                    except Exception:
+                        tmp_spill.unlink(missing_ok=True)
+                        raise
+        else:
+            print(f"  Midnight fix: orphaned spillover(s) from {prev_datestr} found "
+                  f"but no today VPT to merge into yet — will retry next run.")
+
+    # ------------------------------------------------------------------
+    # Step 1: check today's VPT files for midnight crossings
+    # ------------------------------------------------------------------
+    vpt_files = sorted([
+        f for f in date_outdir.glob('*vpt*.nc')
+        if '_original' not in f.name
+    ])
+    if not vpt_files:
+        print(f"  Midnight fix: no VPT files found in {date_outdir}")
+        return
+
+    print(f"  Midnight fix: checking {len(vpt_files)} VPT file(s)...")
+    for vpt_file in vpt_files:
+        src_path = str(vpt_file)
+        print(f"    {vpt_file.name} ...", end=' ', flush=True)
+        try:
+            with nc4.Dataset(src_path, 'r') as ds:
+                split = fmcv._find_split(ds.variables['time'])
+        except ValueError:
+            print("no crossing.")
+            continue
+
+        print(f"crossing at ray {split}.")
+        src_date = fmcv._src_date(src_path)
+        next_day_file = fmcv._detect_next_day_file(src_path, src_date)
+
+        with nc4.Dataset(src_path, 'r') as ds:
+            t = ds.variables['time']
+            times = nc4.num2date(t[split:split + 1], t.units,
+                                 only_use_cftime_datetimes=False)
+        first_spill_time = datetime.datetime(
+            times[0].year, times[0].month, times[0].day,
+            times[0].hour, times[0].minute, times[0].second
+        )
+        out_path = fmcv._output_path_for_spillover(src_path, first_spill_time, next_day_file)
+        bak = src_path.replace('.nc', '_original.nc')
+
+        fmcv.trim_source(src_path, split, force=force)
+
+        if next_day_file and fmcv._spillover_already_present(next_day_file, src_date):
+            print(f"    Next-day file already starts with rays from {src_date} — "
+                  f"skipping prepend (reprocessed day?)")
+        else:
+            # Always back up the spillover rays to spillover/ so reruns can
+            # find them even after the live standalone file has been consumed.
+            # Write a standalone spillover file directly into spillover/.
+            spillover_bak_dir = Path(outpath) / 'spillover'
+            spillover_bak_dir.mkdir(exist_ok=True)
+            spill_bak_path = str(spillover_bak_dir / Path(out_path).name)
+            if not Path(spill_bak_path).exists() or force:
+                fmcv.prepend_spillover(bak, split, None, spill_bak_path,
+                                       no_backup=True, force=force)
+                print(f"    Backed up spillover to: spillover/{Path(out_path).name}")
+
+            fmcv.prepend_spillover(bak, split, next_day_file, out_path, force=force)
+            if next_day_file:
+                print(f"    Spillover prepended to: {Path(out_path).name}")
+            else:
+                print(f"    Spillover written standalone: {Path(out_path).name}")
+                print(f"    (will be merged into next-day VPT on the next processing run)")
+
+        # Remove any stale next-day VPT files that have the right date token but
+        # a different (earlier) start-time token than out_path.  These are left
+        # over from a run that predated the rename-on-prepend logic.
+        if out_path and Path(out_path).exists():
+            out_dir = Path(out_path).parent
+            date_token = Path(out_path).name  # e.g. '...20260403-000000...'
+            # Extract the YYYYMMDD portion from out_path to match siblings
+            _m = re.search(r'(\d{8})-\d{6}', Path(out_path).name)
+            if _m:
+                _day = _m.group(1)
+                for _stale in out_dir.glob(f'*{_day}*vpt*.nc'):
+                    if '_original' in _stale.name:
+                        continue
+                    if _stale == Path(out_path):
+                        continue
+                    _stale.unlink()
+                    print(f"    Removed stale file: {_stale.name}")
+
+    # ------------------------------------------------------------------
+    # Step 2: move any *_original.nc files from the date directory to
+    #         the central original/ directory.
+    # ------------------------------------------------------------------
+    original_dir = Path(outpath) / 'original'
+    original_dir.mkdir(exist_ok=True)
+    for orig_file in sorted(date_outdir.glob('*_original.nc')):
+        dest = original_dir / orig_file.name
+        if dest.exists() and not force:
+            print(f"  Original backup already in original/: {orig_file.name} — skipping move")
+        else:
+            shutil.move(str(orig_file), dest)
+            print(f"  Moved to original/: {orig_file.name}")
 
 
 def setup_reading_general_paths(use_latest=True):
@@ -220,6 +421,12 @@ def main():
         help='Maximum age of input files in hours (default: 6 hours)'
     )
 
+    parser.add_argument(
+        '--no-midnight-fix',
+        action='store_true',
+        help='Disable automatic midnight crossing fix for VPT files after processing'
+    )
+
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
@@ -341,8 +548,18 @@ def main():
                 single_sweep=args.single_sweep,
                 revised_northangle=args.north_angle,
                 no_vpt=args.no_vpt,
-                max_age=args.max_age
+                max_age=args.max_age,
+                logp_dir='/mnt/keplerdata/Logp',
+                force=args.force
             )
+
+            if not args.no_midnight_fix:
+                try:
+                    fix_midnight_crossings_for_date(
+                        paths['outpath'], datestr, force=args.force
+                    )
+                except Exception as mc_exc:
+                    print(f"Warning: midnight crossing fix failed for {datestr}: {mc_exc}")
 
             end_time = datetime.datetime.now()
             duration = end_time - start_time

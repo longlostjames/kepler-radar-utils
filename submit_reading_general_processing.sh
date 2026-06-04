@@ -22,6 +22,18 @@ cd $SCRIPT_DIR
 source $HOME/miniforge3/etc/profile.d/conda.sh
 conda activate cao_3_11
 
+PYTHON_SCRIPT="$SCRIPT_DIR/proc_kepler_reading_general_campaign_batch.py"
+
+# --latest: non-interactive, process today, skip prompts
+if [[ "$1" == "--latest" ]]; then
+    TODAY=$(date +%Y%m%d)
+    DATA_VERSION=${DATA_VERSION:-1.0.0}
+    echo "Running latest-day processing for $TODAY (version $DATA_VERSION)"
+    python $PYTHON_SCRIPT -d $TODAY --latest \
+        --data-version $DATA_VERSION \
+        --skip-missing --single-sweep --force --gzip
+    exit $?
+fi
 # Campaign date range defaults
 START_DATE=${START_DATE:-20260401}
 END_DATE=${END_DATE:-20261231}
@@ -54,7 +66,7 @@ echo ""
 read -p "Enter choice [1-4]: " choice
 
 PYTHON_SCRIPT="$SCRIPT_DIR/proc_kepler_reading_general_campaign_batch.py"
-BASE_ARGS="--data-version $DATA_VERSION --skip-missing --single-sweep --latest"
+BASE_ARGS="--data-version $DATA_VERSION --skip-missing --single-sweep --force --gzip"
 
 case $choice in
     1)
